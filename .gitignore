@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.env
+dist/
+data/imports/*.json
+data/events/*.json
+data_old/
+
+# Local logs
+*.log
+.codex-*.log
+
+# TypeScript incremental build
+*.tsbuildinfo
