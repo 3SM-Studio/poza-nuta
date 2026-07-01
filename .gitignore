@@ -1,10 +1,13 @@
 node_modules/
-.next/
 .env
 dist/
 data/imports/*.json
 data/events/*.json
 data_old/
+
+# Next.js generated types
+next-env.d.ts
+.next/
 
 # Local logs
 *.log
