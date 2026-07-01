@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed": "node --experimental-strip-types db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "dev:api": "node --watch --experimental-strip-types apps/api/src/server.ts",
