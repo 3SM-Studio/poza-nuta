@@ -9,6 +9,9 @@
     "start": "next start",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "dev:api": "node --watch --experimental-strip-types apps/api/src/server.ts",
     "dev:web": "vite --config apps/web/vite.config.ts --host 0.0.0.0",
@@ -27,14 +30,19 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.1",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.9",
     "typescript": "^6.0.3",
     "vite": "^8.0.14"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "next": "^16.2.9",
+    "postgres": "^3.4.9",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "server-only": "^0.0.1"
   }
 }
