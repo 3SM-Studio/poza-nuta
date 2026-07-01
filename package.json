@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
+    "db:import:karafun": "node --experimental-strip-types db/import-karafun-csv.ts",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "node --experimental-strip-types db/seed.ts",
     "db:studio": "drizzle-kit studio",
