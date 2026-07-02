@@ -15,6 +15,13 @@
       "when": 1782975152935,
       "tag": "0001_pale_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782978722551,
+      "tag": "0002_remarkable_jackal",
+      "breakpoints": true
     }
   ]
 }

@@ -92,6 +92,9 @@
 }
 
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 2.75rem;
   border: 1px solid transparent;
   border-radius: 0.55rem;
@@ -101,6 +104,7 @@
   font-weight: 750;
   line-height: 1;
   padding: 0.75rem 1rem;
+  text-decoration: none;
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
@@ -202,6 +206,37 @@
 
 .pageError {
   margin-bottom: 1rem;
+}
+
+.successMessage {
+  margin-bottom: 1rem;
+  border: 1px solid #b9dcc2;
+  border-radius: 0.6rem;
+  background: #eef9f1;
+  color: #245f34;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  padding: 0.75rem 0.85rem;
+}
+
+.eventWarning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e5cd8e;
+  border-radius: 0.75rem;
+  background: #fff9e8;
+  color: #6e5112;
+  padding: 0.9rem 1rem;
+}
+
+.warningActions,
+.lifecycleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .queueGrid {
@@ -362,6 +397,91 @@
   padding: 4rem 1rem;
 }
 
+.settingsShell {
+  width: min(100%, 58rem);
+  margin: 0 auto;
+}
+
+.settingsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.settingsHeader h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.settingsCard {
+  margin-bottom: 1rem;
+  border: 1px solid #dce2dd;
+  border-radius: 0.85rem;
+  background: #ffffff;
+  padding: clamp(1rem, 3vw, 1.4rem);
+}
+
+.settingsCard h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.settingsIntro {
+  margin: -0.35rem 0 1rem;
+  color: #657069;
+  line-height: 1.5;
+}
+
+.settingsForm {
+  display: grid;
+  gap: 1rem;
+}
+
+.settingsForm .button {
+  justify-self: start;
+}
+
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.checkboxField input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #23743a;
+}
+
+.eventDetails {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.eventDetails div {
+  border-radius: 0.55rem;
+  background: #f5f7f5;
+  padding: 0.75rem;
+}
+
+.eventDetails dt {
+  color: #657069;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.eventDetails dd {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
 @media (max-width: 800px) {
   .queueHeader {
     align-items: flex-start;
@@ -378,12 +498,22 @@
     width: 100%;
   }
 
+  .eventWarning,
+  .settingsHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .queueGrid {
     grid-template-columns: 1fr;
   }
 
   .wideSection {
     grid-column: auto;
+  }
+
+  .eventDetails {
+    grid-template-columns: 1fr;
   }
 }
 

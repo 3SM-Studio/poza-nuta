@@ -4,6 +4,10 @@ import { and, eq, ilike, inArray, max } from "drizzle-orm";
 
 import { events, songRequests, songs } from "../../db/schema";
 import { getDb } from "../db";
+import {
+  closeExpiredActiveEventInTransaction,
+  getActiveEventAfterLazyClose,
+} from "../event-lifecycle";
 import { PublicApiError } from "./errors";
 import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "./queue-policy";
 import type { PublicRequestInput } from "./validation";
@@ -15,22 +19,8 @@ const activePublicEventFilter = and(
   eq(events.status, "active"),
 );
 
-const activePublicEventSelection = {
-  id: events.id,
-  name: events.name,
-  venue: events.venue,
-  startsAt: events.startsAt,
-  status: events.status,
-  publicQueueEnabled: events.publicQueueEnabled,
-  publicShowSongTitles: events.publicShowSongTitles,
-};
-
 export async function getActivePublicEvent() {
-  const [event] = await getDb()
-    .select(activePublicEventSelection)
-    .from(events)
-    .where(activePublicEventFilter)
-    .limit(1);
+  const event = await getActiveEventAfterLazyClose();
 
   if (!event) {
     throw new PublicApiError(
@@ -40,7 +30,15 @@ export async function getActivePublicEvent() {
     );
   }
 
-  return event;
+  return {
+    id: event.id,
+    name: event.name,
+    venue: event.venue,
+    startsAt: event.startsAt,
+    status: event.status,
+    publicQueueEnabled: event.publicQueueEnabled,
+    publicShowSongTitles: event.publicShowSongTitles,
+  };
 }
 
 export async function searchPublicSongs(query: string | null) {
@@ -72,6 +70,8 @@ export async function searchPublicSongs(query: string | null) {
 
 export async function createPublicRequest(input: PublicRequestInput) {
   return getDb().transaction(async (transaction) => {
+    await closeExpiredActiveEventInTransaction(transaction);
+
     const [event] = await transaction
       .select({
         id: events.id,

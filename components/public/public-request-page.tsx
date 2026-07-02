@@ -50,10 +50,13 @@ export function PublicRequestPage() {
         if (active) {
           setEvent(activeEvent);
         }
-      } catch {
+      } catch (caughtError) {
         if (active) {
           setEventError(
-            "Nie udało się wczytać aktywnego wydarzenia. Spróbuj ponownie później.",
+            caughtError instanceof PublicClientError &&
+              caughtError.status === 404
+              ? "Aktualnie nie ma aktywnego wydarzenia."
+              : "Nie udało się wczytać aktywnego wydarzenia. Spróbuj ponownie później.",
           );
         }
       } finally {

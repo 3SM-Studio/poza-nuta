@@ -20,6 +20,10 @@ test("operator UI client uses canonical dashboard API paths", () => {
     logout: "/api/dashboard/logout",
     me: "/api/dashboard/me",
     queue: "/api/dashboard/queue",
+    event: "/api/dashboard/event",
+    extendEvent: "/api/dashboard/event/extend",
+    closeEvent: "/api/dashboard/event/close",
+    startEvent: "/api/dashboard/event/start",
   });
   assert.equal(
     getDashboardRequestActionPath(42, "approve"),

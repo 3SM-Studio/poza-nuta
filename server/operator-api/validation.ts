@@ -3,10 +3,28 @@ export const MAX_OPERATOR_NAME_LENGTH = 120;
 export const MAX_OPERATOR_EMAIL_LENGTH = 254;
 export const MIN_OPERATOR_PASSWORD_LENGTH = 6;
 export const MAX_OPERATOR_PASSWORD_LENGTH = 1_024;
+export const MAX_EVENT_NAME_LENGTH = 120;
+export const MAX_EVENT_VENUE_LENGTH = 120;
 
 export type LoginInput = {
   email: string;
   password: string;
+};
+
+export type EventSettingsInput = {
+  name: string;
+  venue: string | null;
+  publicQueueEnabled: boolean;
+  publicShowSongTitles: boolean;
+};
+
+export type StartEventInput = {
+  name: string;
+  venue: string | null;
+};
+
+export type ExtendEventInput = {
+  hours: 1 | 2;
 };
 
 export type ValidationIssue = {
@@ -96,10 +114,137 @@ export function validateRequestId(value: string): ValidationResult<number> {
   return { success: true, data: requestId };
 }
 
+export function validateEventSettingsInput(
+  input: unknown,
+): ValidationResult<EventSettingsInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  const eventFields = validateEventNameAndVenue(input);
+  const issues = [...eventFields.issues];
+
+  if (typeof input.publicQueueEnabled !== "boolean") {
+    issues.push({
+      field: "publicQueueEnabled",
+      message: "publicQueueEnabled must be a boolean.",
+    });
+  }
+
+  if (typeof input.publicShowSongTitles !== "boolean") {
+    issues.push({
+      field: "publicShowSongTitles",
+      message: "publicShowSongTitles must be a boolean.",
+    });
+  }
+
+  if (issues.length > 0) {
+    return { success: false, issues };
+  }
+
+  return {
+    success: true,
+    data: {
+      name: eventFields.name,
+      venue: eventFields.venue,
+      publicQueueEnabled: input.publicQueueEnabled as boolean,
+      publicShowSongTitles: input.publicShowSongTitles as boolean,
+    },
+  };
+}
+
+export function validateStartEventInput(
+  input: unknown,
+): ValidationResult<StartEventInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  const eventFields = validateEventNameAndVenue(input);
+
+  if (eventFields.issues.length > 0) {
+    return { success: false, issues: eventFields.issues };
+  }
+
+  return {
+    success: true,
+    data: {
+      name: eventFields.name,
+      venue: eventFields.venue,
+    },
+  };
+}
+
+export function validateExtendInput(
+  input: unknown,
+): ValidationResult<ExtendEventInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  if (input.hours !== 1 && input.hours !== 2) {
+    return {
+      success: false,
+      issues: [
+        {
+          field: "hours",
+          message: "hours must be either 1 or 2.",
+        },
+      ],
+    };
+  }
+
+  return {
+    success: true,
+    data: { hours: input.hours },
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function invalidBodyResult(): ValidationResult<never> {
+  return {
+    success: false,
+    issues: [{ field: "body", message: "Body must be a JSON object." }],
+  };
+}
+
+function validateEventNameAndVenue(input: Record<string, unknown>) {
+  const issues: ValidationIssue[] = [];
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const venue =
+    typeof input.venue === "string" ? input.venue.trim() || null : null;
+
+  if (typeof input.name !== "string" || name.length === 0) {
+    issues.push({ field: "name", message: "name is required." });
+  } else if (name.length > MAX_EVENT_NAME_LENGTH) {
+    issues.push({
+      field: "name",
+      message: `name must contain at most ${MAX_EVENT_NAME_LENGTH} characters.`,
+    });
+  }
+
+  if (
+    input.venue !== undefined &&
+    input.venue !== null &&
+    typeof input.venue !== "string"
+  ) {
+    issues.push({
+      field: "venue",
+      message: "venue must be a string or null.",
+    });
+  } else if (venue && venue.length > MAX_EVENT_VENUE_LENGTH) {
+    issues.push({
+      field: "venue",
+      message: `venue must contain at most ${MAX_EVENT_VENUE_LENGTH} characters.`,
+    });
+  }
+
+  return { name, venue, issues };
 }

@@ -19,6 +19,21 @@ export type OperatorIdentity = {
   active: true;
 };
 
+export type DashboardEvent = {
+  id: number;
+  name: string;
+  venue: string | null;
+  startsAt: string;
+  status: "active" | "closed";
+  isActivePublicEvent: boolean;
+  publicQueueEnabled: boolean;
+  publicShowSongTitles: boolean;
+  autoCloseAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OperatorQueueItem = {
   id: number;
   eventId: number;
@@ -50,6 +65,8 @@ export type OperatorQueueResponse = {
     venue: string | null;
     startsAt: string;
     status: "active";
+    autoCloseAt: string | null;
+    closedAt: string | null;
   };
   queue: Record<OperatorRequestStatus, OperatorQueueItem[]>;
 };
@@ -79,6 +96,10 @@ export const dashboardApiPaths = {
   logout: "/api/dashboard/logout",
   me: "/api/dashboard/me",
   queue: "/api/dashboard/queue",
+  event: "/api/dashboard/event",
+  extendEvent: "/api/dashboard/event/extend",
+  closeEvent: "/api/dashboard/event/close",
+  startEvent: "/api/dashboard/event/start",
 } as const;
 
 export class OperatorClientError extends Error {
@@ -116,6 +137,54 @@ export function getCurrentOperator() {
 
 export function getOperatorQueue() {
   return requestJson<OperatorQueueResponse>(dashboardApiPaths.queue);
+}
+
+export function getDashboardEvent() {
+  return requestJson<{ event: DashboardEvent | null }>(
+    dashboardApiPaths.event,
+  );
+}
+
+export function updateDashboardEventSettings(input: {
+  name: string;
+  venue: string | null;
+  publicQueueEnabled: boolean;
+  publicShowSongTitles: boolean;
+}) {
+  return requestJson<{ event: DashboardEvent }>(dashboardApiPaths.event, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function extendDashboardEvent(hours: 1 | 2) {
+  return requestJson<{ event: DashboardEvent }>(
+    dashboardApiPaths.extendEvent,
+    {
+      method: "POST",
+      body: JSON.stringify({ hours }),
+    },
+  );
+}
+
+export function closeDashboardEvent() {
+  return requestJson<{ event: DashboardEvent }>(
+    dashboardApiPaths.closeEvent,
+    { method: "POST" },
+  );
+}
+
+export function startDashboardEvent(input: {
+  name: string;
+  venue: string | null;
+}) {
+  return requestJson<{ event: DashboardEvent }>(
+    dashboardApiPaths.startEvent,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function runOperatorQueueAction(

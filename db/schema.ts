@@ -73,6 +73,8 @@ export const events = pgTable(
     publicShowSongTitles: boolean("public_show_song_titles")
       .notNull()
       .default(false),
+    autoCloseAt: timestampColumn("auto_close_at"),
+    closedAt: timestampColumn("closed_at"),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },

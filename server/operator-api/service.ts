@@ -9,6 +9,10 @@ import {
   songs,
 } from "../../db/schema";
 import { getDb } from "../db";
+import {
+  closeExpiredActiveEventInTransaction,
+  getActiveEventAfterLazyClose,
+} from "../event-lifecycle";
 import { OperatorApiError } from "./errors";
 import {
   canApplyQueueAction,
@@ -43,7 +47,16 @@ const operatorQueueItemSelection = {
 };
 
 export async function getOperatorQueue() {
-  const event = await getActiveOperatorEvent();
+  const event = await getActiveEventAfterLazyClose();
+
+  if (!event) {
+    throw new OperatorApiError(
+      404,
+      "ACTIVE_EVENT_NOT_FOUND",
+      "No active public event is available.",
+    );
+  }
+
   const rows = await getDb()
     .select(operatorQueueItemSelection)
     .from(songRequests)
@@ -79,6 +92,8 @@ export async function applyOperatorQueueAction(
   operatorId: number,
 ) {
   return getDb().transaction(async (transaction) => {
+    await closeExpiredActiveEventInTransaction(transaction);
+
     const [event] = await transaction
       .select({
         id: events.id,
@@ -229,30 +244,6 @@ export async function applyOperatorQueueAction(
       request: toOperatorQueueItem(updatedRequest),
     };
   });
-}
-
-async function getActiveOperatorEvent() {
-  const [event] = await getDb()
-    .select({
-      id: events.id,
-      name: events.name,
-      venue: events.venue,
-      startsAt: events.startsAt,
-      status: events.status,
-    })
-    .from(events)
-    .where(activePublicEventFilter)
-    .limit(1);
-
-  if (!event) {
-    throw new OperatorApiError(
-      404,
-      "ACTIVE_EVENT_NOT_FOUND",
-      "No active public event is available.",
-    );
-  }
-
-  return event;
 }
 
 type OperatorQueueRow = {

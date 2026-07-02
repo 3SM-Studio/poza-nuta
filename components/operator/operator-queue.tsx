@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { shouldWarnEventClosingSoon } from "../../lib/event-lifecycle";
 import {
+  extendDashboardEvent,
   formatDuration,
   getCurrentOperator,
   getOperatorQueue,
@@ -72,6 +75,11 @@ export function OperatorQueuePanel() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [eventAction, setEventAction] = useState<"extend-1" | "extend-2" | null>(
+    null,
+  );
+  const [closingWarningDismissed, setClosingWarningDismissed] = useState(false);
+  const [warningNow, setWarningNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
 
   const handleAuthenticationError = useCallback(
@@ -144,6 +152,14 @@ export function OperatorQueuePanel() {
     };
   }, [handleAuthenticationError, loadQueue]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setWarningNow(new Date());
+    }, 60_000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   async function handleAction(
     requestId: number,
     action: OperatorQueueAction,
@@ -180,6 +196,22 @@ export function OperatorQueuePanel() {
     }
   }
 
+  async function handleExtendEvent(hours: 1 | 2) {
+    setEventAction(`extend-${hours}`);
+    setError(null);
+
+    try {
+      await extendDashboardEvent(hours);
+      await loadQueue(false);
+    } catch (caughtError) {
+      if (!handleAuthenticationError(caughtError)) {
+        setError(getClientErrorMessage(caughtError));
+      }
+    } finally {
+      setEventAction(null);
+    }
+  }
+
   if (isInitialLoading) {
     return (
       <div className={styles.loadingScreen} role="status">
@@ -208,11 +240,22 @@ export function OperatorQueuePanel() {
               Operator: {operator.name}
             </span>
           ) : null}
+          <Link
+            className={`${styles.button} ${styles.secondaryButton}`}
+            href="/dashboard/settings"
+          >
+            Ustawienia
+          </Link>
           <button
             className={`${styles.button} ${styles.secondaryButton}`}
             type="button"
             onClick={() => void loadQueue()}
-            disabled={isRefreshing || activeAction !== null || isLoggingOut}
+            disabled={
+              isRefreshing ||
+              activeAction !== null ||
+              eventAction !== null ||
+              isLoggingOut
+            }
           >
             {isRefreshing ? "Odświeżanie…" : "Odśwież"}
           </button>
@@ -220,7 +263,9 @@ export function OperatorQueuePanel() {
             className={`${styles.button} ${styles.secondaryButton}`}
             type="button"
             onClick={() => void handleLogout()}
-            disabled={isLoggingOut || activeAction !== null}
+            disabled={
+              isLoggingOut || activeAction !== null || eventAction !== null
+            }
           >
             {isLoggingOut ? "Wylogowywanie…" : "Wyloguj"}
           </button>
@@ -233,6 +278,40 @@ export function OperatorQueuePanel() {
         </div>
       ) : null}
 
+      {queueData &&
+      !closingWarningDismissed &&
+      shouldWarnEventClosingSoon(queueData.event.autoCloseAt, warningNow) ? (
+        <section className={styles.eventWarning} role="alert">
+          <strong>Event zakończy się za mniej niż 30 minut.</strong>
+          <div className={styles.warningActions}>
+            <button
+              className={`${styles.button} ${styles.actionButton}`}
+              type="button"
+              onClick={() => void handleExtendEvent(1)}
+              disabled={eventAction !== null || activeAction !== null}
+            >
+              {eventAction === "extend-1" ? "Przedłużanie…" : "Przedłuż +1h"}
+            </button>
+            <button
+              className={`${styles.button} ${styles.actionButton}`}
+              type="button"
+              onClick={() => void handleExtendEvent(2)}
+              disabled={eventAction !== null || activeAction !== null}
+            >
+              {eventAction === "extend-2" ? "Przedłużanie…" : "Przedłuż +2h"}
+            </button>
+            <button
+              className={`${styles.button} ${styles.secondaryButton}`}
+              type="button"
+              onClick={() => setClosingWarningDismissed(true)}
+              disabled={eventAction !== null}
+            >
+              Zamknij po czasie
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {queueData ? (
         <div className={styles.queueGrid}>
           {queueSections.map((section) => (
@@ -242,7 +321,9 @@ export function OperatorQueuePanel() {
               items={queueData.queue[section.status]}
               wide={section.wide}
               activeAction={activeAction}
-              actionsDisabled={isRefreshing || isLoggingOut}
+              actionsDisabled={
+                isRefreshing || isLoggingOut || eventAction !== null
+              }
               onAction={handleAction}
             />
           ))}

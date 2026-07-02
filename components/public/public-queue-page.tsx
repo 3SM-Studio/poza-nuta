@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import {
   getPublicQueue,
+  PublicClientError,
   type PublicQueueResponse,
 } from "./api";
 import styles from "./public.module.css";
@@ -25,9 +26,9 @@ export function PublicQueuePage() {
         if (active) {
           setQueue(response);
         }
-      } catch {
+      } catch (caughtError) {
         if (active) {
-          setError("Nie udało się wczytać kolejki. Spróbuj ponownie.");
+          setError(getQueueErrorMessage(caughtError));
         }
       } finally {
         if (active) {
@@ -49,8 +50,8 @@ export function PublicQueuePage() {
 
     try {
       setQueue(await getPublicQueue());
-    } catch {
-      setError("Nie udało się wczytać kolejki. Spróbuj ponownie.");
+    } catch (caughtError) {
+      setError(getQueueErrorMessage(caughtError));
     } finally {
       setIsRefreshing(false);
     }
@@ -133,4 +134,10 @@ export function PublicQueuePage() {
       </div>
     </main>
   );
+}
+
+function getQueueErrorMessage(error: unknown) {
+  return error instanceof PublicClientError && error.status === 404
+    ? "Aktualnie nie ma aktywnego wydarzenia."
+    : "Nie udało się wczytać kolejki. Spróbuj ponownie.";
 }
