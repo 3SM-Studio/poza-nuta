@@ -19,6 +19,19 @@ export type OperatorAccessDecision =
       message: string;
     };
 
+export type SignInPageAccessDecision =
+  | {
+      state: "guest";
+    }
+  | {
+      state: "authorized";
+      operator: LinkedOperatorRecord & { active: true };
+    }
+  | {
+      state: "unauthorized";
+      code: "OPERATOR_NOT_LINKED" | "OPERATOR_INACTIVE";
+    };
+
 export function resolveOperatorAccess(
   authUserId: string | null,
   operator: LinkedOperatorRecord | null,
@@ -56,6 +69,32 @@ export function resolveOperatorAccess(
       ...operator,
       active: true,
     },
+  };
+}
+
+export function resolveSignInPageAccess(
+  authUserId: string | null,
+  operator: LinkedOperatorRecord | null,
+): SignInPageAccessDecision {
+  if (!authUserId) {
+    return { state: "guest" };
+  }
+
+  const access = resolveOperatorAccess(authUserId, operator);
+
+  if (access.allowed) {
+    return {
+      state: "authorized",
+      operator: access.operator,
+    };
+  }
+
+  return {
+    state: "unauthorized",
+    code:
+      access.code === "OPERATOR_INACTIVE"
+        ? "OPERATOR_INACTIVE"
+        : "OPERATOR_NOT_LINKED",
   };
 }
 

@@ -21,7 +21,7 @@ export function OperatorLoginForm() {
     try {
       await loginOperator({ email, password });
       setPassword("");
-      router.replace("/dashboard/queue");
+      router.replace("/dashboard");
       router.refresh();
     } catch (caughtError) {
       setError(getLoginErrorMessage(caughtError));

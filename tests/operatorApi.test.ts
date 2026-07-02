@@ -5,6 +5,7 @@ import { hashPin, verifyPin } from "../server/operator-api/crypto.ts";
 import {
   mapSupabaseLoginError,
   resolveOperatorAccess,
+  resolveSignInPageAccess,
 } from "../server/operator-api/auth-policy.ts";
 import {
   canApplyQueueAction,
@@ -98,6 +99,48 @@ test("Supabase Auth users must map to an active local operator", () => {
     }),
     {
       allowed: true,
+      operator: {
+        id: 7,
+        name: "Operator",
+        active: true,
+      },
+    },
+  );
+});
+
+test("sign-in page distinguishes guests, authorized operators and denied users", () => {
+  assert.deepEqual(resolveSignInPageAccess(null, null), {
+    state: "guest",
+  });
+  assert.deepEqual(
+    resolveSignInPageAccess(
+      "62e01318-1043-48a1-93de-d3f0469545c6",
+      null,
+    ),
+    {
+      state: "unauthorized",
+      code: "OPERATOR_NOT_LINKED",
+    },
+  );
+  assert.deepEqual(
+    resolveSignInPageAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
+      id: 7,
+      name: "Operator",
+      active: false,
+    }),
+    {
+      state: "unauthorized",
+      code: "OPERATOR_INACTIVE",
+    },
+  );
+  assert.deepEqual(
+    resolveSignInPageAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
+      id: 7,
+      name: "Operator",
+      active: true,
+    }),
+    {
+      state: "authorized",
       operator: {
         id: 7,
         name: "Operator",

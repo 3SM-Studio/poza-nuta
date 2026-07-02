@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -13,6 +12,7 @@ import {
   type DashboardEvent,
   updateDashboardEventSettings,
 } from "./api";
+import { CloseEventConfirmation } from "./close-event-confirmation";
 import styles from "./operator.module.css";
 
 export function DashboardEventSettings() {
@@ -24,6 +24,8 @@ export function DashboardEventSettings() {
   const [publicShowSongTitles, setPublicShowSongTitles] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [isCloseConfirmationOpen, setIsCloseConfirmationOpen] =
+    useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +123,7 @@ export function DashboardEventSettings() {
   async function handleClose() {
     await runAction("close", async () => {
       await closeDashboardEvent();
+      setIsCloseConfirmationOpen(false);
       await loadEvent();
       setSuccess("Event został zamknięty.");
     });
@@ -158,17 +161,8 @@ export function DashboardEventSettings() {
 
   return (
     <div className={styles.settingsShell}>
-      <header className={styles.settingsHeader}>
-        <div>
-          <p className={styles.brand}>Poza Nutą</p>
-          <h1>Ustawienia eventu</h1>
-        </div>
-        <Link
-          className={`${styles.button} ${styles.secondaryButton}`}
-          href="/dashboard/queue"
-        >
-          Powrót do kolejki
-        </Link>
+      <header className={styles.pageHeader}>
+        <h1>Ustawienia eventu</h1>
       </header>
 
       {success ? (
@@ -261,7 +255,9 @@ export function DashboardEventSettings() {
                 className={`${styles.button} ${styles.actionButton}`}
                 type="button"
                 onClick={() => void handleExtend(1)}
-                disabled={activeAction !== null}
+                disabled={
+                  activeAction !== null || isCloseConfirmationOpen
+                }
               >
                 {activeAction === "extend-1"
                   ? "Przedłużanie…"
@@ -271,7 +267,9 @@ export function DashboardEventSettings() {
                 className={`${styles.button} ${styles.actionButton}`}
                 type="button"
                 onClick={() => void handleExtend(2)}
-                disabled={activeAction !== null}
+                disabled={
+                  activeAction !== null || isCloseConfirmationOpen
+                }
               >
                 {activeAction === "extend-2"
                   ? "Przedłużanie…"
@@ -280,12 +278,25 @@ export function DashboardEventSettings() {
               <button
                 className={`${styles.button} ${styles.dangerButton}`}
                 type="button"
-                onClick={() => void handleClose()}
+                onClick={() => {
+                  setSuccess(null);
+                  setError(null);
+                  setIsCloseConfirmationOpen(true);
+                }}
                 disabled={activeAction !== null}
+                aria-expanded={isCloseConfirmationOpen}
+                aria-controls="settings-close-event-confirmation"
               >
-                {activeAction === "close" ? "Zamykanie…" : "Zamknij event"}
+                Zamknij event
               </button>
             </div>
+            <CloseEventConfirmation
+              id="settings-close-event-confirmation"
+              open={isCloseConfirmationOpen}
+              isConfirming={activeAction === "close"}
+              onCancel={() => setIsCloseConfirmationOpen(false)}
+              onConfirm={() => void handleClose()}
+            />
           </section>
         </>
       ) : (

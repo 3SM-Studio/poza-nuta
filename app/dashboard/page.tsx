@@ -1,5 +1,16 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+import { DashboardOverview } from "../../components/operator/dashboard-overview";
+import styles from "../../components/operator/operator.module.css";
+
+export const metadata: Metadata = {
+  title: "Dashboard | Poza Nutą",
+};
 
 export default function DashboardPage() {
-  redirect("/dashboard/queue");
+  return (
+    <main className={styles.queuePage}>
+      <DashboardOverview />
+    </main>
+  );
 }

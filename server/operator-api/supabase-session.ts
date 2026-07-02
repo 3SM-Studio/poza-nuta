@@ -8,6 +8,7 @@ import { getDb } from "../db";
 import {
   mapSupabaseLoginError,
   resolveOperatorAccess,
+  resolveSignInPageAccess,
   type LinkedOperatorRecord,
 } from "./auth-policy";
 import { OperatorApiError } from "./errors";
@@ -101,6 +102,16 @@ export async function requireOperatorSession(): Promise<AuthenticatedOperatorSes
     operator: decision.operator,
     supabase,
   };
+}
+
+export async function getSignInPageAccess() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const operator = user ? await findLinkedOperator(user.id) : null;
+
+  return resolveSignInPageAccess(user?.id ?? null, operator);
 }
 
 export async function logoutOperator() {

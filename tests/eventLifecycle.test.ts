@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   calculateAutoCloseAt,
+  formatEventTimeRemaining,
   getLazyCloseDecision,
   shouldWarnEventClosingSoon,
 } from "../lib/event-lifecycle.ts";
@@ -55,6 +56,24 @@ test("lazy close decision handles expired, future and missing deadlines", () => 
     "not_expired",
   );
   assert.equal(getLazyCloseDecision(null, now), "no_deadline");
+});
+
+test("formatEventTimeRemaining reports hours, minutes and expired state", () => {
+  const now = new Date("2026-07-02T18:00:00.000Z");
+
+  assert.equal(
+    formatEventTimeRemaining("2026-07-02T19:30:00.000Z", now),
+    "1 godz. 30 min",
+  );
+  assert.equal(
+    formatEventTimeRemaining("2026-07-02T18:20:00.000Z", now),
+    "20 min",
+  );
+  assert.equal(
+    formatEventTimeRemaining("2026-07-02T17:59:00.000Z", now),
+    "Zamykanie",
+  );
+  assert.equal(formatEventTimeRemaining(null, now), "Brak terminu");
 });
 
 test("validateExtendInput accepts only one or two hours", () => {

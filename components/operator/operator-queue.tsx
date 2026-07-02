@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -8,11 +7,8 @@ import { shouldWarnEventClosingSoon } from "../../lib/event-lifecycle";
 import {
   extendDashboardEvent,
   formatDuration,
-  getCurrentOperator,
   getOperatorQueue,
-  logoutOperator,
   OperatorClientError,
-  type OperatorIdentity,
   type OperatorQueueAction,
   type OperatorQueueItem,
   type OperatorQueueResponse,
@@ -69,11 +65,9 @@ const availableActions: Partial<
 
 export function OperatorQueuePanel() {
   const router = useRouter();
-  const [operator, setOperator] = useState<OperatorIdentity | null>(null);
   const [queueData, setQueueData] = useState<OperatorQueueResponse | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [eventAction, setEventAction] = useState<"extend-1" | "extend-2" | null>(
     null,
@@ -126,13 +120,6 @@ export function OperatorQueuePanel() {
 
     async function initialize() {
       try {
-        const currentOperator = await getCurrentOperator();
-
-        if (!active) {
-          return;
-        }
-
-        setOperator(currentOperator.operator);
         await loadQueue(false);
       } catch (caughtError) {
         if (active && !handleAuthenticationError(caughtError)) {
@@ -180,22 +167,6 @@ export function OperatorQueuePanel() {
     }
   }
 
-  async function handleLogout() {
-    setIsLoggingOut(true);
-    setError(null);
-
-    try {
-      await logoutOperator();
-      router.replace("/sign-in");
-      router.refresh();
-    } catch (caughtError) {
-      if (!handleAuthenticationError(caughtError)) {
-        setError(getClientErrorMessage(caughtError));
-        setIsLoggingOut(false);
-      }
-    }
-  }
-
   async function handleExtendEvent(hours: 1 | 2) {
     setEventAction(`extend-${hours}`);
     setError(null);
@@ -222,9 +193,8 @@ export function OperatorQueuePanel() {
 
   return (
     <div className={styles.queueShell}>
-      <header className={styles.queueHeader}>
+      <header className={styles.pageHeader}>
         <div>
-          <p className={styles.brand}>Poza Nutą</p>
           <h1>Dashboard kolejki</h1>
           {queueData ? (
             <p className={styles.eventMeta}>
@@ -235,17 +205,6 @@ export function OperatorQueuePanel() {
         </div>
 
         <div className={styles.headerActions}>
-          {operator ? (
-            <span className={styles.operatorName}>
-              Operator: {operator.name}
-            </span>
-          ) : null}
-          <Link
-            className={`${styles.button} ${styles.secondaryButton}`}
-            href="/dashboard/settings"
-          >
-            Ustawienia
-          </Link>
           <button
             className={`${styles.button} ${styles.secondaryButton}`}
             type="button"
@@ -253,21 +212,10 @@ export function OperatorQueuePanel() {
             disabled={
               isRefreshing ||
               activeAction !== null ||
-              eventAction !== null ||
-              isLoggingOut
+              eventAction !== null
             }
           >
             {isRefreshing ? "Odświeżanie…" : "Odśwież"}
-          </button>
-          <button
-            className={`${styles.button} ${styles.secondaryButton}`}
-            type="button"
-            onClick={() => void handleLogout()}
-            disabled={
-              isLoggingOut || activeAction !== null || eventAction !== null
-            }
-          >
-            {isLoggingOut ? "Wylogowywanie…" : "Wyloguj"}
           </button>
         </div>
       </header>
@@ -306,7 +254,7 @@ export function OperatorQueuePanel() {
               onClick={() => setClosingWarningDismissed(true)}
               disabled={eventAction !== null}
             >
-              Zamknij po czasie
+              Ukryj ostrzeżenie
             </button>
           </div>
         </section>
@@ -322,7 +270,7 @@ export function OperatorQueuePanel() {
               wide={section.wide}
               activeAction={activeAction}
               actionsDisabled={
-                isRefreshing || isLoggingOut || eventAction !== null
+                isRefreshing || eventAction !== null
               }
               onAction={handleAction}
             />

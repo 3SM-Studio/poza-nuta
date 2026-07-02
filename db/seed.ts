@@ -2,6 +2,7 @@ import { config } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { calculateAutoCloseAt } from "../lib/event-lifecycle.ts";
 import { events } from "./schema.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
@@ -22,12 +23,14 @@ async function seed() {
   const db = drizzle({ client });
 
   try {
+    const startsAt = new Date();
     const insertedEvents = await db
       .insert(events)
       .values({
         name: "Poza Nutą",
         venue: "Domyślny lokal",
-        startsAt: new Date(),
+        startsAt,
+        autoCloseAt: calculateAutoCloseAt(startsAt),
         status: "active",
         isActivePublicEvent: true,
         publicQueueEnabled: false,

@@ -1,8 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const protectedDashboardRoutes = ["/dashboard/queue", "/dashboard/settings"];
-
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -35,9 +33,8 @@ export async function updateSession(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims();
   const pathname = request.nextUrl.pathname;
-  const isProtectedDashboardRoute = protectedDashboardRoutes.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`),
-  );
+  const isProtectedDashboardRoute =
+    pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
   if (!data?.claims && isProtectedDashboardRoute) {
     const loginUrl = request.nextUrl.clone();
