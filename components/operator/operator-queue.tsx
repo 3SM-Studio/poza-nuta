@@ -80,7 +80,7 @@ export function OperatorQueuePanel() {
         caughtError instanceof OperatorClientError &&
         caughtError.status === 401
       ) {
-        router.replace("/operator/login");
+        router.replace("/sign-in");
         router.refresh();
         return true;
       }
@@ -170,7 +170,7 @@ export function OperatorQueuePanel() {
 
     try {
       await logoutOperator();
-      router.replace("/operator/login");
+      router.replace("/sign-in");
       router.refresh();
     } catch (caughtError) {
       if (!handleAuthenticationError(caughtError)) {
@@ -193,7 +193,7 @@ export function OperatorQueuePanel() {
       <header className={styles.queueHeader}>
         <div>
           <p className={styles.brand}>Poza Nutą</p>
-          <h1>Kolejka operatora</h1>
+          <h1>Dashboard kolejki</h1>
           {queueData ? (
             <p className={styles.eventMeta}>
               {queueData.event.name}

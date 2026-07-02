@@ -1,0 +1,3 @@
+ALTER TABLE "operator_users" ADD COLUMN "auth_user_id" uuid;--> statement-breakpoint
+ALTER TABLE "operator_users" ADD CONSTRAINT "operator_users_auth_user_id_users_id_fk" FOREIGN KEY ("auth_user_id") REFERENCES "auth"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "operator_users_auth_user_id_idx" ON "operator_users" USING btree ("auth_user_id") WHERE "operator_users"."auth_user_id" is not null;

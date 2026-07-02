@@ -11,7 +11,9 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
+import { authUsers } from "drizzle-orm/supabase";
 
 export const eventStatusValues = ["draft", "active", "closed"] as const;
 export const songSourceValues = ["ising", "karafun", "manual"] as const;
@@ -144,6 +146,9 @@ export const operatorUsers = pgTable(
   {
     id: idColumn(),
     name: text("name").notNull(),
+    authUserId: uuid("auth_user_id").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
     passwordHash: text("password_hash").notNull(),
     active: boolean("active").notNull().default(true),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
@@ -151,6 +156,9 @@ export const operatorUsers = pgTable(
   },
   (table) => [
     uniqueIndex("operator_users_name_idx").on(sql`lower(${table.name})`),
+    uniqueIndex("operator_users_auth_user_id_idx")
+      .on(table.authUserId)
+      .where(sql`${table.authUserId} is not null`),
     index("operator_users_active_idx")
       .on(table.active)
       .where(sql`${table.active} = true`),

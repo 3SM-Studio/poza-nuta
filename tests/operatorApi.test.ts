@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { hashPin, verifyPin } from "../server/operator-api/crypto.ts";
 import {
-  createSessionToken,
-  hashPin,
-  hashSessionToken,
-  verifyPin,
-} from "../server/operator-api/crypto.ts";
+  mapSupabaseLoginError,
+  resolveOperatorAccess,
+} from "../server/operator-api/auth-policy.ts";
 import {
   canApplyQueueAction,
   getTargetStatus,
@@ -25,42 +24,86 @@ test("hashPin and verifyPin accept only the original PIN", async () => {
   assert.equal(await verifyPin("4826", "not-a-valid-hash"), false);
 });
 
-test("session tokens are random and stored through a one-way hash", () => {
-  const firstToken = createSessionToken();
-  const secondToken = createSessionToken();
-  const firstHash = hashSessionToken(firstToken);
-
-  assert.notEqual(firstToken, secondToken);
-  assert.notEqual(firstHash, firstToken);
-  assert.equal(firstHash, hashSessionToken(firstToken));
-});
-
-test("validateLoginInput trims a name but preserves the PIN exactly", () => {
+test("validateLoginInput normalizes email but preserves password exactly", () => {
   assert.deepEqual(
     validateLoginInput({
-      name: "  Operator  ",
-      pin: " 1234 ",
+      email: "  OPERATOR@example.com  ",
+      password: " secret password ",
     }),
     {
       success: true,
       data: {
-        name: "Operator",
-        pin: " 1234 ",
+        email: "operator@example.com",
+        password: " secret password ",
       },
     },
   );
 });
 
-test("validateLoginInput rejects malformed and short credentials", () => {
+test("validateLoginInput rejects malformed email and short password", () => {
   const result = validateLoginInput({
-    name: "",
-    pin: "123",
+    email: "not-an-email",
+    password: "123",
   });
 
   assert.equal(result.success, false);
   assert.deepEqual(
     result.success ? [] : result.issues.map((issue) => issue.field),
-    ["name", "pin"],
+    ["email", "password"],
+  );
+});
+
+test("Supabase login errors are mapped to safe API errors", () => {
+  assert.deepEqual(mapSupabaseLoginError({ code: "invalid_credentials" }), {
+    status: 401,
+    code: "INVALID_CREDENTIALS",
+    message: "The email address or password is incorrect.",
+  });
+  assert.equal(
+    mapSupabaseLoginError({ code: "over_request_rate_limit" }).status,
+    429,
+  );
+  assert.equal(mapSupabaseLoginError({ status: 503 }).status, 500);
+});
+
+test("Supabase Auth users must map to an active local operator", () => {
+  const unauthenticated = resolveOperatorAccess(null, null);
+  const unlinked = resolveOperatorAccess(
+    "62e01318-1043-48a1-93de-d3f0469545c6",
+    null,
+  );
+
+  assert.equal(unauthenticated.allowed, false);
+  assert.equal(unauthenticated.allowed ? null : unauthenticated.status, 401);
+  assert.equal(unlinked.allowed, false);
+  assert.equal(unlinked.allowed ? null : unlinked.status, 403);
+  assert.deepEqual(
+    resolveOperatorAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
+      id: 7,
+      name: "Operator",
+      active: false,
+    }),
+    {
+      allowed: false,
+      status: 403,
+      code: "OPERATOR_INACTIVE",
+      message: "This operator account is inactive.",
+    },
+  );
+  assert.deepEqual(
+    resolveOperatorAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
+      id: 7,
+      name: "Operator",
+      active: true,
+    }),
+    {
+      allowed: true,
+      operator: {
+        id: 7,
+        name: "Operator",
+        active: true,
+      },
+    },
   );
 });
 

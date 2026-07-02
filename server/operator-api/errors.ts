@@ -1,4 +1,4 @@
-export type OperatorApiErrorStatus = 400 | 401 | 403 | 404 | 409;
+export type OperatorApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 429;
 
 export class OperatorApiError extends Error {
   constructor(

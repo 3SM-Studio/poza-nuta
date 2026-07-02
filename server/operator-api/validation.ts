@@ -1,11 +1,12 @@
 export const DEFAULT_OPERATOR_NAME = "Operator";
 export const MAX_OPERATOR_NAME_LENGTH = 120;
-export const MIN_OPERATOR_PIN_LENGTH = 4;
-export const MAX_OPERATOR_PIN_LENGTH = 128;
+export const MAX_OPERATOR_EMAIL_LENGTH = 254;
+export const MIN_OPERATOR_PASSWORD_LENGTH = 6;
+export const MAX_OPERATOR_PASSWORD_LENGTH = 1_024;
 
 export type LoginInput = {
-  name: string;
-  pin: string;
+  email: string;
+  password: string;
 };
 
 export type ValidationIssue = {
@@ -28,27 +29,30 @@ export function validateLoginInput(
   }
 
   const issues: ValidationIssue[] = [];
-  const name = typeof input.name === "string" ? input.name.trim() : "";
-  const pin = typeof input.pin === "string" ? input.pin : "";
+  const email =
+    typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const password = typeof input.password === "string" ? input.password : "";
 
-  if (typeof input.name !== "string" || name.length === 0) {
-    issues.push({ field: "name", message: "name is required." });
-  } else if (name.length > MAX_OPERATOR_NAME_LENGTH) {
+  if (typeof input.email !== "string" || email.length === 0) {
+    issues.push({ field: "email", message: "email is required." });
+  } else if (email.length > MAX_OPERATOR_EMAIL_LENGTH) {
     issues.push({
-      field: "name",
-      message: `name must contain at most ${MAX_OPERATOR_NAME_LENGTH} characters.`,
+      field: "email",
+      message: `email must contain at most ${MAX_OPERATOR_EMAIL_LENGTH} characters.`,
     });
+  } else if (!isValidEmail(email)) {
+    issues.push({ field: "email", message: "email must be valid." });
   }
 
-  if (typeof input.pin !== "string" || pin.length === 0) {
-    issues.push({ field: "pin", message: "pin is required." });
+  if (typeof input.password !== "string" || password.length === 0) {
+    issues.push({ field: "password", message: "password is required." });
   } else if (
-    pin.length < MIN_OPERATOR_PIN_LENGTH ||
-    pin.length > MAX_OPERATOR_PIN_LENGTH
+    password.length < MIN_OPERATOR_PASSWORD_LENGTH ||
+    password.length > MAX_OPERATOR_PASSWORD_LENGTH
   ) {
     issues.push({
-      field: "pin",
-      message: `pin must contain between ${MIN_OPERATOR_PIN_LENGTH} and ${MAX_OPERATOR_PIN_LENGTH} characters.`,
+      field: "password",
+      message: `password must contain between ${MIN_OPERATOR_PASSWORD_LENGTH} and ${MAX_OPERATOR_PASSWORD_LENGTH} characters.`,
     });
   }
 
@@ -58,7 +62,7 @@ export function validateLoginInput(
 
   return {
     success: true,
-    data: { name, pin },
+    data: { email, password },
   };
 }
 
@@ -94,4 +98,8 @@ export function validateRequestId(value: string): ValidationResult<number> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }

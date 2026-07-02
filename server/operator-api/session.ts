@@ -1,5 +1,8 @@
 import "server-only";
 
+// Legacy custom PIN/session implementation retained for reference only.
+// Active operator routes use supabase-session.ts.
+
 import { and, eq, gt, lte, sql } from "drizzle-orm";
 import type { NextRequest, NextResponse } from "next/server";
 
@@ -16,7 +19,10 @@ import {
   verifyPin,
 } from "./crypto";
 import { OperatorApiError } from "./errors";
-import type { LoginInput } from "./validation";
+type LoginInput = {
+  name: string;
+  pin: string;
+};
 
 export const OPERATOR_SESSION_COOKIE = "poza_nuta_operator_session";
 export const OPERATOR_SESSION_TTL_SECONDS = 8 * 60 * 60;

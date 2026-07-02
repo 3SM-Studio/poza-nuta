@@ -7,18 +7,18 @@ import {
   operatorJsonResponse,
   operatorValidationErrorResponse,
 } from "./responses";
-import { requireOperatorSession } from "./session";
+import { requireOperatorSession } from "./supabase-session";
 import { applyOperatorQueueAction } from "./service";
 import type { OperatorQueueAction } from "./transitions";
 import { validateRequestId } from "./validation";
 
 export async function handleOperatorQueueAction(
-  request: NextRequest,
+  _request: NextRequest,
   params: Promise<{ requestId: string }>,
   action: OperatorQueueAction,
 ) {
   try {
-    const session = await requireOperatorSession(request);
+    const session = await requireOperatorSession();
     const { requestId: rawRequestId } = await params;
     const validation = validateRequestId(rawRequestId);
 

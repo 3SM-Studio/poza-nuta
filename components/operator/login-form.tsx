@@ -8,8 +8,8 @@ import styles from "./operator.module.css";
 
 export function OperatorLoginForm() {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [pin, setPin] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -19,16 +19,12 @@ export function OperatorLoginForm() {
     setIsSubmitting(true);
 
     try {
-      await loginOperator({ name, pin });
-      setPin("");
-      router.replace("/operator/queue");
+      await loginOperator({ email, password });
+      setPassword("");
+      router.replace("/dashboard/queue");
       router.refresh();
     } catch (caughtError) {
-      setError(
-        caughtError instanceof OperatorClientError
-          ? caughtError.message
-          : "Nie udało się zalogować. Spróbuj ponownie.",
-      );
+      setError(getLoginErrorMessage(caughtError));
     } finally {
       setIsSubmitting(false);
     }
@@ -37,14 +33,14 @@ export function OperatorLoginForm() {
   return (
     <form className={styles.loginForm} onSubmit={handleSubmit}>
       <div className={styles.field}>
-        <label htmlFor="operator-name">Nazwa operatora</label>
+        <label htmlFor="operator-email">E-mail</label>
         <input
-          id="operator-name"
-          name="name"
-          type="text"
+          id="operator-email"
+          name="email"
+          type="email"
           autoComplete="username"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
           disabled={isSubmitting}
           required
           autoFocus
@@ -52,16 +48,17 @@ export function OperatorLoginForm() {
       </div>
 
       <div className={styles.field}>
-        <label htmlFor="operator-pin">PIN</label>
+        <label htmlFor="operator-password">Hasło</label>
         <input
-          id="operator-pin"
-          name="pin"
+          id="operator-password"
+          name="password"
           type="password"
           autoComplete="current-password"
-          value={pin}
-          onChange={(event) => setPin(event.target.value)}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
           disabled={isSubmitting}
           required
+          minLength={6}
         />
       </div>
 
@@ -80,4 +77,23 @@ export function OperatorLoginForm() {
       </button>
     </form>
   );
+}
+
+function getLoginErrorMessage(error: unknown) {
+  if (error instanceof OperatorClientError) {
+    switch (error.code) {
+      case "INVALID_CREDENTIALS":
+        return "Nieprawidłowy adres e-mail lub hasło.";
+      case "AUTH_RATE_LIMITED":
+        return "Zbyt wiele prób logowania. Spróbuj ponownie później.";
+      case "OPERATOR_NOT_LINKED":
+        return "To konto nie jest powiązane z operatorem.";
+      case "OPERATOR_INACTIVE":
+        return "To konto operatora jest nieaktywne.";
+      default:
+        return "Nie udało się zalogować. Spróbuj ponownie.";
+    }
+  }
+
+  return "Nie udało się zalogować. Spróbuj ponownie.";
 }

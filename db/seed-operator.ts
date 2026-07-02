@@ -5,10 +5,7 @@ import postgres from "postgres";
 
 import { operatorUsers } from "./schema.ts";
 import { hashPin } from "../server/operator-api/crypto.ts";
-import {
-  DEFAULT_OPERATOR_NAME,
-  validateLoginInput,
-} from "../server/operator-api/validation.ts";
+import { DEFAULT_OPERATOR_NAME } from "../server/operator-api/validation.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
@@ -32,13 +29,13 @@ async function seedOperator() {
     );
   }
 
-  const validation = validateLoginInput({ name, pin });
+  if (name.length > 120) {
+    throw new Error("OPERATOR_BOOTSTRAP_NAME must have at most 120 characters.");
+  }
 
-  if (!validation.success) {
+  if (pin.length < 4 || pin.length > 128) {
     throw new Error(
-      `Operator bootstrap input is invalid: ${validation.issues
-        .map((issue) => issue.message)
-        .join(" ")}`,
+      "OPERATOR_BOOTSTRAP_PIN must have between 4 and 128 characters.",
     );
   }
 
@@ -57,7 +54,7 @@ async function seedOperator() {
         active: operatorUsers.active,
       })
       .from(operatorUsers)
-      .where(sql`lower(${operatorUsers.name}) = lower(${validation.data.name})`)
+      .where(sql`lower(${operatorUsers.name}) = lower(${name})`)
       .limit(1);
 
     if (existingOperator?.active) {
@@ -71,11 +68,11 @@ async function seedOperator() {
       );
     }
 
-    const passwordHash = await hashPin(validation.data.pin);
+    const passwordHash = await hashPin(pin);
     const [createdOperator] = await db
       .insert(operatorUsers)
       .values({
-        name: validation.data.name,
+        name,
         passwordHash,
         active: true,
       })

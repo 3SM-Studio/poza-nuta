@@ -56,12 +56,15 @@ export type OperatorQueueResponse = {
 
 type OperatorMeResponse = {
   operator: OperatorIdentity;
-  expiresAt: string;
+  authUser?: {
+    id: string;
+    email: string | null;
+  };
 };
 
 type OperatorLoginInput = {
-  name: string;
-  pin: string;
+  email: string;
+  password: string;
 };
 
 type ApiErrorBody = {
@@ -70,6 +73,13 @@ type ApiErrorBody = {
     message?: string;
   };
 };
+
+export const dashboardApiPaths = {
+  login: "/api/dashboard/login",
+  logout: "/api/dashboard/logout",
+  me: "/api/dashboard/me",
+  queue: "/api/dashboard/queue",
+} as const;
 
 export class OperatorClientError extends Error {
   readonly status: number;
@@ -88,34 +98,40 @@ export class OperatorClientError extends Error {
 }
 
 export function loginOperator(input: OperatorLoginInput) {
-  return requestJson<OperatorMeResponse>("/api/operator/login", {
+  return requestJson<OperatorMeResponse>(dashboardApiPaths.login, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function logoutOperator() {
-  return requestJson<{ success: true }>("/api/operator/logout", {
+  return requestJson<{ success: true }>(dashboardApiPaths.logout, {
     method: "POST",
   });
 }
 
 export function getCurrentOperator() {
-  return requestJson<OperatorMeResponse>("/api/operator/me");
+  return requestJson<OperatorMeResponse>(dashboardApiPaths.me);
 }
 
 export function getOperatorQueue() {
-  return requestJson<OperatorQueueResponse>("/api/operator/queue");
+  return requestJson<OperatorQueueResponse>(dashboardApiPaths.queue);
 }
 
 export function runOperatorQueueAction(
   requestId: number,
   action: OperatorQueueAction,
 ) {
-  return requestJson(
-    `/api/operator/requests/${encodeURIComponent(requestId)}/${action}`,
-    { method: "POST" },
-  );
+  return requestJson(getDashboardRequestActionPath(requestId, action), {
+    method: "POST",
+  });
+}
+
+export function getDashboardRequestActionPath(
+  requestId: number,
+  action: OperatorQueueAction,
+) {
+  return `/api/dashboard/requests/${encodeURIComponent(requestId)}/${action}`;
 }
 
 export function formatDuration(durationSeconds: number | null) {
