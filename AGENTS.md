@@ -1,21 +1,25 @@
 # Poza Nuta — Codex Instructions
 
-## Product
+## Currently implemented product
 
 Poza Nuta is a karaoke queue application for local events.
 
 Public users can:
-- view active/scheduled events,
-- enter an event session through a QR code,
-- choose a nickname,
 - search songs,
 - submit song requests,
-- optionally add co-singers.
+- view the public queue when enabled.
 
 Dashboard users can:
 - sign in with Supabase Auth,
 - manage the active event,
-- manage the queue,
+- manage the queue.
+
+## Target product
+
+Planned capabilities, not necessarily implemented yet:
+- event listings and shareable event/session routes,
+- QR-based participant sessions and nicknames,
+- co-singers and participant history,
 - manage participants,
 - manage catalog imports,
 - manage members/owners.
@@ -30,35 +34,59 @@ Dashboard users can:
 - Business operations must go through server-side API routes.
 - Do not use browser Supabase client for direct business table access.
 - Public users do not use Supabase Auth.
-- Participant sessions use HttpOnly cookies and hashed tokens in the database.
+- Target participant sessions should use HttpOnly cookies and hashed tokens in the database.
 
-## Current route conventions
+## Currently implemented routes
 
 Public:
-- `/` — public event listing.
-- `/events/[slug]` — redirect to Facebook URL.
-- `/session/[code]` — QR session entry.
+- `/` — public song search and request form.
 - `/queue` — public queue.
 
 Dashboard:
 - `/sign-in`
-- `/setup`
 - `/dashboard`
 - `/dashboard/queue`
 - `/dashboard/settings`
+
+API:
+- `/api/health`
+- `/api/public/event`
+- `/api/public/songs/search`
+- `/api/public/requests`
+- `/api/public/queue`
+- `/api/dashboard/login`
+- `/api/dashboard/logout`
+- `/api/dashboard/me`
+- `/api/dashboard/event`
+- `/api/dashboard/event/start`
+- `/api/dashboard/event/extend`
+- `/api/dashboard/event/close`
+- `/api/dashboard/queue`
+- `/api/dashboard/requests/[requestId]/{approve,reject,start,done,skip}`
+
+Legacy compatibility:
+- `/operator/login`
+- `/operator/queue`
+- `/api/operator/*`
+- Do not add new operator routes.
+
+## Target routes
+
+These are product direction, not claims about current implementation:
+
+Public:
+- `/events/[slug]`
+- `/session/[code]`
+
+Dashboard:
+- `/setup`
 - `/dashboard/events`
 - `/dashboard/participants`
 - `/dashboard/imports`
 - `/dashboard/members`
 
 API:
-- `/api/public/*`
 - `/api/session/*`
-- `/api/dashboard/*`
-
-Legacy:
-- `/operator/*` and `/api/operator/*` are legacy compatibility paths only.
-- Do not add new operator routes.
 
 ## Security rules
 
