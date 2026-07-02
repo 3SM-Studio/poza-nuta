@@ -1,0 +1,422 @@
+.loginPage,
+.queuePage {
+  min-height: 100vh;
+  background: #f5f7f5;
+  color: #172019;
+}
+
+.loginPage {
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.loginCard {
+  width: min(100%, 28rem);
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  border: 1px solid #dce2dd;
+  border-radius: 1rem;
+  background: #ffffff;
+  box-shadow: 0 1rem 2.5rem rgb(28 44 32 / 8%);
+}
+
+.loginCard h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 6vw, 2.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.loginIntro {
+  margin: 0.75rem 0 1.75rem;
+  color: #657069;
+  line-height: 1.55;
+}
+
+.brand {
+  margin: 0 0 0.35rem;
+  color: #295a36;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.loginForm {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field label {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.field input {
+  min-height: 3rem;
+  width: 100%;
+  border: 1px solid #cbd4cd;
+  border-radius: 0.6rem;
+  background: #ffffff;
+  color: #172019;
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.field input:focus {
+  border-color: #2e7442;
+  outline: 3px solid rgb(46 116 66 / 16%);
+}
+
+.field input:disabled {
+  background: #f0f2f0;
+  color: #758078;
+}
+
+.formError,
+.pageError {
+  margin: 0;
+  border: 1px solid #efc4c4;
+  border-radius: 0.6rem;
+  background: #fff4f4;
+  color: #8c2525;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  padding: 0.75rem 0.85rem;
+}
+
+.button {
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1;
+  padding: 0.75rem 1rem;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.button:focus-visible {
+  outline: 3px solid rgb(46 116 66 / 20%);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.primaryButton,
+.actionButton {
+  background: #23743a;
+  color: #ffffff;
+}
+
+.primaryButton:hover:not(:disabled),
+.actionButton:hover:not(:disabled) {
+  background: #185e2d;
+}
+
+.loginButton {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.secondaryButton {
+  border-color: #cbd4cd;
+  background: #ffffff;
+  color: #263029;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: #f0f3f0;
+}
+
+.dangerButton {
+  border-color: #e1b9b9;
+  background: #ffffff;
+  color: #9a2929;
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: #fff0f0;
+}
+
+.queuePage {
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+.queueShell {
+  width: min(100%, 92rem);
+  margin: 0 auto;
+}
+
+.queueHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid #dce2dd;
+  border-radius: 0.85rem;
+  background: #ffffff;
+}
+
+.queueHeader h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+
+.eventMeta {
+  margin: 0.35rem 0 0;
+  color: #657069;
+  font-size: 0.9rem;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.operatorName {
+  margin-right: 0.35rem;
+  color: #59655d;
+  font-size: 0.9rem;
+}
+
+.pageError {
+  margin-bottom: 1rem;
+}
+
+.queueGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.queueSection {
+  min-width: 0;
+  border: 1px solid #dce2dd;
+  border-radius: 0.85rem;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.wideSection {
+  grid-column: 1 / -1;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #e6ebe7;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.sectionHeader span {
+  min-width: 1.7rem;
+  border-radius: 0.4rem;
+  background: #eef2ef;
+  color: #566158;
+  font-size: 0.78rem;
+  font-weight: 750;
+  padding: 0.2rem 0.4rem;
+  text-align: center;
+}
+
+.requestList {
+  display: grid;
+}
+
+.requestRow {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  gap: 0.8rem 1rem;
+  padding: 0.9rem 1rem;
+}
+
+.requestRow + .requestRow {
+  border-top: 1px solid #edf0ed;
+}
+
+.requestMain {
+  min-width: 0;
+}
+
+.requestHeading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.requestHeading strong {
+  font-size: 0.98rem;
+}
+
+.status {
+  border-radius: 0.35rem;
+  background: #eef1ee;
+  color: #566158;
+  font-size: 0.7rem;
+  font-weight: 750;
+  line-height: 1;
+  padding: 0.3rem 0.4rem;
+}
+
+.approved,
+.now,
+.done {
+  background: #e7f3e9;
+  color: #246037;
+}
+
+.rejected {
+  background: #fdeaea;
+  color: #932929;
+}
+
+.songTitle {
+  margin: 0.42rem 0 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.songArtist {
+  margin: 0.14rem 0 0;
+  color: #657069;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.note {
+  margin: 0.5rem 0 0;
+  color: #4d574f;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.requestMeta {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: #6b756e;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+}
+
+.rowActions .button {
+  min-height: 2.45rem;
+  font-size: 0.82rem;
+  padding: 0.65rem 0.8rem;
+}
+
+.emptySection,
+.emptyPage,
+.loadingScreen {
+  color: #6b756e;
+  text-align: center;
+}
+
+.emptySection {
+  margin: 0;
+  padding: 1.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.emptyPage,
+.loadingScreen {
+  padding: 4rem 1rem;
+}
+
+@media (max-width: 800px) {
+  .queueHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .operatorName {
+    width: 100%;
+  }
+
+  .queueGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .wideSection {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .queuePage {
+    padding: 0;
+  }
+
+  .queueHeader,
+  .queueSection {
+    border-left: 0;
+    border-radius: 0;
+    border-right: 0;
+  }
+
+  .requestRow {
+    grid-template-columns: 1fr;
+  }
+
+  .requestMeta {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .rowActions .button {
+    flex: 1 1 8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}

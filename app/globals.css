@@ -20,14 +20,14 @@ body {
   margin: 0;
 }
 
-main {
+.home-main {
   display: grid;
   min-height: 100vh;
   place-items: center;
   padding: 2rem;
 }
 
-section {
+.home-card {
   width: min(100%, 42rem);
   padding: clamp(2rem, 6vw, 4rem);
   border: 1px solid #d8dfd2;
@@ -45,14 +45,14 @@ section {
   text-transform: uppercase;
 }
 
-h1 {
+.home-card h1 {
   margin: 0;
   font-size: clamp(2.25rem, 8vw, 4.5rem);
   line-height: 0.98;
   letter-spacing: -0.05em;
 }
 
-h1 + p {
+.home-card h1 + p {
   max-width: 34rem;
   margin: 1.5rem 0 0;
   color: #526057;

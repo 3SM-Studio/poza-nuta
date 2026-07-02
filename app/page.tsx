@@ -1,7 +1,7 @@
 export default function HomePage() {
   return (
-    <main>
-      <section>
+    <main className="home-main">
+      <section className="home-card">
         <p className="eyebrow">Poza Nutą</p>
         <h1>Nowa aplikacja jest gotowa.</h1>
         <p>
