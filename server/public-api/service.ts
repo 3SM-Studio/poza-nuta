@@ -55,6 +55,7 @@ export async function searchPublicSongs(query: string | null) {
   return getDb()
     .select({
       id: songs.id,
+      source: songs.source,
       title: songs.title,
       artist: songs.artist,
       durationSeconds: songs.durationSeconds,
