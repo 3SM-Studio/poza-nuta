@@ -1,5 +1,18 @@
 # Poza Nuta
 
+## Higiena repozytorium i eksport do review
+
+Nie pakujemy całego working directory do ZIP-a. Do review lub przekazania
+źródeł używamy archiwum tworzonego bezpośrednio z aktualnego commita:
+
+```bash
+git archive --format=zip --output poza-nuta-src.zip HEAD
+```
+
+Pliki `.env`, katalogi `.next` i `node_modules` oraz lokalne logi nie mogą
+trafić do paczki. Lokalne katalogi importów i źródłowe katalogi CSV również
+pozostają poza repozytorium.
+
 ## Import metadanych iSing
 
 Importer buduje lokalny, prywatny indeks metadanych dostępnych utworow karaoke z iSing.

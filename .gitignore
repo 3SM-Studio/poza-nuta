@@ -1,20 +1,39 @@
+# Dependencies
 node_modules/
+apps/*/node_modules/
+
+# Local environment files
 .env
+.env.*
+!.env.example
+
+# Build output and platform state
 dist/
-data/imports/*.json
-data/events/*.json
+.next/
+out/
+.vercel/
+
+# Local runtime and import data
+data/imports/*
+!data/imports/.gitkeep
+data/events/*
+!data/events/.gitkeep
+data/sources/*.csv
 data_old/
 
-# Next.js generated types
+# Generated types and caches
 next-env.d.ts
-.next/
-
-# Local logs
-*.log
-.codex-*.log
-
-# TypeScript incremental build
 *.tsbuildinfo
+
+# Local logs and tool state
+*.log
+.codex-dev-*.log
+.next-dev.*.log
+.agents/
+
+# Local archives
+poza-nuta*.zip
+*.local.zip
 
 *.cookies
 operator.cookies
