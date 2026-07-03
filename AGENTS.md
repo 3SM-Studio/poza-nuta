@@ -167,3 +167,109 @@ Stop and ask/report if:
 - browser smoke test hangs because of tooling,
 - a task would require changing unrelated modules,
 - a destructive import/delete/truncate seems necessary.
+
+## MCP / Tool usage policy
+
+Codex may use available MCP servers, but must keep scope narrow and report which MCPs were used.
+
+### Use Next DevTools MCP when:
+- debugging Next.js App Router routing,
+- checking route detection,
+- diagnosing Proxy behavior,
+- investigating build/dev-server issues,
+- verifying `src/app` route structure.
+
+### Use Playwright or Chrome DevTools when:
+- performing browser smoke tests,
+- verifying UI behavior,
+- checking redirects,
+- testing dashboard flows,
+- testing dialogs, menus, and forms.
+
+Rules:
+- Do not perform destructive UI actions unless explicitly approved.
+- For close/delete/archive actions, test cancel flow first.
+- Never click final destructive confirmation unless explicitly instructed.
+
+### Use shadcn MCP when:
+- adding shadcn/ui foundation,
+- adding specific shadcn components,
+- checking shadcn registry/docs.
+
+Allowed by default:
+- button
+- card
+- badge
+- alert
+- dropdown-menu
+- dialog
+- alert-dialog
+- separator
+- avatar
+- input
+- label
+- textarea
+- select
+
+Not allowed without explicit approval:
+- dashboard blocks
+- sidebar blocks
+- charts
+- data-table demos
+- calendar
+- dark mode
+- demo pages
+- generated example apps
+
+### Use Supabase MCP only for:
+- read-only schema inspection,
+- Supabase docs lookup,
+- verifying table/column existence.
+
+Rules:
+- Do not mutate Supabase data through MCP.
+- Do not run destructive SQL.
+- Do not expose secrets.
+- Application business logic must remain server-side through Drizzle/API.
+
+### Use Context7 when:
+- checking current official docs for libraries/frameworks,
+- verifying API usage for Next.js, Supabase, Drizzle, shadcn, Vercel.
+
+Prefer official docs over blog posts.
+
+### Use GitHub MCP only when:
+- explicitly asked to inspect GitHub issues, PRs, commits, or remote repo state.
+
+Do not push, merge, close issues, or modify remote state without explicit approval.
+
+### Use Vercel MCP only when:
+- explicitly asked to inspect deployments, env vars, domains, logs, or project settings.
+
+Do not deploy or change env/project settings without explicit approval.
+
+### Use Cloudflare MCP only when:
+- explicitly asked to inspect DNS, domains, caching, or Cloudflare config.
+
+Do not modify DNS, routes, workers, SSL, or security settings without explicit approval.
+
+### Use Sentry MCP only when:
+- explicitly asked to inspect production errors/performance.
+
+Do not create/delete projects, alerts, or change settings without explicit approval.
+
+### Use node_repl only when:
+- quick local JavaScript/TypeScript inspection is useful,
+- parsing config,
+- checking small runtime behavior.
+
+Do not use node_repl as a replacement for `pnpm test`, `pnpm typecheck`, `pnpm lint`, or `pnpm build`.
+
+### Reporting requirement
+
+At the end of each task, Codex must report:
+- which MCPs were used,
+- why they were used,
+- whether any authenticated/external service was accessed,
+- whether any mutation was performed,
+- whether browser automation clicked any destructive action.
