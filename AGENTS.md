@@ -221,6 +221,12 @@ Not allowed without explicit approval:
 - demo pages
 - generated example apps
 
+Foundation rules:
+- Code-owned UI components live in `src/components/ui`.
+- Shared class merging uses `src/lib/utils.ts`.
+- Adding the foundation does not authorize migrating dashboard or public UI.
+- Keep `components.json` aliases aligned with the `src` structure.
+
 ### Use Supabase MCP only for:
 - read-only schema inspection,
 - Supabase docs lookup,

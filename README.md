@@ -68,6 +68,17 @@ Aktywny test suite obejmuje aplikację Next, API, helpery klienta, cykl życia
 eventu oraz importer KaraFun do Postgresa. Testy dawnego API, Vite UI i
 lokalnego przepływu JSON zostały wycofane.
 
+## UI foundation
+
+Projekt używa shadcn/ui jako lokalnego, code-owned foundation w
+`src/components/ui`. Bazowe komponenty dodajemy przez oficjalne narzędzia
+shadcn, dzięki czemu ich kod pozostaje częścią repozytorium i może być
+kontrolowanie rozwijany.
+
+Dashboard blocks, sidebar blocks, charts i inne rozbudowane elementy wymagają
+osobnego review. Samo dodanie foundation nie migruje istniejącego dashboardu
+ani publicznego UI.
+
 ## Kod legacy
 
 Legacy source folders `apps/api` i `apps/web` oraz dawna zawartość rootowego
