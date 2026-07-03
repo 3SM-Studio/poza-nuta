@@ -33,6 +33,17 @@ export const importJobStatusValues = [
   "done",
   "failed",
 ] as const;
+export const workspaceMemberRoleValues = [
+  "owner",
+  "manager",
+  "operator",
+  "viewer",
+] as const;
+export const platformMemberRoleValues = [
+  "platform_owner",
+  "platform_admin",
+  "support",
+] as const;
 
 export const eventStatusEnum = pgEnum("event_status", eventStatusValues);
 export const songSourceEnum = pgEnum("song_source", songSourceValues);
@@ -49,6 +60,14 @@ export const importJobStatusEnum = pgEnum(
   "import_job_status",
   importJobStatusValues,
 );
+export const workspaceMemberRoleEnum = pgEnum(
+  "workspace_member_role",
+  workspaceMemberRoleValues,
+);
+export const platformMemberRoleEnum = pgEnum(
+  "platform_member_role",
+  platformMemberRoleValues,
+);
 
 const idColumn = () =>
   bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity();
@@ -56,10 +75,35 @@ const idColumn = () =>
 const timestampColumn = (name: string) =>
   timestamp(name, { withTimezone: true, mode: "date" });
 
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: idColumn(),
+    name: text("name").notNull(),
+    handle: text("handle").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("workspaces_handle_idx").on(table.handle),
+    index("workspaces_active_idx")
+      .on(table.active)
+      .where(sql`${table.active} = true`),
+    check(
+      "workspaces_handle_format_check",
+      sql`${table.handle} ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'`,
+    ),
+  ],
+).enableRLS();
+
 export const events = pgTable(
   "events",
   {
     id: idColumn(),
+    workspaceId: bigint("workspace_id", { mode: "number" })
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     venue: text("venue"),
     startsAt: timestampColumn("starts_at").notNull(),
@@ -79,9 +123,14 @@ export const events = pgTable(
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("events_one_active_public_idx")
-      .on(table.isActivePublicEvent)
+    uniqueIndex("events_one_active_public_per_workspace_idx")
+      .on(table.workspaceId)
       .where(sql`${table.isActivePublicEvent} = true`),
+    index("events_workspace_status_starts_at_idx").on(
+      table.workspaceId,
+      table.status,
+      table.startsAt.desc(),
+    ),
     index("events_status_starts_at_idx").on(
       table.status,
       table.startsAt.desc(),
@@ -162,6 +211,58 @@ export const operatorUsers = pgTable(
       .on(table.authUserId)
       .where(sql`${table.authUserId} is not null`),
     index("operator_users_active_idx")
+      .on(table.active)
+      .where(sql`${table.active} = true`),
+  ],
+).enableRLS();
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: idColumn(),
+    workspaceId: bigint("workspace_id", { mode: "number" })
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    operatorUserId: bigint("operator_user_id", { mode: "number" })
+      .notNull()
+      .references(() => operatorUsers.id, { onDelete: "cascade" }),
+    role: workspaceMemberRoleEnum("role").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("workspace_members_workspace_operator_idx").on(
+      table.workspaceId,
+      table.operatorUserId,
+    ),
+    index("workspace_members_operator_idx").on(table.operatorUserId),
+    index("workspace_members_workspace_role_idx").on(
+      table.workspaceId,
+      table.role,
+    ),
+    index("workspace_members_active_idx")
+      .on(table.active)
+      .where(sql`${table.active} = true`),
+  ],
+).enableRLS();
+
+export const platformMembers = pgTable(
+  "platform_members",
+  {
+    id: idColumn(),
+    operatorUserId: bigint("operator_user_id", { mode: "number" })
+      .notNull()
+      .references(() => operatorUsers.id, { onDelete: "cascade" }),
+    role: platformMemberRoleEnum("role").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("platform_members_operator_idx").on(table.operatorUserId),
+    index("platform_members_role_idx").on(table.role),
+    index("platform_members_active_idx")
       .on(table.active)
       .where(sql`${table.active} = true`),
   ],

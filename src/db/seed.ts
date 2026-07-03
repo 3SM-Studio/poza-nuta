@@ -3,7 +3,11 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { calculateAutoCloseAt } from "../lib/event-lifecycle.ts";
-import { events } from "./schema.ts";
+import {
+  DEFAULT_WORKSPACE_HANDLE,
+  DEFAULT_WORKSPACE_NAME,
+} from "../lib/workspace.ts";
+import { events, workspaces } from "./schema.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
@@ -23,10 +27,27 @@ async function seed() {
   const db = drizzle({ client });
 
   try {
+    const [workspace] = await db
+      .insert(workspaces)
+      .values({
+        name: DEFAULT_WORKSPACE_NAME,
+        handle: DEFAULT_WORKSPACE_HANDLE,
+      })
+      .onConflictDoUpdate({
+        target: workspaces.handle,
+        set: {
+          name: DEFAULT_WORKSPACE_NAME,
+          active: true,
+          updatedAt: new Date(),
+        },
+      })
+      .returning({ id: workspaces.id });
+
     const startsAt = new Date();
     const insertedEvents = await db
       .insert(events)
       .values({
+        workspaceId: workspace.id,
         name: "Poza Nutą",
         venue: "Domyślny lokal",
         startsAt,

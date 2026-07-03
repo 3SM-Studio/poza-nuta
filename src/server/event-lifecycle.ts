@@ -2,8 +2,9 @@ import "server-only";
 
 import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 
-import { events, operatorAuditLog } from "../db/schema";
+import { events, operatorAuditLog, workspaces } from "../db/schema";
 import { calculateAutoCloseAt } from "../lib/event-lifecycle";
+import { DEFAULT_WORKSPACE_HANDLE } from "../lib/workspace";
 import { getDb } from "./db";
 import { OperatorApiError } from "./operator-api/errors";
 import type {
@@ -12,13 +13,16 @@ import type {
   StartEventInput,
 } from "./operator-api/validation";
 
-const activeEventFilter = and(
-  eq(events.isActivePublicEvent, true),
-  eq(events.status, "active"),
-);
+const activeEventFilter = (workspaceId: number) =>
+  and(
+    eq(events.workspaceId, workspaceId),
+    eq(events.isActivePublicEvent, true),
+    eq(events.status, "active"),
+  );
 
 export const activeEventSelection = {
   id: events.id,
+  workspaceId: events.workspaceId,
   name: events.name,
   venue: events.venue,
   startsAt: events.startsAt,
@@ -38,12 +42,15 @@ type DatabaseTransaction = Parameters<
 
 export async function getActiveEventAfterLazyClose(now = new Date()) {
   return getDb().transaction(async (transaction) => {
-    await closeExpiredActiveEventInTransaction(transaction, now);
+    const workspaceId = await requireDefaultWorkspaceIdInTransaction(
+      transaction,
+    );
+    await closeExpiredActiveEventInTransaction(transaction, now, workspaceId);
 
     const [event] = await transaction
       .select(activeEventSelection)
       .from(events)
-      .where(activeEventFilter)
+      .where(activeEventFilter(workspaceId))
       .limit(1);
 
     return event ?? null;
@@ -53,7 +60,10 @@ export async function getActiveEventAfterLazyClose(now = new Date()) {
 export async function closeExpiredActiveEventInTransaction(
   transaction: DatabaseTransaction,
   now = new Date(),
+  workspaceId?: number,
 ) {
+  const targetWorkspaceId =
+    workspaceId ?? (await requireDefaultWorkspaceIdInTransaction(transaction));
   const [closedEvent] = await transaction
     .update(events)
     .set({
@@ -64,7 +74,7 @@ export async function closeExpiredActiveEventInTransaction(
     })
     .where(
       and(
-        activeEventFilter,
+        activeEventFilter(targetWorkspaceId),
         isNotNull(events.autoCloseAt),
         lte(events.autoCloseAt, now),
       ),
@@ -99,8 +109,14 @@ export async function updateActiveEventSettings(
   return getDb().transaction(async (transaction) => {
     await acquireEventLifecycleLock(transaction);
     const now = new Date();
-    await closeExpiredActiveEventInTransaction(transaction, now);
-    const event = await requireActiveEventForUpdate(transaction);
+    const workspaceId = await requireDefaultWorkspaceIdInTransaction(
+      transaction,
+    );
+    await closeExpiredActiveEventInTransaction(transaction, now, workspaceId);
+    const event = await requireActiveEventForUpdate(
+      transaction,
+      workspaceId,
+    );
 
     const [updatedEvent] = await transaction
       .update(events)
@@ -146,8 +162,14 @@ export async function extendActiveEvent(
   return getDb().transaction(async (transaction) => {
     await acquireEventLifecycleLock(transaction);
     const now = new Date();
-    await closeExpiredActiveEventInTransaction(transaction, now);
-    const event = await requireActiveEventForUpdate(transaction);
+    const workspaceId = await requireDefaultWorkspaceIdInTransaction(
+      transaction,
+    );
+    await closeExpiredActiveEventInTransaction(transaction, now, workspaceId);
+    const event = await requireActiveEventForUpdate(
+      transaction,
+      workspaceId,
+    );
     const base = event.autoCloseAt ?? now;
     const autoCloseAt = new Date(
       base.getTime() + input.hours * 60 * 60 * 1_000,
@@ -181,7 +203,13 @@ export async function extendActiveEvent(
 export async function closeActiveEvent(operatorId: number) {
   return getDb().transaction(async (transaction) => {
     await acquireEventLifecycleLock(transaction);
-    const event = await requireActiveEventForUpdate(transaction);
+    const workspaceId = await requireDefaultWorkspaceIdInTransaction(
+      transaction,
+    );
+    const event = await requireActiveEventForUpdate(
+      transaction,
+      workspaceId,
+    );
     const now = new Date();
 
     const [closedEvent] = await transaction
@@ -216,12 +244,15 @@ export async function startEvent(
   return getDb().transaction(async (transaction) => {
     await acquireEventLifecycleLock(transaction);
     const now = new Date();
-    await closeExpiredActiveEventInTransaction(transaction, now);
+    const workspaceId = await requireDefaultWorkspaceIdInTransaction(
+      transaction,
+    );
+    await closeExpiredActiveEventInTransaction(transaction, now, workspaceId);
 
     const [activeEvent] = await transaction
       .select({ id: events.id })
       .from(events)
-      .where(activeEventFilter)
+      .where(activeEventFilter(workspaceId))
       .limit(1);
 
     if (activeEvent) {
@@ -236,6 +267,7 @@ export async function startEvent(
     const [createdEvent] = await transaction
       .insert(events)
       .values({
+        workspaceId,
         name: input.name,
         venue: input.venue,
         startsAt: now,
@@ -264,11 +296,12 @@ export async function startEvent(
 
 async function requireActiveEventForUpdate(
   transaction: DatabaseTransaction,
+  workspaceId: number,
 ) {
   const [event] = await transaction
     .select(activeEventSelection)
     .from(events)
-    .where(activeEventFilter)
+    .where(activeEventFilter(workspaceId))
     .for("update")
     .limit(1);
 
@@ -281,6 +314,27 @@ async function requireActiveEventForUpdate(
   }
 
   return event;
+}
+
+export async function requireDefaultWorkspaceIdInTransaction(
+  transaction: DatabaseTransaction,
+) {
+  const [workspace] = await transaction
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(
+      and(
+        eq(workspaces.handle, DEFAULT_WORKSPACE_HANDLE),
+        eq(workspaces.active, true),
+      ),
+    )
+    .limit(1);
+
+  if (!workspace) {
+    throw new Error("Default workspace is not configured.");
+  }
+
+  return workspace.id;
 }
 
 async function acquireEventLifecycleLock(
