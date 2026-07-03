@@ -13,6 +13,8 @@ export type OperatorQueueAction =
   | "done"
   | "skip";
 
+export type SongSource = "ising" | "karafun" | "manual";
+
 export type OperatorIdentity = {
   id: number;
   name: string;
@@ -84,7 +86,7 @@ export type OperatorQueueItem = {
     title: string;
     artist: string;
     durationSeconds: number | null;
-    source?: string;
+    source: SongSource;
   };
 };
 

@@ -43,6 +43,7 @@ const operatorQueueItemSelection = {
   completedAt: songRequests.completedAt,
   songTitle: songs.title,
   songArtist: songs.artist,
+  songSource: songs.source,
   durationSeconds: songs.durationSeconds,
 };
 
@@ -264,6 +265,7 @@ type OperatorQueueRow = {
   completedAt: Date | null;
   songTitle: string;
   songArtist: string;
+  songSource: "ising" | "karafun" | "manual";
   durationSeconds: number | null;
 };
 
@@ -287,6 +289,7 @@ function toOperatorQueueItem(row: OperatorQueueRow) {
     song: {
       title: row.songTitle,
       artist: row.songArtist,
+      source: row.songSource,
       durationSeconds: row.durationSeconds,
     },
   };

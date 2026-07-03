@@ -25,6 +25,7 @@ import {
   formatDuration,
   getOperatorQueue,
   OperatorClientError,
+  type SongSource,
   type OperatorQueueAction,
   type OperatorQueueItem,
   type OperatorQueueResponse,
@@ -366,6 +367,7 @@ function RequestRow({
 }: RequestRowProps) {
   const duration = formatDuration(item.song.durationSeconds);
   const actions = availableActions[item.status] ?? [];
+  const sourceLabel = formatDashboardSongSource(item.song.source);
 
   return (
     <article className={styles.requestRow}>
@@ -376,14 +378,22 @@ function RequestRow({
             {statusLabels[item.status]}
           </Badge>
         </div>
-        <p className={styles.songTitle}>{item.song.title}</p>
+        <div className={styles.songHeading}>
+          <p className={styles.songTitle}>{item.song.title}</p>
+          <Badge
+            className={styles.songSourceBadge}
+            variant="outline"
+            aria-label={`Źródło piosenki: ${sourceLabel}`}
+          >
+            {sourceLabel}
+          </Badge>
+        </div>
         <p className={styles.songArtist}>{item.song.artist}</p>
         {item.note ? <p className={styles.note}>Notatka: {item.note}</p> : null}
       </div>
 
       <div className={styles.requestMeta}>
         <span>Pozycja: {item.position > 0 ? item.position : "—"}</span>
-        {item.song.source ? <span>Źródło: {item.song.source}</span> : null}
         {duration ? <span>Czas: {duration}</span> : null}
       </div>
 
@@ -410,6 +420,16 @@ function RequestRow({
       ) : null}
     </article>
   );
+}
+
+function formatDashboardSongSource(source: SongSource) {
+  const labels = {
+    ising: "iSing",
+    karafun: "KaraFun",
+    manual: "Ręcznie",
+  } as const satisfies Record<SongSource, string>;
+
+  return labels[source];
 }
 
 function getStatusBadgeVariant(

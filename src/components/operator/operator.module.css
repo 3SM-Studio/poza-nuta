@@ -295,11 +295,23 @@
   font-size: 0.98rem;
 }
 
-.songTitle {
+.songHeading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
   margin: 0.42rem 0 0;
+}
+
+.songTitle {
+  margin: 0;
   font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.songSourceBadge {
+  max-width: 100%;
 }
 
 .songArtist {
