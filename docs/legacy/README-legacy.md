@@ -4,6 +4,10 @@
 > komendy Vite/Node/local-JSON zostały usunięte z `package.json` i nie są
 > wspieranym sposobem uruchamiania projektu. Aktualny workflow znajduje się w
 > rootowym `README.md`.
+>
+> Katalogi `apps/api`, `apps/web` i rootowe `src`, do których odwołuje się ten
+> dokument, zostały usunięte z working tree. Ich kod jest dostępny wyłącznie w
+> historii Git; poniższych instrukcji nie da się uruchomić z bieżącego stanu.
 
 ## Import metadanych iSing
 

@@ -68,11 +68,12 @@ lokalnego przepływu JSON zostały wycofane.
 
 ## Kod legacy
 
-Katalogi `apps/api`, `apps/web`, `src` i `data` pozostają tymczasowo w
-repozytorium jako źródło referencyjne. Nie są częścią aktywnego workflow
-build/test/typecheck/lint i nie należy uruchamiać ich jako bieżącej aplikacji.
+Legacy source folders `apps/api`, `apps/web` i rootowe `src` zostały usunięte z
+working tree po odłączeniu ich od build/test/typecheck/lint. Kod pozostaje
+dostępny w historii Git. Katalog `data` pozostaje lokalnym workspace importów,
+w tym domyślną lokalizacją wejściowego katalogu KaraFun.
 
-- Bieżący stan odłączenia: [`docs/legacy-audit.md`](docs/legacy-audit.md)
+- Bieżący stan usunięcia: [`docs/legacy-audit.md`](docs/legacy-audit.md)
 - Archiwalne instrukcje: [`docs/legacy/README-legacy.md`](docs/legacy/README-legacy.md)
 
 ## Eksport do review

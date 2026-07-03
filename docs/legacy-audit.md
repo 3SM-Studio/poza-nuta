@@ -1,8 +1,7 @@
-# Legacy source audit — stan po odłączeniu
+# Legacy source audit — stan po usunięciu
 
-Audyt zaktualizowano 2026-07-03 po odłączeniu narzędzi Vite/Node/local-JSON od
-aktywnego projektu. Robocza, historyczna wersja wcześniejszego audytu znajduje
-się w
+Audyt zaktualizowano 2026-07-03 po fizycznym usunięciu legacy source folders z
+working tree. Robocza, historyczna wersja wcześniejszego audytu znajduje się w
 [`docs/legacy/legacy-audit-pre-detachment.md`](legacy/legacy-audit-pre-detachment.md).
 
 ## Stan aktywnego workflow
@@ -27,17 +26,20 @@ Odłączono:
 wyłącznie aktywnej aplikacji oraz jej narzędzi. README opisuje Next/Supabase/
 Drizzle, a dawne instrukcje znajdują się tylko w `docs/legacy`.
 
-## Fizycznie zachowane katalogi
+## Stan katalogów
 
-| Katalog | Stan po odłączeniu |
+| Katalog | Stan |
 | --- | --- |
-| `apps/api` | Zachowany jako referencja; brak aktywnych scripts/testów/typecheck |
-| `apps/web` | Zachowany jako referencja; brak Vite scripts, testów i dependencies |
-| `src` | Zachowany jako referencja starego CLI, importerów i domeny JSON |
-| `data` | Zachowany dla lokalnych danych oraz wejścia aktywnego importera KaraFun |
+| `apps/api` | Usunięty z working tree |
+| `apps/web` | Usunięty z working tree |
+| rootowy `src` | Usunięty z working tree |
+| `data` | Zachowany jako lokalny workspace importów |
 
-Nowa aplikacja w `app`, `components`, `server`, `db` i `lib` nie importuje
-`apps/api`, `apps/web` ani starego `src`.
+Kod usuniętych katalogów nadal jest dostępny w historii Git oraz w commitach
+sprzed cleanupu. Archiwalne instrukcje w `docs/legacy` są dokumentacją
+historyczną, a nie częścią aktywnego projektu.
+
+Nowa aplikacja pozostaje w `app`, `components`, `server`, `db` i `lib`.
 
 ## Usunięte testy legacy
 
@@ -56,38 +58,20 @@ Testy te sprawdzały wycofane lokalne API, Vite client, stare importery
 zapisujące JSON oraz lokalne search/queue CLI. Zachowane testy dotyczą
 aktywnego Next API, helperów UI, lifecycle eventu i importera Postgres.
 
-## Co nadal blokuje fizyczne usunięcie
-
-### `apps/api` i `apps/web`
-
-Nie blokują już builda ani workflow developerskiego. Ich fizyczne usunięcie
-wymaga wyłącznie osobnego, jawnego cleanupu i ewentualnej decyzji, czy kod ma
-zostać zachowany poza główną gałęzią jako materiał historyczny.
-
-### `src`
-
-`src/importers/ising` jest nadal jedyną implementacją importu iSing. Przed
-usunięciem całego `src` trzeba zdecydować, czy importer:
-
-- zostanie świadomie wycofany,
-- zostanie zarchiwizowany,
-- czy zostanie przepisany na aktywny model Postgres/import_jobs.
-
-Pozostałe moduły `src` obsługują wycofany lokalny JSON search/queue flow i nie
-są potrzebne aktywnej aplikacji.
-
-### `data`
+## Zachowany workspace `data`
 
 Aktywny `pnpm db:import:karafun` domyślnie czyta lokalny plik
 `data/sources/karafuncatalog.csv`. CSV jest ignorowany przez Git, ale sama
 ścieżka jest nadal częścią kontraktu CLI.
 
-Przed usunięciem `data` trzeba:
+Katalog `data` nie jest legacy source folderem usuwanym w tym kroku. Pozostaje
+lokalnym workspace dla:
 
-- zachować lub zmienić domyślną ścieżkę wejściową importera Postgres;
-- zdecydować, czy lokalne pliki w `data/events` i `data/imports` wymagają
-  archiwizacji;
-- zachować wymagane pliki `.gitkeep` do czasu osobnego cleanupu katalogu.
+- `data/sources/karafuncatalog.csv`,
+- `data/imports/.gitkeep` i lokalnych wyników importów,
+- danych historycznych, które są ignorowane przez Git.
+
+`data/sources` ani `data/imports` nie zostały usunięte.
 
 ## Zależności
 
@@ -101,13 +85,9 @@ Były używane tylko przez `apps/web` oraz wspólne uruchamianie legacy API/Vite
 Nie usunięto zależności wymaganych przez Next, React, Supabase, Drizzle,
 Postgres, ESLint, TypeScript ani aktywne testy.
 
-## Następny bezpieczny krok
+## Stan końcowy
 
-1. Podjąć decyzję dotyczącą importera iSing i danych historycznych.
-2. W osobnym zadaniu usunąć `apps/web` i `apps/api`.
-3. Usunąć niepotrzebne części `src` po decyzji o iSing.
-4. Na końcu uporządkować `data`, zachowując świadomie wybraną lokalizację
-   wejściowego CSV.
-
-Każdy etap powinien kończyć się przez `pnpm test`, `pnpm typecheck`,
-`pnpm lint` i `pnpm build`.
+Legacy Vite UI, lokalne Node API oraz rootowe CLI/importery JSON nie istnieją
+już w working tree. Ich odtworzenie wymaga sięgnięcia do historii Git.
+Aktywny workflow pozostaje oparty wyłącznie na Next.js, Supabase, Drizzle i
+serwerowym imporcie KaraFun do Postgresa.
