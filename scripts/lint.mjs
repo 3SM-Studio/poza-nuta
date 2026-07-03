@@ -2,11 +2,15 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const files = [
-  ...(await listFiles("src", ".ts")),
+  ...(await listFiles("app", ".ts")),
+  ...(await listFiles("app", ".tsx")),
+  ...(await listFiles("components", ".ts")),
+  ...(await listFiles("components", ".tsx")),
+  ...(await listFiles("server", ".ts")),
+  ...(await listFiles("db", ".ts")),
+  ...(await listFiles("lib", ".ts")),
+  ...(await listFiles("scripts", ".mjs")),
   ...(await listFiles("tests", ".ts")),
-  ...(await listFiles("apps", ".ts")),
-  ...(await listFiles("apps", ".tsx")),
-  ...(await listFiles("apps", ".css")),
   ...(await listFiles("docs", ".md")),
   "README.md",
   ".env.example"

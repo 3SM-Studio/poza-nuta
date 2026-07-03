@@ -37,11 +37,8 @@
     "components/**/*.tsx",
     "server/**/*.ts",
     "db/**/*.ts",
+    "lib/**/*.ts",
     "drizzle/**/*.ts",
-    "src/**/*.ts",
-    "apps/api/src/**/*.ts",
-    "apps/web/**/*.ts",
-    "apps/web/**/*.tsx",
     "tests/**/*.ts"
   ],
   "exclude": [
