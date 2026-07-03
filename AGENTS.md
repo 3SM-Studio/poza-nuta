@@ -279,3 +279,50 @@ At the end of each task, Codex must report:
 - whether any authenticated/external service was accessed,
 - whether any mutation was performed,
 - whether browser automation clicked any destructive action.
+
+## Project roadmap and planning protocol
+
+The strategic roadmap lives in:
+
+- `docs/project-roadmap.md`
+
+This document is not an immutable contract. It describes the current intended direction of the product and the preferred implementation order.
+
+For any task touching:
+- event lifecycle,
+- dashboard routing,
+- queue/realtime,
+- access links,
+- QR/session flow,
+- auth/account management,
+- roles/RBAC,
+- venues,
+- operator shifts/payments,
+- production/deployment architecture,
+
+Codex must first read `docs/project-roadmap.md`.
+
+### Planning rule
+
+For non-trivial changes, Codex must not immediately implement.
+
+Codex must first report:
+1. the understood goal,
+2. relevant roadmap section,
+3. proposed implementation plan,
+4. risks,
+5. alternatives,
+6. whether the plan deviates from the roadmap,
+7. whether approval is required before implementation.
+
+### Deviation rule
+
+If Codex believes the roadmap is wrong, outdated, or suboptimal, it must say so explicitly and propose a better plan.
+
+Codex must not silently ignore the roadmap.
+
+### Execution rule
+
+Small fixes may be implemented directly if they are clearly scoped and do not change architecture, schema, auth, routing, or product direction.
+
+Large changes require an explicit implementation plan before code changes.
