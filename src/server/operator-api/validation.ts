@@ -5,6 +5,7 @@ export const MIN_OPERATOR_PASSWORD_LENGTH = 6;
 export const MAX_OPERATOR_PASSWORD_LENGTH = 1_024;
 export const MAX_EVENT_NAME_LENGTH = 120;
 export const MAX_EVENT_VENUE_LENGTH = 120;
+export const MAX_EVENT_ACCESS_LINK_LABEL_LENGTH = 120;
 
 export type LoginInput = {
   email: string;
@@ -25,6 +26,10 @@ export type StartEventInput = {
 
 export type ExtendEventInput = {
   hours: 1 | 2;
+};
+
+export type CreateEventAccessLinkInput = {
+  label: string | null;
 };
 
 export type ValidationIssue = {
@@ -85,33 +90,96 @@ export function validateLoginInput(
 }
 
 export function validateRequestId(value: string): ValidationResult<number> {
+  return validatePositiveSafeInteger(value, "requestId");
+}
+
+export function validateAccessLinkId(
+  value: string,
+): ValidationResult<number> {
+  return validatePositiveSafeInteger(value, "linkId");
+}
+
+export function normalizeEventAccessLinkLabel(value: string) {
+  return value.trim() || null;
+}
+
+export function validateCreateEventAccessLinkInput(
+  input: unknown,
+): ValidationResult<CreateEventAccessLinkInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  if (input.label === undefined || input.label === null) {
+    return {
+      success: true,
+      data: { label: null },
+    };
+  }
+
+  if (typeof input.label !== "string") {
+    return {
+      success: false,
+      issues: [
+        {
+          field: "label",
+          message: "label must be a string or null.",
+        },
+      ],
+    };
+  }
+
+  const label = normalizeEventAccessLinkLabel(input.label);
+
+  if (label && label.length > MAX_EVENT_ACCESS_LINK_LABEL_LENGTH) {
+    return {
+      success: false,
+      issues: [
+        {
+          field: "label",
+          message: `label must contain at most ${MAX_EVENT_ACCESS_LINK_LABEL_LENGTH} characters.`,
+        },
+      ],
+    };
+  }
+
+  return {
+    success: true,
+    data: { label },
+  };
+}
+
+function validatePositiveSafeInteger(
+  value: string,
+  field: string,
+): ValidationResult<number> {
   if (!/^[1-9]\d*$/.test(value)) {
     return {
       success: false,
       issues: [
         {
-          field: "requestId",
-          message: "requestId must be a positive integer.",
+          field,
+          message: `${field} must be a positive integer.`,
         },
       ],
     };
   }
 
-  const requestId = Number(value);
+  const parsedId = Number(value);
 
-  if (!Number.isSafeInteger(requestId)) {
+  if (!Number.isSafeInteger(parsedId)) {
     return {
       success: false,
       issues: [
         {
-          field: "requestId",
-          message: "requestId must be a safe positive integer.",
+          field,
+          message: `${field} must be a safe positive integer.`,
         },
       ],
     };
   }
 
-  return { success: true, data: requestId };
+  return { success: true, data: parsedId };
 }
 
 export function validateEventSettingsInput(

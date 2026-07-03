@@ -167,6 +167,43 @@ export const operatorUsers = pgTable(
   ],
 ).enableRLS();
 
+export const eventAccessLinks = pgTable(
+  "event_access_links",
+  {
+    id: idColumn(),
+    eventId: bigint("event_id", { mode: "number" })
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    label: text("label"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+    revokedAt: timestampColumn("revoked_at"),
+    lastUsedAt: timestampColumn("last_used_at"),
+    useCount: integer("use_count").notNull().default(0),
+    createdByOperatorId: bigint("created_by_operator_id", { mode: "number" })
+      .references(() => operatorUsers.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    uniqueIndex("event_access_links_code_hash_idx").on(table.codeHash),
+    index("event_access_links_event_created_at_idx").on(
+      table.eventId,
+      table.createdAt.desc(),
+    ),
+    index("event_access_links_created_by_operator_idx").on(
+      table.createdByOperatorId,
+    ),
+    check(
+      "event_access_links_use_count_check",
+      sql`${table.useCount} >= 0`,
+    ),
+    check(
+      "event_access_links_revoked_inactive_check",
+      sql`${table.revokedAt} is null or not ${table.active}`,
+    ),
+  ],
+).enableRLS();
+
 export const songRequests = pgTable(
   "song_requests",
   {
