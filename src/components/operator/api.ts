@@ -19,6 +19,36 @@ export type OperatorIdentity = {
   active: true;
 };
 
+export type DashboardEventAccessLink = {
+  id: number;
+  eventId: number;
+  label: string | null;
+  active: boolean;
+  createdAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  useCount: number;
+  createdByOperatorId: number | null;
+};
+
+export type DashboardEventAccessLinksResponse = {
+  event: {
+    id: number;
+    name: string;
+  };
+  links: DashboardEventAccessLink[];
+};
+
+export type CreateDashboardEventAccessLinkResponse = {
+  event: {
+    id: number;
+    name: string;
+  };
+  link: DashboardEventAccessLink;
+  code: string;
+  sessionPath: string;
+};
+
 export type DashboardEvent = {
   id: number;
   name: string;
@@ -100,6 +130,7 @@ export const dashboardApiPaths = {
   extendEvent: "/api/dashboard/event/extend",
   closeEvent: "/api/dashboard/event/close",
   startEvent: "/api/dashboard/event/start",
+  accessLinks: "/api/dashboard/event/access-links",
 } as const;
 
 export class OperatorClientError extends Error {
@@ -143,6 +174,35 @@ export function getDashboardEvent() {
   return requestJson<{ event: DashboardEvent | null }>(
     dashboardApiPaths.event,
   );
+}
+
+export function getDashboardEventAccessLinks() {
+  return requestJson<DashboardEventAccessLinksResponse>(
+    dashboardApiPaths.accessLinks,
+  );
+}
+
+export function createDashboardEventAccessLink(label: string | null) {
+  return requestJson<CreateDashboardEventAccessLinkResponse>(
+    dashboardApiPaths.accessLinks,
+    {
+      method: "POST",
+      body: JSON.stringify({ label }),
+    },
+  );
+}
+
+export function revokeDashboardEventAccessLink(linkId: number) {
+  return requestJson<{ link: DashboardEventAccessLink }>(
+    getDashboardEventAccessLinkRevokePath(linkId),
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function getDashboardEventAccessLinkRevokePath(linkId: number) {
+  return `${dashboardApiPaths.accessLinks}/${encodeURIComponent(linkId)}/revoke`;
 }
 
 export function updateDashboardEventSettings(input: {
