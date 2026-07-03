@@ -1,6 +1,15 @@
 "use client";
 
-import styles from "./operator.module.css";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 
 type CloseEventConfirmationProps = {
   id: string;
@@ -17,46 +26,35 @@ export function CloseEventConfirmation({
   onCancel,
   onConfirm,
 }: CloseEventConfirmationProps) {
-  if (!open) {
-    return null;
-  }
-
-  const titleId = `${id}-title`;
-  const descriptionId = `${id}-description`;
-
   return (
-    <div
-      id={id}
-      className={styles.closeConfirmation}
-      role="alertdialog"
-      aria-labelledby={titleId}
-      aria-describedby={descriptionId}
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !isConfirming) {
+          onCancel();
+        }
+      }}
     >
-      <div>
-        <h3 id={titleId}>Potwierdź zamknięcie eventu</h3>
-        <p id={descriptionId}>
+      <AlertDialogContent id={id}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Potwierdź zamknięcie eventu</AlertDialogTitle>
+          <AlertDialogDescription>
           Zamknięcie eventu ukryje aktywną sesję i zablokuje nowe zgłoszenia.
           Kolejka i historia zostaną zachowane.
-        </p>
-      </div>
-      <div className={styles.closeConfirmationActions}>
-        <button
-          className={`${styles.button} ${styles.secondaryButton}`}
-          type="button"
-          onClick={onCancel}
-          disabled={isConfirming}
-        >
-          Anuluj
-        </button>
-        <button
-          className={`${styles.button} ${styles.confirmDangerButton}`}
-          type="button"
-          onClick={onConfirm}
-          disabled={isConfirming}
-        >
-          {isConfirming ? "Zamykanie…" : "Tak, zamknij event"}
-        </button>
-      </div>
-    </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isConfirming}>Anuluj</AlertDialogCancel>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={isConfirming}
+          >
+            {isConfirming ? "Zamykanie…" : "Tak, zamknij event"}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

@@ -5,6 +5,23 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+import {
   formatEventTimeRemaining,
   shouldWarnEventClosingSoon,
 } from "../../lib/event-lifecycle";
@@ -157,93 +174,99 @@ export function DashboardOverview() {
             Przegląd aktywnego eventu i kolejki.
           </p>
         </div>
-        <Link href="/queue">Widok publiczny</Link>
+        <Button variant="outline" asChild>
+          <Link href="/queue">Widok publiczny</Link>
+        </Button>
       </header>
 
       {success ? (
-        <div className={styles.successMessage} role="status">
-          {success}
-        </div>
+        <Alert className={styles.successMessage} role="status">
+          <AlertTitle>Gotowe</AlertTitle>
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
       ) : null}
 
       {error ? (
-        <div className={styles.pageError} role="alert">
-          {error}
-        </div>
+        <Alert className={styles.pageError} variant="destructive">
+          <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {event ? (
         <>
           {shouldWarnEventClosingSoon(event.autoCloseAt, now) ? (
-            <div className={styles.eventWarning} role="alert">
-              <strong>Event zakończy się za mniej niż 30 minut.</strong>
-            </div>
+            <Alert className={styles.eventWarning}>
+              <AlertTitle>
+                Event zakończy się za mniej niż 30 minut.
+              </AlertTitle>
+            </Alert>
           ) : null}
 
-          <section className={styles.overviewCard}>
-            <div className={styles.overviewCardHeader}>
+          <Card className={styles.overviewCard}>
+            <CardHeader>
               <div>
-                <p className={styles.overviewEyebrow}>Aktywny event</p>
-                <h2>{event.name}</h2>
-                <p>{event.venue || "Lokal nie został podany"}</p>
+                <CardDescription>Aktywny event</CardDescription>
+                <CardTitle>{event.name}</CardTitle>
+                <CardDescription>
+                  {event.venue || "Lokal nie został podany"}
+                </CardDescription>
               </div>
-              <span className={`${styles.status} ${styles.now}`}>
-                {event.status}
-              </span>
-            </div>
+              <CardAction>
+                <Badge>{event.status}</Badge>
+              </CardAction>
+            </CardHeader>
 
-            <dl className={styles.eventDetails}>
-              <div>
-                <dt>Start</dt>
-                <dd>{formatDateTime(event.startsAt)}</dd>
-              </div>
-              <div>
-                <dt>Automatyczne zamknięcie</dt>
-                <dd>{formatDateTime(event.autoCloseAt)}</dd>
-              </div>
-              <div>
-                <dt>Czas do zamknięcia</dt>
-                <dd>{formatEventTimeRemaining(event.autoCloseAt, now)}</dd>
-              </div>
-              <div>
-                <dt>Publiczna kolejka</dt>
-                <dd>{event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
-              </div>
-              <div>
-                <dt>Publiczne tytuły piosenek</dt>
-                <dd>
-                  {event.publicShowSongTitles ? "Widoczne" : "Ukryte"}
-                </dd>
-              </div>
-            </dl>
+            <CardContent>
+              <dl className={styles.eventDetails}>
+                <div>
+                  <dt>Start</dt>
+                  <dd>{formatDateTime(event.startsAt)}</dd>
+                </div>
+                <div>
+                  <dt>Automatyczne zamknięcie</dt>
+                  <dd>{formatDateTime(event.autoCloseAt)}</dd>
+                </div>
+                <div>
+                  <dt>Czas do zamknięcia</dt>
+                  <dd>{formatEventTimeRemaining(event.autoCloseAt, now)}</dd>
+                </div>
+                <div>
+                  <dt>Publiczna kolejka</dt>
+                  <dd>
+                    {event.publicQueueEnabled ? "Włączona" : "Wyłączona"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Publiczne tytuły piosenek</dt>
+                  <dd>
+                    {event.publicShowSongTitles ? "Widoczne" : "Ukryte"}
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
 
-            <div className={styles.lifecycleActions}>
-              <button
-                className={`${styles.button} ${styles.actionButton}`}
+            <CardFooter className={styles.lifecycleActions}>
+              <Button
                 type="button"
                 onClick={() => void handleExtend(1)}
-                disabled={
-                  activeAction !== null || isCloseConfirmationOpen
-                }
+                disabled={activeAction !== null || isCloseConfirmationOpen}
               >
                 {activeAction === "extend-1"
                   ? "Przedłużanie…"
                   : "Przedłuż +1h"}
-              </button>
-              <button
-                className={`${styles.button} ${styles.actionButton}`}
+              </Button>
+              <Button
                 type="button"
                 onClick={() => void handleExtend(2)}
-                disabled={
-                  activeAction !== null || isCloseConfirmationOpen
-                }
+                disabled={activeAction !== null || isCloseConfirmationOpen}
               >
                 {activeAction === "extend-2"
                   ? "Przedłużanie…"
                   : "Przedłuż +2h"}
-              </button>
-              <button
-                className={`${styles.button} ${styles.dangerButton}`}
+              </Button>
+              <Button
+                variant="destructive"
                 type="button"
                 onClick={() => {
                   setSuccess(null);
@@ -255,49 +278,56 @@ export function DashboardOverview() {
                 aria-controls="dashboard-close-event-confirmation"
               >
                 Zamknij event
-              </button>
-            </div>
+              </Button>
+            </CardFooter>
+          </Card>
 
-            <CloseEventConfirmation
-              id="dashboard-close-event-confirmation"
-              open={isCloseConfirmationOpen}
-              isConfirming={activeAction === "close"}
-              onCancel={() => setIsCloseConfirmationOpen(false)}
-              onConfirm={() => void handleConfirmClose()}
-            />
-          </section>
+          <CloseEventConfirmation
+            id="dashboard-close-event-confirmation"
+            open={isCloseConfirmationOpen}
+            isConfirming={activeAction === "close"}
+            onCancel={() => setIsCloseConfirmationOpen(false)}
+            onConfirm={() => void handleConfirmClose()}
+          />
 
-          <section className={styles.overviewCard}>
-            <div className={styles.overviewCardHeader}>
+          <Card className={styles.overviewCard}>
+            <CardHeader>
               <div>
-                <p className={styles.overviewEyebrow}>Kolejka</p>
-                <h2>Liczniki zgłoszeń</h2>
+                <CardDescription>Kolejka</CardDescription>
+                <CardTitle>Liczniki zgłoszeń</CardTitle>
               </div>
-              <Link href="/dashboard/queue">Otwórz kolejkę</Link>
-            </div>
-            <div className={styles.counterGrid}>
+              <CardAction>
+                <Button variant="outline" asChild>
+                  <Link href="/dashboard/queue">Otwórz kolejkę</Link>
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className={styles.counterGrid}>
               {queueCounters.map(({ status, label }) => (
-                <div className={styles.counterCard} key={status}>
-                  <strong>{queue?.[status].length ?? 0}</strong>
-                  <span>{label}</span>
-                </div>
+                <Card size="sm" key={status}>
+                  <CardHeader>
+                    <CardTitle>{queue?.[status].length ?? 0}</CardTitle>
+                    <CardDescription>{label}</CardDescription>
+                  </CardHeader>
+                </Card>
               ))}
-            </div>
-          </section>
+            </CardContent>
+          </Card>
         </>
       ) : (
-        <section className={styles.overviewCard}>
-          <h2>Brak aktywnego eventu</h2>
-          <p className={styles.settingsIntro}>
-            Uruchom nowy event w ustawieniach dashboardu.
-          </p>
-          <Link
-            className={`${styles.button} ${styles.primaryButton}`}
-            href="/dashboard/settings"
-          >
-            Przejdź do ustawień
-          </Link>
-        </section>
+        <Card className={styles.overviewCard}>
+          <CardHeader>
+            <CardTitle>Brak aktywnego eventu</CardTitle>
+            <CardDescription>
+              Uruchom nowy event w ustawieniach dashboardu.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button asChild>
+              <Link href="/dashboard/settings">Przejdź do ustawień</Link>
+            </Button>
+          </CardFooter>
+        </Card>
       )}
     </div>
   );

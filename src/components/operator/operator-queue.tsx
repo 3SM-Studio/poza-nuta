@@ -3,6 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
 import { shouldWarnEventClosingSoon } from "../../lib/event-lifecycle";
 import {
   extendDashboardEvent,
@@ -205,59 +221,60 @@ export function OperatorQueuePanel() {
         </div>
 
         <div className={styles.headerActions}>
-          <button
-            className={`${styles.button} ${styles.secondaryButton}`}
+          <Button
+            variant="outline"
             type="button"
             onClick={() => void loadQueue()}
-            disabled={
-              isRefreshing ||
-              activeAction !== null ||
-              eventAction !== null
-            }
+            disabled={isRefreshing || activeAction !== null || eventAction !== null}
           >
             {isRefreshing ? "Odświeżanie…" : "Odśwież"}
-          </button>
+          </Button>
         </div>
       </header>
 
       {error ? (
-        <div className={styles.pageError} role="alert">
-          {error}
-        </div>
+        <Alert className={styles.pageError} variant="destructive">
+          <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {queueData &&
       !closingWarningDismissed &&
       shouldWarnEventClosingSoon(queueData.event.autoCloseAt, warningNow) ? (
-        <section className={styles.eventWarning} role="alert">
-          <strong>Event zakończy się za mniej niż 30 minut.</strong>
-          <div className={styles.warningActions}>
-            <button
-              className={`${styles.button} ${styles.actionButton}`}
-              type="button"
-              onClick={() => void handleExtendEvent(1)}
-              disabled={eventAction !== null || activeAction !== null}
-            >
-              {eventAction === "extend-1" ? "Przedłużanie…" : "Przedłuż +1h"}
-            </button>
-            <button
-              className={`${styles.button} ${styles.actionButton}`}
-              type="button"
-              onClick={() => void handleExtendEvent(2)}
-              disabled={eventAction !== null || activeAction !== null}
-            >
-              {eventAction === "extend-2" ? "Przedłużanie…" : "Przedłuż +2h"}
-            </button>
-            <button
-              className={`${styles.button} ${styles.secondaryButton}`}
-              type="button"
-              onClick={() => setClosingWarningDismissed(true)}
-              disabled={eventAction !== null}
-            >
-              Ukryj ostrzeżenie
-            </button>
-          </div>
-        </section>
+        <Alert className={styles.eventWarning}>
+          <AlertTitle>Event zakończy się za mniej niż 30 minut.</AlertTitle>
+          <AlertDescription>
+            <div className={styles.warningActions}>
+              <Button
+                type="button"
+                onClick={() => void handleExtendEvent(1)}
+                disabled={eventAction !== null || activeAction !== null}
+              >
+                {eventAction === "extend-1"
+                  ? "Przedłużanie…"
+                  : "Przedłuż +1h"}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleExtendEvent(2)}
+                disabled={eventAction !== null || activeAction !== null}
+              >
+                {eventAction === "extend-2"
+                  ? "Przedłużanie…"
+                  : "Przedłuż +2h"}
+              </Button>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setClosingWarningDismissed(true)}
+                disabled={eventAction !== null}
+              >
+                Ukryj ostrzeżenie
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {queueData ? (
@@ -303,16 +320,18 @@ function QueueSection({
   onAction,
 }: QueueSectionProps) {
   return (
-    <section
-      className={`${styles.queueSection} ${wide ? styles.wideSection : ""}`}
-    >
-      <div className={styles.sectionHeader}>
-        <h2>{title}</h2>
-        <span aria-label={`${items.length} zgłoszeń`}>{items.length}</span>
-      </div>
+    <Card className={wide ? styles.wideSection : undefined}>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardAction>
+          <Badge variant="secondary" aria-label={`${items.length} zgłoszeń`}>
+            {items.length}
+          </Badge>
+        </CardAction>
+      </CardHeader>
 
       {items.length > 0 ? (
-        <div className={styles.requestList}>
+        <CardContent className={styles.requestList}>
           {items.map((item) => (
             <RequestRow
               key={item.id}
@@ -322,11 +341,13 @@ function QueueSection({
               onAction={onAction}
             />
           ))}
-        </div>
+        </CardContent>
       ) : (
-        <p className={styles.emptySection}>Brak zgłoszeń.</p>
+        <CardContent>
+          <CardDescription>Brak zgłoszeń.</CardDescription>
+        </CardContent>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -351,9 +372,9 @@ function RequestRow({
       <div className={styles.requestMain}>
         <div className={styles.requestHeading}>
           <strong>{item.displayName || item.singerName}</strong>
-          <span className={`${styles.status} ${styles[item.status]}`}>
+          <Badge variant={getStatusBadgeVariant(item.status)}>
             {statusLabels[item.status]}
-          </span>
+          </Badge>
         </div>
         <p className={styles.songTitle}>{item.song.title}</p>
         <p className={styles.songArtist}>{item.song.artist}</p>
@@ -373,23 +394,36 @@ function RequestRow({
             const isActive = activeAction === actionKey;
 
             return (
-              <button
+              <Button
                 key={action}
-                className={`${styles.button} ${
-                  destructive ? styles.dangerButton : styles.actionButton
-                }`}
+                size="sm"
+                variant={destructive ? "destructive" : "default"}
                 type="button"
                 onClick={() => void onAction(item.id, action)}
                 disabled={actionsDisabled || activeAction !== null}
               >
                 {isActive ? "Zapisywanie…" : label}
-              </button>
+              </Button>
             );
           })}
         </div>
       ) : null}
     </article>
   );
+}
+
+function getStatusBadgeVariant(
+  status: OperatorRequestStatus,
+): "default" | "secondary" | "destructive" {
+  if (status === "rejected") {
+    return "destructive";
+  }
+
+  if (status === "approved" || status === "now" || status === "done") {
+    return "default";
+  }
+
+  return "secondary";
 }
 
 function getClientErrorMessage(error: unknown) {

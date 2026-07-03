@@ -4,6 +4,25 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+import {
   closeDashboardEvent,
   extendDashboardEvent,
   getDashboardEvent,
@@ -166,117 +185,118 @@ export function DashboardEventSettings() {
       </header>
 
       {success ? (
-        <div className={styles.successMessage} role="status">
-          {success}
-        </div>
+        <Alert className={styles.successMessage} role="status">
+          <AlertTitle>Gotowe</AlertTitle>
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
       ) : null}
 
       {error ? (
-        <div className={styles.pageError} role="alert">
-          {error}
-        </div>
+        <Alert className={styles.pageError} variant="destructive">
+          <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {event ? (
         <>
-          <section className={styles.settingsCard}>
-            <h2>Aktywny event</h2>
-            <dl className={styles.eventDetails}>
-              <div>
-                <dt>Status</dt>
-                <dd>{event.status}</dd>
-              </div>
-              <div>
-                <dt>Start</dt>
-                <dd>{formatDateTime(event.startsAt)}</dd>
-              </div>
-              <div>
-                <dt>Automatyczne zamknięcie</dt>
-                <dd>{formatDateTime(event.autoCloseAt)}</dd>
-              </div>
-              {event.closedAt ? (
+          <Card className={styles.settingsCard}>
+            <CardHeader>
+              <CardTitle>Aktywny event</CardTitle>
+              <CardAction>
+                <Badge>{event.status}</Badge>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <dl className={styles.eventDetails}>
                 <div>
-                  <dt>Zamknięty</dt>
-                  <dd>{formatDateTime(event.closedAt)}</dd>
+                  <dt>Start</dt>
+                  <dd>{formatDateTime(event.startsAt)}</dd>
                 </div>
-              ) : null}
-            </dl>
-          </section>
+                <div>
+                  <dt>Automatyczne zamknięcie</dt>
+                  <dd>{formatDateTime(event.autoCloseAt)}</dd>
+                </div>
+                {event.closedAt ? (
+                  <div>
+                    <dt>Zamknięty</dt>
+                    <dd>{formatDateTime(event.closedAt)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </CardContent>
+          </Card>
 
-          <section className={styles.settingsCard}>
-            <h2>Edycja ustawień</h2>
-            <form className={styles.settingsForm} onSubmit={handleSave}>
-              <EventNameAndVenueFields
-                name={name}
-                venue={venue}
-                disabled={activeAction !== null}
-                onNameChange={setName}
-                onVenueChange={setVenue}
-              />
-
-              <label className={styles.checkboxField}>
-                <input
-                  type="checkbox"
-                  checked={publicQueueEnabled}
-                  onChange={(changeEvent) =>
-                    setPublicQueueEnabled(changeEvent.target.checked)
-                  }
+          <Card className={styles.settingsCard}>
+            <CardHeader>
+              <CardTitle>Edycja ustawień</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className={styles.settingsForm} onSubmit={handleSave}>
+                <EventNameAndVenueFields
+                  name={name}
+                  venue={venue}
                   disabled={activeAction !== null}
+                  onNameChange={setName}
+                  onVenueChange={setVenue}
                 />
-                Publiczny podgląd kolejki
-              </label>
 
-              <label className={styles.checkboxField}>
-                <input
-                  type="checkbox"
-                  checked={publicShowSongTitles}
-                  onChange={(changeEvent) =>
-                    setPublicShowSongTitles(changeEvent.target.checked)
-                  }
-                  disabled={activeAction !== null}
-                />
-                Pokazuj tytuły piosenek publicznie
-              </label>
+                <Label className={styles.checkboxField}>
+                  <input
+                    type="checkbox"
+                    checked={publicQueueEnabled}
+                    onChange={(changeEvent) =>
+                      setPublicQueueEnabled(changeEvent.target.checked)
+                    }
+                    disabled={activeAction !== null}
+                  />
+                  Publiczny podgląd kolejki
+                </Label>
 
-              <button
-                className={`${styles.button} ${styles.primaryButton}`}
-                type="submit"
-                disabled={activeAction !== null}
-              >
-                {activeAction === "save" ? "Zapisywanie…" : "Zapisz"}
-              </button>
-            </form>
-          </section>
+                <Label className={styles.checkboxField}>
+                  <input
+                    type="checkbox"
+                    checked={publicShowSongTitles}
+                    onChange={(changeEvent) =>
+                      setPublicShowSongTitles(changeEvent.target.checked)
+                    }
+                    disabled={activeAction !== null}
+                  />
+                  Pokazuj tytuły piosenek publicznie
+                </Label>
 
-          <section className={styles.settingsCard}>
-            <h2>Lifecycle</h2>
-            <div className={styles.lifecycleActions}>
-              <button
-                className={`${styles.button} ${styles.actionButton}`}
+                <Button type="submit" disabled={activeAction !== null}>
+                  {activeAction === "save" ? "Zapisywanie…" : "Zapisz"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card className={styles.settingsCard}>
+            <CardHeader>
+              <CardTitle>Lifecycle</CardTitle>
+            </CardHeader>
+            <CardFooter className={styles.lifecycleActions}>
+              <Button
                 type="button"
                 onClick={() => void handleExtend(1)}
-                disabled={
-                  activeAction !== null || isCloseConfirmationOpen
-                }
+                disabled={activeAction !== null || isCloseConfirmationOpen}
               >
                 {activeAction === "extend-1"
                   ? "Przedłużanie…"
                   : "Przedłuż +1h"}
-              </button>
-              <button
-                className={`${styles.button} ${styles.actionButton}`}
+              </Button>
+              <Button
                 type="button"
                 onClick={() => void handleExtend(2)}
-                disabled={
-                  activeAction !== null || isCloseConfirmationOpen
-                }
+                disabled={activeAction !== null || isCloseConfirmationOpen}
               >
                 {activeAction === "extend-2"
                   ? "Przedłużanie…"
                   : "Przedłuż +2h"}
-              </button>
-              <button
-                className={`${styles.button} ${styles.dangerButton}`}
+              </Button>
+              <Button
+                variant="destructive"
                 type="button"
                 onClick={() => {
                   setSuccess(null);
@@ -288,40 +308,41 @@ export function DashboardEventSettings() {
                 aria-controls="settings-close-event-confirmation"
               >
                 Zamknij event
-              </button>
-            </div>
-            <CloseEventConfirmation
-              id="settings-close-event-confirmation"
-              open={isCloseConfirmationOpen}
-              isConfirming={activeAction === "close"}
-              onCancel={() => setIsCloseConfirmationOpen(false)}
-              onConfirm={() => void handleClose()}
-            />
-          </section>
+              </Button>
+            </CardFooter>
+          </Card>
+          <CloseEventConfirmation
+            id="settings-close-event-confirmation"
+            open={isCloseConfirmationOpen}
+            isConfirming={activeAction === "close"}
+            onCancel={() => setIsCloseConfirmationOpen(false)}
+            onConfirm={() => void handleClose()}
+          />
         </>
       ) : (
-        <section className={styles.settingsCard}>
-          <h2>Uruchom nowy event</h2>
-          <p className={styles.settingsIntro}>
-            Brak aktywnego eventu. Nowy event zostanie uruchomiony na 8 godzin.
-          </p>
-          <form className={styles.settingsForm} onSubmit={handleStart}>
-            <EventNameAndVenueFields
-              name={name}
-              venue={venue}
-              disabled={activeAction !== null}
-              onNameChange={setName}
-              onVenueChange={setVenue}
-            />
-            <button
-              className={`${styles.button} ${styles.primaryButton}`}
-              type="submit"
-              disabled={activeAction !== null}
-            >
-              {activeAction === "start" ? "Uruchamianie…" : "Start eventu"}
-            </button>
-          </form>
-        </section>
+        <Card className={styles.settingsCard}>
+          <CardHeader>
+            <CardTitle>Uruchom nowy event</CardTitle>
+            <CardDescription>
+              Brak aktywnego eventu. Nowy event zostanie uruchomiony na 8
+              godzin.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className={styles.settingsForm} onSubmit={handleStart}>
+              <EventNameAndVenueFields
+                name={name}
+                venue={venue}
+                disabled={activeAction !== null}
+                onNameChange={setName}
+                onVenueChange={setVenue}
+              />
+              <Button type="submit" disabled={activeAction !== null}>
+                {activeAction === "start" ? "Uruchamianie…" : "Start eventu"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -344,9 +365,9 @@ function EventNameAndVenueFields({
 }: EventNameAndVenueFieldsProps) {
   return (
     <>
-      <div className={styles.field}>
-        <label htmlFor="event-name">Nazwa</label>
-        <input
+      <div className={styles.dashboardField}>
+        <Label htmlFor="event-name">Nazwa</Label>
+        <Input
           id="event-name"
           type="text"
           value={name}
@@ -356,9 +377,9 @@ function EventNameAndVenueFields({
           required
         />
       </div>
-      <div className={styles.field}>
-        <label htmlFor="event-venue">Lokal</label>
-        <input
+      <div className={styles.dashboardField}>
+        <Label htmlFor="event-venue">Lokal</Label>
+        <Input
           id="event-venue"
           type="text"
           value={venue}
