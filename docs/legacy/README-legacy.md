@@ -5,9 +5,11 @@
 > wspieranym sposobem uruchamiania projektu. Aktualny workflow znajduje się w
 > rootowym `README.md`.
 >
-> Katalogi `apps/api`, `apps/web` i rootowe `src`, do których odwołuje się ten
-> dokument, zostały usunięte z working tree. Ich kod jest dostępny wyłącznie w
-> historii Git; poniższych instrukcji nie da się uruchomić z bieżącego stanu.
+> Katalogi `apps/api`, `apps/web` i dawna zawartość rootowego `src`, do których
+> odwołuje się ten dokument, zostały usunięte. Obecny `src` zawiera aktywną
+> aplikację Next i nie jest kodem opisanym poniżej. Kod legacy jest dostępny
+> wyłącznie w historii Git; poniższych instrukcji nie da się uruchomić z
+> bieżącego stanu.
 
 ## Import metadanych iSing
 

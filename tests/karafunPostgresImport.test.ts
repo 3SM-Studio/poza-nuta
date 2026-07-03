@@ -4,11 +4,11 @@ import test from "node:test";
 import {
   type KaraFunCsvRow,
   parseDelimitedRecord,
-} from "../db/karafun-csv.ts";
+} from "../src/db/karafun-csv.ts";
 import {
   mapKaraFunRowToSong,
   normalizeSongSearchText,
-} from "../db/karafun-mapping.ts";
+} from "../src/db/karafun-mapping.ts";
 
 const row: KaraFunCsvRow = {
   Id: " 56442 ",

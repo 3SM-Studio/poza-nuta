@@ -10,7 +10,6 @@ export default defineConfig([
     "dist/**",
     "data/**",
     "apps/**",
-    "src/**",
     "tests/**",
     "scripts/**",
   ]),

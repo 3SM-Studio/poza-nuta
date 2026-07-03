@@ -8,7 +8,7 @@ import {
   PUBLIC_NOTE_MAX_LENGTH,
   PUBLIC_SINGER_NAME_MAX_LENGTH,
   validatePublicRequestForm,
-} from "../components/public/validation.ts";
+} from "../src/components/public/validation.ts";
 
 test("validatePublicRequestForm trims and accepts valid participant input", () => {
   assert.deepEqual(

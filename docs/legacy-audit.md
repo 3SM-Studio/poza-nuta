@@ -32,14 +32,15 @@ Drizzle, a dawne instrukcje znajdują się tylko w `docs/legacy`.
 | --- | --- |
 | `apps/api` | Usunięty z working tree |
 | `apps/web` | Usunięty z working tree |
-| rootowy `src` | Usunięty z working tree |
+| dawna zawartość rootowego `src` | Usunięta; ścieżka jest ponownie używana przez aktywną aplikację |
 | `data` | Zachowany jako lokalny workspace importów |
 
 Kod usuniętych katalogów nadal jest dostępny w historii Git oraz w commitach
 sprzed cleanupu. Archiwalne instrukcje w `docs/legacy` są dokumentacją
 historyczną, a nie częścią aktywnego projektu.
 
-Nowa aplikacja pozostaje w `app`, `components`, `server`, `db` i `lib`.
+Nowa aplikacja została później przeniesiona do `src/app`, `src/components`,
+`src/server`, `src/db` i `src/lib`. Nie przywraca to usuniętego kodu legacy.
 
 ## Usunięte testy legacy
 
@@ -87,7 +88,7 @@ Postgres, ESLint, TypeScript ani aktywne testy.
 
 ## Stan końcowy
 
-Legacy Vite UI, lokalne Node API oraz rootowe CLI/importery JSON nie istnieją
-już w working tree. Ich odtworzenie wymaga sięgnięcia do historii Git.
-Aktywny workflow pozostaje oparty wyłącznie na Next.js, Supabase, Drizzle i
-serwerowym imporcie KaraFun do Postgresa.
+Legacy Vite UI, lokalne Node API oraz dawne rootowe CLI/importery JSON nie
+istnieją już w working tree. Ich odtworzenie wymaga sięgnięcia do historii Git.
+Obecny katalog `src` zawiera wyłącznie aktywną aplikację opartą na Next.js,
+Supabase, Drizzle i serwerowym imporcie KaraFun do Postgresa.

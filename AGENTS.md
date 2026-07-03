@@ -27,6 +27,10 @@ Planned capabilities, not necessarily implemented yet:
 ## Architecture
 
 - Next.js App Router.
+- Active application routes live in `src/app`.
+- Shared UI, server logic, database code, and helpers live in
+  `src/components`, `src/server`, `src/db`, and `src/lib`.
+- Next.js proxy lives in `src/proxy.ts`.
 - Vercel-compatible runtime.
 - Supabase Postgres.
 - Drizzle ORM for server-side database access.
@@ -142,7 +146,8 @@ API:
 
 - One feature = one commit.
 - Do not mix unrelated refactors with feature work.
-- Do not touch `apps/api`, `apps/web`, `src`, or `data` unless explicitly requested.
+- Do not recreate removed legacy `apps/api` or `apps/web` code.
+- Do not touch `data` unless explicitly requested.
 - Do not change schema without Drizzle migration.
 - Do not run destructive database operations.
 - Do not commit automatically.

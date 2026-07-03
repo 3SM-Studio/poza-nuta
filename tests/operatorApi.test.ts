@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { hashPin, verifyPin } from "../server/operator-api/crypto.ts";
+import { hashPin, verifyPin } from "../src/server/operator-api/crypto.ts";
 import {
   mapSupabaseLoginError,
   resolveOperatorAccess,
   resolveSignInPageAccess,
-} from "../server/operator-api/auth-policy.ts";
+} from "../src/server/operator-api/auth-policy.ts";
 import {
   canApplyQueueAction,
   getTargetStatus,
-} from "../server/operator-api/transitions.ts";
+} from "../src/server/operator-api/transitions.ts";
 import {
   validateLoginInput,
   validateRequestId,
-} from "../server/operator-api/validation.ts";
+} from "../src/server/operator-api/validation.ts";
 
 test("hashPin and verifyPin accept only the original PIN", async () => {
   const encodedHash = await hashPin("4826");

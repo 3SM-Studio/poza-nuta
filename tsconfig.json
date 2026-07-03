@@ -23,7 +23,12 @@
         "name": "next"
       }
     ],
-    "allowJs": true
+    "allowJs": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
   },
   "include": [
     "next-env.d.ts",
@@ -31,15 +36,11 @@
     "drizzle.config.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "components/**/*.ts",
-    "components/**/*.tsx",
-    "server/**/*.ts",
-    "db/**/*.ts",
-    "lib/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     "drizzle/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "scripts/**/*.mjs"
   ],
   "exclude": [
     "node_modules"

@@ -5,7 +5,7 @@ import {
   dashboardApiPaths,
   formatDuration,
   getDashboardRequestActionPath,
-} from "../components/operator/api.ts";
+} from "../src/components/operator/api.ts";
 
 test("formatDuration formats queue durations for the operator UI", () => {
   assert.equal(formatDuration(null), null);

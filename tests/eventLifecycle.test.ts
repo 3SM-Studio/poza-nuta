@@ -6,12 +6,12 @@ import {
   formatEventTimeRemaining,
   getLazyCloseDecision,
   shouldWarnEventClosingSoon,
-} from "../lib/event-lifecycle.ts";
+} from "../src/lib/event-lifecycle.ts";
 import {
   validateEventSettingsInput,
   validateExtendInput,
   validateStartEventInput,
-} from "../server/operator-api/validation.ts";
+} from "../src/server/operator-api/validation.ts";
 
 test("calculateAutoCloseAt adds the default eight hours", () => {
   const startsAt = new Date("2026-07-02T18:00:00.000Z");

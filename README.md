@@ -3,6 +3,8 @@
 Aktywnym projektem jest jedna aplikacja Next.js App Router uruchamiana z
 głównego katalogu repozytorium. Dane biznesowe są przechowywane w Supabase
 Postgres przez Drizzle ORM, a dashboard operatora korzysta z Supabase Auth SSR.
+Kod aplikacji znajduje się w `src/app`, `src/components`, `src/server`,
+`src/db` i `src/lib`; Next.js proxy znajduje się w `src/proxy.ts`.
 
 ## Uruchomienie lokalne
 
@@ -68,10 +70,11 @@ lokalnego przepływu JSON zostały wycofane.
 
 ## Kod legacy
 
-Legacy source folders `apps/api`, `apps/web` i rootowe `src` zostały usunięte z
-working tree po odłączeniu ich od build/test/typecheck/lint. Kod pozostaje
-dostępny w historii Git. Katalog `data` pozostaje lokalnym workspace importów,
-w tym domyślną lokalizacją wejściowego katalogu KaraFun.
+Legacy source folders `apps/api` i `apps/web` oraz dawna zawartość rootowego
+`src` zostały usunięte po odłączeniu ich od build/test/typecheck/lint. Ścieżka
+`src` została następnie wykorzystana dla aktywnej aplikacji Next. Kod legacy
+pozostaje dostępny w historii Git. Katalog `data` pozostaje lokalnym workspace
+importów, w tym domyślną lokalizacją wejściowego katalogu KaraFun.
 
 - Bieżący stan usunięcia: [`docs/legacy-audit.md`](docs/legacy-audit.md)
 - Archiwalne instrukcje: [`docs/legacy/README-legacy.md`](docs/legacy/README-legacy.md)

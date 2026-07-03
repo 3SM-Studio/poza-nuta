@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   isPublicQueueVisibleStatus,
   PUBLIC_QUEUE_VISIBLE_STATUSES,
-} from "../server/public-api/queue-policy.ts";
+} from "../src/server/public-api/queue-policy.ts";
 import {
   MAX_NOTE_LENGTH,
   MAX_SEARCH_QUERY_LENGTH,
@@ -12,7 +12,7 @@ import {
   normalizeSearchQuery,
   validatePublicRequestInput,
   validateSearchQuery,
-} from "../server/public-api/validation.ts";
+} from "../src/server/public-api/validation.ts";
 
 test("validatePublicRequestInput trims and accepts valid input", () => {
   const result = validatePublicRequestInput({
