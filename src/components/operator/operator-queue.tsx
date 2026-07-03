@@ -32,6 +32,7 @@ import {
   runOperatorQueueAction,
 } from "./api";
 import styles from "./operator.module.css";
+import { useDashboardQueueRealtime } from "./use-dashboard-queue-realtime";
 
 const queueSections: Array<{
   status: OperatorRequestStatus;
@@ -89,7 +90,6 @@ export function OperatorQueuePanel() {
     null,
   );
   const [closingWarningDismissed, setClosingWarningDismissed] = useState(false);
-  const [warningNow, setWarningNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
 
   const handleAuthenticationError = useCallback(
@@ -155,13 +155,11 @@ export function OperatorQueuePanel() {
     };
   }, [handleAuthenticationError, loadQueue]);
 
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setWarningNow(new Date());
-    }, 60_000);
+  const handleRealtimeInvalidate = useCallback(async () => {
+    await loadQueue(false);
+  }, [loadQueue]);
 
-    return () => window.clearInterval(interval);
-  }, []);
+  useDashboardQueueRealtime(queueData?.event.id, handleRealtimeInvalidate);
 
   async function handleAction(
     requestId: number,
@@ -206,6 +204,8 @@ export function OperatorQueuePanel() {
       </div>
     );
   }
+
+  const warningNow = new Date();
 
   return (
     <div className={styles.queueShell}>
