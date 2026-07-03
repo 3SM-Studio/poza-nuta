@@ -6,6 +6,55 @@
 
 ---
 
+## 0. Aktualne decyzje strategiczne: workspace, stały QR i event hosts
+
+Te decyzje są nadrzędne wobec starszych notatek o event-specific QR i `/session/[code]`. Jeśli dalsza część roadmapy mówi inaczej, należy ją czytać jako historyczny etap wymagający dostosowania do poniższego modelu.
+
+### Workspace / organizacja
+
+- Poza Nutą ma działać jako workspace/organizacja, nawet jeśli MVP zaczyna od jednego workspace’u.
+- Domyślny publiczny handle dla obecnej organizacji to `pozanuta`.
+- Workspace ma members z rolami:
+  - `owner` — pełne zarządzanie workspace’em, członkami, ustawieniami i rozliczeniami,
+  - `manager` — zarządzanie eventami i konfiguracją operacyjną,
+  - `operator` — obsługa kolejki i pracy eventu,
+  - `viewer` — podgląd bez zmian.
+- Operator może zarządzać kolejką, ale nie musi mieć prawa zmiany nazwy eventu ani event settings. Uprawnienia do queue i settings muszą być rozdzielone na poziomie API, nie tylko UI.
+
+### Stały publiczny QR
+
+- Główny drukowany QR dla Poza Nutą ma być stały i prowadzić do:
+
+```txt
+/join/pozanuta
+```
+
+- Trasa:
+
+```txt
+/join/{workspaceHandle}
+```
+
+rozwiązuje aktualny aktywny event danego workspace’u.
+
+- Event-specific access links nie są głównym mechanizmem drukowanego QR.
+- Access links mogą zostać jako mechanizm pomocniczy, awaryjny, promocyjny albo do kampanii/specjalnych wejść.
+- Stały QR nie powinien wymagać ponownego drukowania przy każdym evencie.
+
+### Event hosts / assignments
+
+- Event ma hosts/assignments: jednego lub wielu prowadzących.
+- Host eventu nie musi być ownerem workspace’u.
+- Host/operator assignments powinny określać, kto prowadzi konkretny event, kto obsługuje kolejkę i kto może zmieniać ustawienia eventu.
+
+### Realtime dashboard queue
+
+- Realtime dashboard queue jest priorytetem produktu.
+- Mechanizm ma być event-driven: Supabase Realtime Broadcast jako sygnał invalidacji + refetch przez nasze API.
+- Nie używamy interval pollingu jako docelowego mechanizmu kolejki.
+
+---
+
 ## 1. Docelowy produkt
 
 Poza Nutą ma być aplikacją do obsługi karaoke/eventów, w której:
@@ -458,6 +507,22 @@ feat: add dashboard queue reorder
 
 # ETAP 6 — public session route `/session/[code]`
 
+## Aktualizacja decyzji
+
+Ten etap wymaga przeprojektowania pod stały workspace QR. Docelowa publiczna ścieżka wejścia uczestnika to:
+
+```txt
+/join/{workspaceHandle}
+```
+
+Dla Poza Nutą główny drukowany QR prowadzi do:
+
+```txt
+/join/pozanuta
+```
+
+`/join/{workspaceHandle}` rozwiązuje aktualny aktywny event workspace’u i dopiero potem tworzy albo odnawia participant session. Event-specific access links mogą pozostać jako mechanizm pomocniczy/awaryjny/promocyjny, ale nie są głównym mechanizmem drukowanego QR.
+
 ## Dlaczego
 
 Access links/QR bez session flow są tylko połową funkcji. Uczestnik musi wejść przez kod, dostać sesję i dopiero wtedy móc zgłaszać.
@@ -512,6 +577,12 @@ feat: add public event session route
 ---
 
 # ETAP 7 — QR rendering
+
+## Aktualizacja decyzji
+
+Priorytetem QR jest stały publiczny QR workspace’u, a nie QR generowany per event access link. Dla obecnego workspace’u drukowany QR powinien zawierać pełny URL do `/join/pozanuta`.
+
+Access-link QR może zostać jako opcjonalny widok po create, ale jest pomocniczy: awaryjny, promocyjny albo kampanijny. Nie powinien być opisany jako główny mechanizm obsługi standardowego eventu.
 
 ## Dlaczego
 
@@ -583,14 +654,32 @@ feat: require participant session for song requests
 
 # ETAP 9 — event list, public pages i Facebook redirect
 
+## Aktualizacja decyzji
+
+Publiczny routing musi uwzględniać workspace join:
+
+```txt
+/join/{workspaceHandle} -> aktualny aktywny event workspace’u
+```
+
+Dla Poza Nutą:
+
+```txt
+/join/pozanuta
+```
+
+Event identity, workspace identity i access-code identity nie są tym samym. Access links nie powinny zastępować stałego join route.
+
 ## Decyzje z rozmowy
 
 Docelowo:
 
 ```txt
 /               -> lista eventów albo landing
+/join/pozanuta  -> stały publiczny QR Poza Nutą
+/join/{workspaceHandle} -> aktywny event workspace’u
 /events/[slug]  -> redirect do Facebook URL
-/session/[code] -> wejście uczestnika przez QR
+/session/[code] -> legacy/pomocniczy event access link, jeśli zostaje
 /queue          -> public active queue
 ```
 
@@ -606,7 +695,8 @@ Docelowo:
 
 - Event slug działa.
 - Facebook redirect działa.
-- `/session/[code]` zostaje osobnym flow.
+- `/join/{workspaceHandle}` rozwiązuje aktywny event workspace’u.
+- `/session/[code]`, jeśli zostaje, jest pomocniczym access-link flow, a nie głównym drukowanym QR.
 - Stary/revoked code nie redirectuje do nowego.
 - Test/typecheck/lint/build przechodzą.
 
@@ -628,10 +718,12 @@ Bez owner panelu nie da się zarządzać operatorami i dostępem. To jest wymaga
 
 ```txt
 owner
-event_manager
-queue_operator
+manager
+operator
 viewer
 ```
+
+To są role workspace members. Starsze nazwy `event_manager` i `queue_operator` należy traktować jako robocze odpowiedniki `manager` i `operator`, nie jako docelowy słownik ról.
 
 ## Uprawnienia
 
@@ -643,19 +735,34 @@ viewer
 - wszystko w kolejce,
 - rozliczenia.
 
-### event_manager
+### manager
 
 - tworzy/edytuje eventy,
 - access links,
 - venue selection.
 
-### queue_operator
+### operator
 
 - obsługuje kolejkę.
+- nie musi mieć prawa zmiany nazwy eventu ani event settings.
+- może być przypisany jako host/prowadzący konkretnego eventu.
 
 ### viewer
 
 - tylko podgląd.
+
+## Event hosts / assignments
+
+Event powinien mieć assignments/hosts:
+
+```txt
+event_hosts
+- event_id
+- workspace_member_id / operator_user_id
+- assignment_role
+```
+
+Jeden event może mieć jednego albo wielu prowadzących. Host/prowadzący może zarządzać kolejką dla przypisanego eventu, ale prawo do zmiany konfiguracji eventu powinno być osobnym uprawnieniem.
 
 ## Co zrobić
 
@@ -664,7 +771,10 @@ viewer
 3. `/dashboard/admin/users`.
 4. Invite/create operator mapping.
 5. Aktywacja/dezaktywacja operatora.
-6. Testy RBAC.
+6. Dodać model workspace members.
+7. Dodać event hosts/assignments.
+8. Rozdzielić uprawnienia queue management od event settings.
+9. Testy RBAC.
 
 ## Acceptance criteria
 
