@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:import:karafun": "node --experimental-strip-types src/db/import-karafun-csv.ts",
+    "db:import:ising": "node --experimental-strip-types src/db/import-ising.ts",
     "db:migrate": "drizzle-kit migrate",
     "db:check": "node --experimental-strip-types src/db/check-db-state.ts",
     "db:seed": "node --experimental-strip-types src/db/seed.ts",
