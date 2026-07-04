@@ -7,6 +7,7 @@ import {
   DEFAULT_WORKSPACE_HANDLE,
   DEFAULT_WORKSPACE_NAME,
 } from "../lib/workspace.ts";
+import { logDatabaseError } from "./log-db-error.ts";
 import { events, workspaces } from "./schema.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
@@ -72,8 +73,6 @@ async function seed() {
 }
 
 seed().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : "Unknown error";
-
-  console.error(`Database seed failed: ${message}`);
+  logDatabaseError("Database seed failed", error);
   process.exitCode = 1;
 });

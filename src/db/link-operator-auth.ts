@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { logDatabaseError } from "./log-db-error.ts";
 import { operatorUsers } from "./schema.ts";
 
 const DEFAULT_OPERATOR_NAME = "Operator";
@@ -110,8 +111,6 @@ async function linkOperatorAuth() {
 }
 
 linkOperatorAuth().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : "Unknown error";
-
-  console.error(`Operator Auth linking failed: ${message}`);
+  logDatabaseError("Operator Auth linking failed", error);
   process.exitCode = 1;
 });

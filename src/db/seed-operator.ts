@@ -6,6 +6,7 @@ import postgres from "postgres";
 import { operatorUsers } from "./schema.ts";
 import { hashPin } from "../server/operator-api/crypto.ts";
 import { DEFAULT_OPERATOR_NAME } from "../server/operator-api/validation.ts";
+import { logDatabaseError } from "./log-db-error.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
@@ -99,8 +100,6 @@ async function seedOperator() {
 }
 
 seedOperator().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : "Unknown error";
-
-  console.error(`Operator seed failed: ${message}`);
+  logDatabaseError("Operator seed failed", error);
   process.exitCode = 1;
 });

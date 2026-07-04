@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:import:karafun": "node --experimental-strip-types src/db/import-karafun-csv.ts",
     "db:migrate": "drizzle-kit migrate",
+    "db:check": "node --experimental-strip-types src/db/check-db-state.ts",
     "db:seed": "node --experimental-strip-types src/db/seed.ts",
     "db:seed:operator": "node --experimental-strip-types src/db/seed-operator.ts",
     "db:link:operator-auth": "node --experimental-strip-types src/db/link-operator-auth.ts",
