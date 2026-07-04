@@ -29,7 +29,20 @@ const CHALLENGE_TEXTS = [
   "Spróbuj ponownie",
 ];
 
-const FORBIDDEN_KEYS = new Set(["audio", "lyrics", "sample_url", "user"]);
+const FORBIDDEN_KEYS = new Set([
+  "audio",
+  "audio_url",
+  "comments",
+  "download_url",
+  "files",
+  "lyrics",
+  "media_url",
+  "profiles",
+  "recording",
+  "recordings",
+  "text",
+  "users",
+]);
 
 export class ISingImportSafetyError extends Error {
   readonly url: string;
@@ -188,10 +201,16 @@ function assertNoForbiddenFields(
     const currentPath = [...path, key];
 
     if (
+      isSafeCountField(normalizedKey) ||
+      normalizedKey.endsWith("_count")
+    ) {
+      continue;
+    }
+
+    if (
       FORBIDDEN_KEYS.has(normalizedKey) ||
       normalizedKey.includes("email") ||
-      normalizedKey.includes("token") ||
-      normalizedKey.includes("recording")
+      normalizedKey.includes("token")
     ) {
       throw new ISingImportSafetyError(
         `Unexpected private/sensitive iSing field: ${currentPath.join(".")}`,
@@ -201,6 +220,15 @@ function assertNoForbiddenFields(
 
     assertNoForbiddenFields(nestedValue, url, currentPath);
   }
+}
+
+function isSafeCountField(key: string) {
+  return (
+    key === "recordings_count" ||
+    key === "comments_count" ||
+    key === "views_count" ||
+    key === "likes_count"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

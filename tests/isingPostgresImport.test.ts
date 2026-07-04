@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runISingImport, type ISingImportOptions } from "../src/db/import-ising.ts";
+import {
+  loadISingImportOptions,
+  runISingImport,
+  type ISingImportOptions,
+} from "../src/db/import-ising.ts";
+import { readAndValidateISingResponse } from "../src/db/ising-client.ts";
 import {
   mapISingSongToSong,
   type ISingApiSong,
@@ -84,6 +89,76 @@ test("iSing dry-run does not persist to the database", async () => {
   assert.equal(summary.skipped, 0);
 });
 
+test("iSing safety allows aggregate count fields", async () => {
+  const parsed = await readAndValidateISingResponse(
+    jsonResponse(
+      pageResponse([
+        sampleSong({
+          recordings_count: 12,
+          comments_count: 3,
+          views_count: 1000,
+          likes_count: 50,
+          sample_url: "https://example.test/sample.mp3",
+        }),
+      ]),
+    ),
+    "https://api.ising.pl/v2/search",
+  );
+
+  assert.equal(parsed.data.results.songs.length, 1);
+});
+
+test("iSing safety rejects recordings payloads", async () => {
+  await assert.rejects(
+    () =>
+      readAndValidateISingResponse(
+        jsonResponse(
+          pageResponse([
+            sampleSong({
+              recordings: [{ id: 1 }],
+            }),
+          ]),
+        ),
+        "https://api.ising.pl/v2/search",
+      ),
+    /Unexpected private\/sensitive iSing field/,
+  );
+});
+
+test("iSing safety rejects lyrics, text and audio_url payloads", async () => {
+  for (const unsafeField of ["lyrics", "text", "audio_url"] as const) {
+    await assert.rejects(
+      () =>
+        readAndValidateISingResponse(
+          jsonResponse(
+            pageResponse([
+              sampleSong({
+                [unsafeField]: "unsafe",
+              }),
+            ]),
+          ),
+          "https://api.ising.pl/v2/search",
+        ),
+      /Unexpected private\/sensitive iSing field/,
+    );
+  }
+});
+
+test("iSing CLI parser accepts standalone double dash", () => {
+  const direct = loadISingImportOptions(testEnv(), ["--dry-run", "--limit", "20"]);
+  const withSeparator = loadISingImportOptions(testEnv(), [
+    "--",
+    "--dry-run",
+    "--limit",
+    "20",
+  ]);
+
+  assert.equal(direct.dryRun, true);
+  assert.equal(direct.limit, 20);
+  assert.equal(withSeparator.dryRun, true);
+  assert.equal(withSeparator.limit, 20);
+});
+
 function sampleSong(overrides: ISingApiSong = {}): ISingApiSong {
   return {
     id: 9053,
@@ -137,5 +212,13 @@ function testOptions(): ISingImportOptions {
     dryRun: false,
     batchSize: 10,
     timeoutMs: 15_000,
+  };
+}
+
+function testEnv(): NodeJS.ProcessEnv {
+  return {
+    NODE_ENV: "test",
+    ISING_CLIENT_ID: "client-id",
+    ISING_IMPORT_DELAY_MS: "1",
   };
 }

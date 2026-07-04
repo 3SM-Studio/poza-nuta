@@ -327,6 +327,10 @@ function parseCliOptions(args: string[]) {
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
 
+    if (argument === "--") {
+      continue;
+    }
+
     if (argument === "--dry-run") {
       dryRun = true;
       continue;

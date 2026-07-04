@@ -29,12 +29,14 @@ Use a dry run first. It fetches and maps metadata but does not write to
 Postgres:
 
 ```bash
+pnpm db:import:ising --dry-run --limit 20
 pnpm db:import:ising -- --dry-run --limit 20
 ```
 
 For a small write import:
 
 ```bash
+pnpm db:import:ising --limit 100
 pnpm db:import:ising -- --limit 100
 ```
 
@@ -55,5 +57,10 @@ from the current import.
 
 Imported fields are limited to song metadata such as title, artist, duration,
 genres, languages when present, public source URL, and boolean availability
-flags. Lyrics, audio, samples, backing tracks, recordings, profiles, comments,
-tokens, and private account data are deliberately rejected or ignored.
+flags. Lyrics, audio, backing tracks, recordings, profiles, comments, tokens,
+and private account data are deliberately rejected or ignored. Fields such as
+`sample_url` may appear in iSing responses, but they are ignored and never
+persisted.
+Aggregate counters such as `recordings_count`, `comments_count`, `views_count`,
+and `likes_count` may appear in iSing responses, but they are ignored because
+the `songs` table has no fields for them.
