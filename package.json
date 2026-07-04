@@ -1,6 +1,7 @@
 {
   "name": "poza-nuta",
   "version": "0.1.0",
+  "packageManager": "pnpm@11.7.0",
   "private": true,
   "type": "module",
   "scripts": {

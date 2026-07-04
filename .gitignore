@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 apps/*/node_modules/
+.pnpm-store/
 
 # Local environment files
 .env
