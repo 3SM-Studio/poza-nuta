@@ -8,6 +8,9 @@ import {
   shouldWarnEventClosingSoon,
 } from "../src/lib/event-lifecycle.ts";
 import {
+  calculateDefaultDashboardEventAutoCloseAt,
+  DEFAULT_DASHBOARD_EVENT_DURATION_HOURS,
+  validateCreateDashboardEventInput,
   validateEventSettingsInput,
   validateExtendInput,
   validateStartEventInput,
@@ -19,6 +22,74 @@ test("calculateAutoCloseAt adds the default eight hours", () => {
   assert.equal(
     calculateAutoCloseAt(startsAt).toISOString(),
     "2026-07-03T02:00:00.000Z",
+  );
+});
+
+test("dashboard event create defaults close time to start plus six hours", () => {
+  const startsAt = new Date("2026-07-05T18:00:00.000Z");
+  const result = validateCreateDashboardEventInput({
+    title: "Karaoke Night",
+    startsAt,
+    autoCloseAt: "",
+    facebookUrl: "",
+  });
+
+  assert.equal(DEFAULT_DASHBOARD_EVENT_DURATION_HOURS, 6);
+  assert.equal(
+    calculateDefaultDashboardEventAutoCloseAt(startsAt).toISOString(),
+    "2026-07-06T00:00:00.000Z",
+  );
+  assert.equal(result.success, true);
+  assert.equal(
+    result.success ? result.data.autoCloseAt.toISOString() : null,
+    "2026-07-06T00:00:00.000Z",
+  );
+});
+
+test("dashboard event create accepts a custom close time and Facebook URL", () => {
+  const result = validateCreateDashboardEventInput({
+    title: "Karaoke Night",
+    startsAt: "2026-07-05T18:00:00.000Z",
+    autoCloseAt: "2026-07-05T23:30:00.000Z",
+    facebookUrl: "https://www.facebook.com/events/123",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(
+    result.success ? result.data.autoCloseAt.toISOString() : null,
+    "2026-07-05T23:30:00.000Z",
+  );
+  assert.equal(
+    result.success ? result.data.facebookUrl : null,
+    "https://www.facebook.com/events/123",
+  );
+});
+
+test("dashboard event create rejects close time before start", () => {
+  const result = validateCreateDashboardEventInput({
+    title: "Karaoke Night",
+    startsAt: "2026-07-05T18:00:00.000Z",
+    autoCloseAt: "2026-07-05T17:30:00.000Z",
+  });
+
+  assert.equal(result.success, false);
+  assert.deepEqual(
+    result.success ? [] : result.issues.map((issue) => issue.field),
+    ["autoCloseAt"],
+  );
+});
+
+test("dashboard event create rejects invalid Facebook URL", () => {
+  const result = validateCreateDashboardEventInput({
+    title: "Karaoke Night",
+    startsAt: "2026-07-05T18:00:00.000Z",
+    facebookUrl: "not a url",
+  });
+
+  assert.equal(result.success, false);
+  assert.deepEqual(
+    result.success ? [] : result.issues.map((issue) => issue.field),
+    ["facebookUrl"],
   );
 });
 

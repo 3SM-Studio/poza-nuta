@@ -18,6 +18,19 @@ export function getDashboardOrganizationEventsPath(organizationId: string) {
   return `${getDashboardOrganizationPath(organizationId)}/events`;
 }
 
+export function getDashboardOrganizationNewEventPath(organizationId: string) {
+  return `${getDashboardOrganizationEventsPath(organizationId)}/new`;
+}
+
+export function getDashboardOrganizationEventPath(
+  organizationId: string,
+  eventId: number | string,
+) {
+  return `${getDashboardOrganizationEventsPath(
+    organizationId,
+  )}/${encodeURIComponent(String(eventId))}`;
+}
+
 export function getDashboardOrganizationSettingsPath(organizationId: string) {
   return `${getDashboardOrganizationPath(organizationId)}/settings`;
 }

@@ -1,9 +1,15 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 
-import { events, operatorUsers, workspaceMembers, workspaces } from "../../db/schema";
+import {
+  events,
+  operatorAuditLog,
+  operatorUsers,
+  workspaceMembers,
+  workspaces,
+} from "../../db/schema";
 import { getDb } from "../db";
 import {
   generateOrganizationPublicId,
@@ -14,6 +20,8 @@ import {
   buildWorkspaceHandleFromName,
   validateOrganizationName,
 } from "../../lib/organization-workspace";
+import { OperatorApiError } from "./errors";
+import type { CreateDashboardEventInput } from "./validation";
 
 export type DashboardOrganizationRole =
   | "owner"
@@ -35,6 +43,7 @@ export type DashboardOrganizationEvent = {
   name: string;
   venue: string | null;
   startsAt: Date;
+  facebookUrl: string | null;
   status: "draft" | "active" | "closed";
   isActivePublicEvent: boolean;
   publicQueueEnabled: boolean;
@@ -69,6 +78,22 @@ const workspaceSelection = {
   name: workspaces.name,
   handle: workspaces.handle,
   active: workspaces.active,
+};
+
+const dashboardEventSelection = {
+  id: events.id,
+  name: events.name,
+  venue: events.venue,
+  startsAt: events.startsAt,
+  facebookUrl: events.facebookUrl,
+  status: events.status,
+  isActivePublicEvent: events.isActivePublicEvent,
+  publicQueueEnabled: events.publicQueueEnabled,
+  publicShowSongTitles: events.publicShowSongTitles,
+  autoCloseAt: events.autoCloseAt,
+  closedAt: events.closedAt,
+  createdAt: events.createdAt,
+  updatedAt: events.updatedAt,
 };
 
 const ownerOrganizationSelection = {
@@ -153,18 +178,7 @@ export async function listDashboardOrganizationEventsForAuthUser(
 
   const organizationEvents = await getDb()
     .select({
-      id: events.id,
-      name: events.name,
-      venue: events.venue,
-      startsAt: events.startsAt,
-      status: events.status,
-      isActivePublicEvent: events.isActivePublicEvent,
-      publicQueueEnabled: events.publicQueueEnabled,
-      publicShowSongTitles: events.publicShowSongTitles,
-      autoCloseAt: events.autoCloseAt,
-      closedAt: events.closedAt,
-      createdAt: events.createdAt,
-      updatedAt: events.updatedAt,
+      ...dashboardEventSelection,
     })
     .from(events)
     .where(eq(events.workspaceId, organization.id))
@@ -174,6 +188,93 @@ export async function listDashboardOrganizationEventsForAuthUser(
     organization,
     events: organizationEvents,
   };
+}
+
+export function canCreateDashboardOrganizationEvent(
+  role: DashboardOrganizationRole,
+) {
+  return role === "owner" || role === "manager";
+}
+
+export async function getDashboardOrganizationEventForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+}) {
+  const organization = await getDashboardOrganizationForAuthUser(
+    input.authUserId,
+    input.organizationId,
+  );
+
+  if (!organization) {
+    return null;
+  }
+
+  const [event] = await getDb()
+    .select(dashboardEventSelection)
+    .from(events)
+    .where(and(eq(events.workspaceId, organization.id), eq(events.id, input.eventId)))
+    .limit(1);
+
+  if (!event) {
+    return null;
+  }
+
+  return {
+    organization,
+    event,
+  };
+}
+
+export async function createDashboardOrganizationEventForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  event: CreateDashboardEventInput;
+}) {
+  return getDb().transaction(async (transaction) => {
+    const organization = await requireEventCreatorOrganizationInTransaction(
+      transaction,
+      input.authUserId,
+      input.organizationId,
+    );
+    const now = new Date();
+    const [event] = await transaction
+      .insert(events)
+      .values({
+        workspaceId: organization.id,
+        name: input.event.title,
+        startsAt: input.event.startsAt,
+        autoCloseAt: input.event.autoCloseAt,
+        facebookUrl: input.event.facebookUrl,
+        status: "draft",
+        isActivePublicEvent: false,
+        publicQueueEnabled: false,
+        publicShowSongTitles: true,
+        updatedAt: now,
+      })
+      .returning(dashboardEventSelection);
+
+    if (!event) {
+      throw new Error("Event could not be created.");
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "create_event",
+      entityId: String(event.id),
+      payload: {
+        startsAt: input.event.startsAt.toISOString(),
+        autoCloseAt: input.event.autoCloseAt.toISOString(),
+        facebookUrlProvided: Boolean(input.event.facebookUrl),
+      },
+    });
+
+    return {
+      organization,
+      event,
+    };
+  });
 }
 
 export async function listDashboardOrganizationMembersForAuthUser(
@@ -412,6 +513,61 @@ async function requireOwnerOrganizationInTransaction(
 
   if (!organization) {
     throw new Error("Only an active organization owner can perform this action.");
+  }
+
+  return organization;
+}
+
+async function requireEventCreatorOrganizationInTransaction(
+  transaction: DatabaseTransaction,
+  authUserId: string,
+  organizationId: string,
+) {
+  if (!isOrganizationPublicId(organizationId)) {
+    throw new OperatorApiError(
+      404,
+      "WORKSPACE_NOT_FOUND",
+      "Organization was not found.",
+    );
+  }
+
+  const [organization] = await transaction
+    .select({
+      id: workspaces.id,
+      publicId: workspaces.publicId,
+      name: workspaces.name,
+      handle: workspaces.handle,
+      active: workspaces.active,
+      role: workspaceMembers.role,
+      operatorId: operatorUsers.id,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      eq(workspaceMembers.workspaceId, workspaces.id),
+    )
+    .innerJoin(
+      operatorUsers,
+      eq(operatorUsers.id, workspaceMembers.operatorUserId),
+    )
+    .where(
+      and(
+        eq(workspaces.publicId, organizationId),
+        eq(workspaces.active, true),
+        eq(operatorUsers.authUserId, authUserId),
+        eq(operatorUsers.active, true),
+        eq(workspaceMembers.active, true),
+        or(eq(workspaceMembers.role, "owner"), eq(workspaceMembers.role, "manager")),
+      ),
+    )
+    .limit(1);
+
+  if (!organization) {
+    throw new OperatorApiError(
+      403,
+      "WORKSPACE_EVENT_CREATE_FORBIDDEN",
+      "Only an owner or manager can create events.",
+    );
   }
 
   return organization;

@@ -26,6 +26,7 @@ export const activeEventSelection = {
   name: events.name,
   venue: events.venue,
   startsAt: events.startsAt,
+  facebookUrl: events.facebookUrl,
   status: events.status,
   isActivePublicEvent: events.isActivePublicEvent,
   publicQueueEnabled: events.publicQueueEnabled,

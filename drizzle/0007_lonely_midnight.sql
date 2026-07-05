@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "facebook_url" text;

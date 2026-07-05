@@ -5,7 +5,9 @@ export const MIN_OPERATOR_PASSWORD_LENGTH = 6;
 export const MAX_OPERATOR_PASSWORD_LENGTH = 1_024;
 export const MAX_EVENT_NAME_LENGTH = 120;
 export const MAX_EVENT_VENUE_LENGTH = 120;
+export const MAX_EVENT_FACEBOOK_URL_LENGTH = 2_048;
 export const MAX_EVENT_ACCESS_LINK_LABEL_LENGTH = 120;
+export const DEFAULT_DASHBOARD_EVENT_DURATION_HOURS = 6;
 
 export type LoginInput = {
   email: string;
@@ -22,6 +24,13 @@ export type EventSettingsInput = {
 export type StartEventInput = {
   name: string;
   venue: string | null;
+};
+
+export type CreateDashboardEventInput = {
+  title: string;
+  startsAt: Date;
+  autoCloseAt: Date;
+  facebookUrl: string | null;
 };
 
 export type ExtendEventInput = {
@@ -97,6 +106,10 @@ export function validateAccessLinkId(
   value: string,
 ): ValidationResult<number> {
   return validatePositiveSafeInteger(value, "linkId");
+}
+
+export function validateEventId(value: string): ValidationResult<number> {
+  return validatePositiveSafeInteger(value, "eventId");
 }
 
 export function normalizeEventAccessLinkLabel(value: string) {
@@ -243,6 +256,76 @@ export function validateStartEventInput(
   };
 }
 
+export function calculateDefaultDashboardEventAutoCloseAt(startsAt: Date) {
+  return new Date(
+    startsAt.getTime() +
+      DEFAULT_DASHBOARD_EVENT_DURATION_HOURS * 60 * 60 * 1_000,
+  );
+}
+
+export function validateCreateDashboardEventInput(
+  input: unknown,
+): ValidationResult<CreateDashboardEventInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  const issues: ValidationIssue[] = [];
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  const startsAt = parseDateTimeInput(input.startsAt, "startsAt", issues);
+  const requestedAutoCloseAt = parseOptionalDateTimeInput(
+    input.autoCloseAt,
+    "autoCloseAt",
+    issues,
+  );
+  const facebookUrl = parseOptionalUrlInput(
+    input.facebookUrl,
+    "facebookUrl",
+    issues,
+  );
+
+  if (typeof input.title !== "string" || title.length === 0) {
+    issues.push({ field: "title", message: "title is required." });
+  } else if (title.length > MAX_EVENT_NAME_LENGTH) {
+    issues.push({
+      field: "title",
+      message: `title must contain at most ${MAX_EVENT_NAME_LENGTH} characters.`,
+    });
+  }
+
+  if (!startsAt) {
+    issues.push({ field: "startsAt", message: "startsAt is required." });
+  }
+
+  if (issues.length > 0 || !startsAt) {
+    return { success: false, issues };
+  }
+
+  const autoCloseAt =
+    requestedAutoCloseAt ?? calculateDefaultDashboardEventAutoCloseAt(startsAt);
+
+  if (autoCloseAt.getTime() <= startsAt.getTime()) {
+    issues.push({
+      field: "autoCloseAt",
+      message: "autoCloseAt must be after startsAt.",
+    });
+  }
+
+  if (issues.length > 0) {
+    return { success: false, issues };
+  }
+
+  return {
+    success: true,
+    data: {
+      title,
+      startsAt,
+      autoCloseAt,
+      facebookUrl,
+    },
+  };
+}
+
 export function validateExtendInput(
   input: unknown,
 ): ValidationResult<ExtendEventInput> {
@@ -281,6 +364,97 @@ function invalidBodyResult(): ValidationResult<never> {
     success: false,
     issues: [{ field: "body", message: "Body must be a JSON object." }],
   };
+}
+
+function parseDateTimeInput(
+  value: unknown,
+  field: string,
+  issues: ValidationIssue[],
+) {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  const date = new Date(normalizedValue);
+
+  if (!Number.isFinite(date.getTime())) {
+    issues.push({ field, message: `${field} must be a valid date.` });
+    return null;
+  }
+
+  return date;
+}
+
+function parseOptionalDateTimeInput(
+  value: unknown,
+  field: string,
+  issues: ValidationIssue[],
+) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === "string" && value.trim() === "") {
+    return null;
+  }
+
+  return parseDateTimeInput(value, field, issues);
+}
+
+function parseOptionalUrlInput(
+  value: unknown,
+  field: string,
+  issues: ValidationIssue[],
+) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push({ field, message: `${field} must be a string or null.` });
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  if (normalizedValue.length > MAX_EVENT_FACEBOOK_URL_LENGTH) {
+    issues.push({
+      field,
+      message: `${field} must contain at most ${MAX_EVENT_FACEBOOK_URL_LENGTH} characters.`,
+    });
+    return null;
+  }
+
+  try {
+    const url = new URL(normalizedValue);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      issues.push({
+        field,
+        message: `${field} must use http or https.`,
+      });
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    issues.push({ field, message: `${field} must be a valid URL.` });
+    return null;
+  }
 }
 
 function validateEventNameAndVenue(input: Record<string, unknown>) {

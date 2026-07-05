@@ -1,17 +1,27 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  getDashboardOrganizationEventPath,
+  getDashboardOrganizationNewEventPath,
+} from "@/lib/dashboard-routes";
 
 import styles from "../../../../../components/operator/operator.module.css";
-import { listDashboardOrganizationEventsForAuthUser } from "../../../../../server/operator-api/organizations";
+import {
+  canCreateDashboardOrganizationEvent,
+  listDashboardOrganizationEventsForAuthUser,
+} from "../../../../../server/operator-api/organizations";
 import { requireOperatorSession } from "../../../../../server/operator-api/supabase-session";
 
 export const metadata: Metadata = {
@@ -40,6 +50,13 @@ export default async function OrganizationEventsPage({
     notFound();
   }
 
+  const canCreateEvent = canCreateDashboardOrganizationEvent(
+    result.organization.role,
+  );
+  const newEventPath = getDashboardOrganizationNewEventPath(
+    result.organization.publicId,
+  );
+
   return (
     <main className={styles.queuePage}>
       <section className={styles.organizationShell}>
@@ -48,6 +65,11 @@ export default async function OrganizationEventsPage({
             <h1>Eventy</h1>
             <p className={styles.eventMeta}>{result.organization.name}</p>
           </div>
+          {canCreateEvent ? (
+            <Button asChild>
+              <Link href={newEventPath}>Utwórz wydarzenie</Link>
+            </Button>
+          ) : null}
         </header>
 
         {result.events.length > 0 ? (
@@ -75,6 +97,10 @@ export default async function OrganizationEventsPage({
                       <dd>{formatDate(event.startsAt)}</dd>
                     </div>
                     <div>
+                      <dt>Czas zamknięcia</dt>
+                      <dd>{formatDate(event.autoCloseAt)}</dd>
+                    </div>
+                    <div>
                       <dt>Publiczna kolejka</dt>
                       <dd>{event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
                     </div>
@@ -84,6 +110,18 @@ export default async function OrganizationEventsPage({
                     </div>
                   </dl>
                 </CardContent>
+                <CardFooter>
+                  <Button variant="outline" asChild>
+                    <Link
+                      href={getDashboardOrganizationEventPath(
+                        result.organization.publicId,
+                        event.id,
+                      )}
+                    >
+                      Otwórz
+                    </Link>
+                  </Button>
+                </CardFooter>
               </Card>
             ))}
           </div>
@@ -95,6 +133,13 @@ export default async function OrganizationEventsPage({
                 Ta organizacja nie ma jeszcze eventów w bazie.
               </CardDescription>
             </CardHeader>
+            {canCreateEvent ? (
+              <CardFooter>
+                <Button asChild>
+                  <Link href={newEventPath}>Utwórz wydarzenie</Link>
+                </Button>
+              </CardFooter>
+            ) : null}
           </Card>
         )}
       </section>
@@ -123,7 +168,11 @@ function formatEventStatus(status: string) {
   }
 }
 
-function formatDate(date: Date) {
+function formatDate(date: Date | null) {
+  if (!date) {
+    return "Brak terminu";
+  }
+
   return new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
     timeStyle: "short",

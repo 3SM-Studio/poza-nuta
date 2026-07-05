@@ -113,6 +113,7 @@ export const events = pgTable(
     name: text("name").notNull(),
     venue: text("venue"),
     startsAt: timestampColumn("starts_at").notNull(),
+    facebookUrl: text("facebook_url"),
     status: eventStatusEnum("status").notNull().default("draft"),
     isActivePublicEvent: boolean("is_active_public_event")
       .notNull()

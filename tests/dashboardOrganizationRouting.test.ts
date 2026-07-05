@@ -19,8 +19,10 @@ import {
 import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
+  getDashboardOrganizationEventPath,
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationGeneralSettingsPath,
+  getDashboardOrganizationNewEventPath,
   getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
   getDashboardOrganizationTeamPath,
@@ -59,6 +61,14 @@ test("organization route helpers encode organizationId values", () => {
   assert.equal(
     getDashboardOrganizationEventsPath(exampleOrganizationId),
     `/dashboard/org/${exampleOrganizationId}/events`,
+  );
+  assert.equal(
+    getDashboardOrganizationNewEventPath(exampleOrganizationId),
+    `/dashboard/org/${exampleOrganizationId}/events/new`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventPath(exampleOrganizationId, 42),
+    `/dashboard/org/${exampleOrganizationId}/events/42`,
   );
   assert.equal(
     getDashboardOrganizationSettingsPath(exampleOrganizationId),
@@ -824,6 +834,62 @@ test("organization access allows active membership target", () => {
     allowed: true,
     organization,
   });
+});
+
+test("organization events support owner and manager create flow", () => {
+  const listPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/page.tsx",
+    "utf8",
+  );
+  const newPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/new/page.tsx",
+    "utf8",
+  );
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const organizationsSource = readFileSync(
+    "src/server/operator-api/organizations.ts",
+    "utf8",
+  );
+
+  assert.match(listPageSource, /Utwórz wydarzenie/);
+  assert.match(listPageSource, /getDashboardOrganizationNewEventPath/);
+  assert.match(newPageSource, /validateCreateDashboardEventInput/);
+  assert.match(newPageSource, /createDashboardOrganizationEventForAuthUser/);
+  assert.match(newPageSource, /getDashboardOrganizationEventPath/);
+  assert.match(newPageSource, /redirect\(/);
+  assert.match(detailPageSource, /Link sesji zostanie dodany w kolejnym etapie/);
+  assert.match(detailPageSource, /result\.event\.autoCloseAt/);
+  assert.match(detailPageSource, /result\.event\.facebookUrl/);
+  assert.match(
+    organizationsSource,
+    /or\(eq\(workspaceMembers\.role, "owner"\), eq\(workspaceMembers\.role, "manager"\)\)/,
+  );
+  assert.equal(
+    organizationsSource.includes('eq(workspaceMembers.role, "viewer")'),
+    false,
+  );
+});
+
+test("organization event create persists auto_close_at and facebook_url only", () => {
+  const schemaSource = readFileSync("src/db/schema.ts", "utf8");
+  const migrationSource = readFileSync(
+    "drizzle/0007_lonely_midnight.sql",
+    "utf8",
+  );
+  const organizationsSource = readFileSync(
+    "src/server/operator-api/organizations.ts",
+    "utf8",
+  );
+
+  assert.match(schemaSource, /facebookUrl: text\("facebook_url"\)/);
+  assert.equal(schemaSource.includes("endsAt"), false);
+  assert.match(migrationSource, /ADD COLUMN "facebook_url" text/);
+  assert.equal(migrationSource.includes("ends_at"), false);
+  assert.match(organizationsSource, /autoCloseAt: input\.event\.autoCloseAt/);
+  assert.match(organizationsSource, /facebookUrl: input\.event\.facebookUrl/);
 });
 
 test("account identity sanitizer exposes login methods without tokens", () => {
