@@ -17,10 +17,11 @@ import {
   getDashboardOrganizationSettingsPath,
 } from "@/lib/dashboard-routes";
 
+import { DashboardRuntimeError } from "../../../../components/operator/dashboard-runtime-error";
 import styles from "../../../../components/operator/operator.module.css";
 import { getDashboardOrganizationOverviewForAuthUser } from "../../../../server/operator-api/organization-overview";
 import { requireOperatorSession } from "../../../../server/operator-api/supabase-session";
-import { traceServerStep } from "../../../../server/runtime-diagnostics";
+import { isTransientInfrastructureError } from "../../../../server/runtime-diagnostics";
 
 export const metadata: Metadata = {
   title: "Organizacja | Poza Nutą",
@@ -38,16 +39,25 @@ export default async function DashboardOrganizationPage({
   params,
 }: OrganizationPageProps) {
   const { organizationId } = await params;
-  const session = await requireOperatorSession("dashboard.org");
-  const overview = await traceServerStep(
-    "dashboard.org",
-    "getOverview",
-    () =>
-      getDashboardOrganizationOverviewForAuthUser(
-        session.authUser.id,
-        organizationId,
-      ),
-  );
+  let overview: Awaited<
+    ReturnType<typeof getDashboardOrganizationOverviewForAuthUser>
+  >;
+
+  try {
+    const session = await requireOperatorSession("dashboard.org");
+    overview = await getDashboardOrganizationOverviewForAuthUser(
+      session.authUser.id,
+      organizationId,
+    );
+  } catch (error) {
+    if (isTransientInfrastructureError(error)) {
+      return (
+        <DashboardRuntimeError title="Nie udało się wczytać organizacji" />
+      );
+    }
+
+    throw error;
+  }
 
   if (!overview) {
     notFound();
@@ -166,7 +176,11 @@ export default async function DashboardOrganizationPage({
               </CardAction>
             </CardHeader>
             <CardContent>
-              {overview.recentEvents.length > 0 ? (
+              {overview.partialFailures.recentEvents ? (
+                <CardDescription>
+                  Nie udało się wczytać tej sekcji. Pozostałe dane są dostępne.
+                </CardDescription>
+              ) : overview.recentEvents.length > 0 ? (
                 <div className={styles.overviewList}>
                   {overview.recentEvents.map((event) => (
                     <div className={styles.overviewRow} key={event.id}>
@@ -196,7 +210,11 @@ export default async function DashboardOrganizationPage({
             <CardTitle>Najczęściej zgłaszane piosenki</CardTitle>
           </CardHeader>
           <CardContent>
-            {overview.topRequestedSongs.length > 0 ? (
+            {overview.partialFailures.topRequestedSongs ? (
+              <CardDescription>
+                Nie udało się wczytać rankingu. Pozostałe dane są dostępne.
+              </CardDescription>
+            ) : overview.topRequestedSongs.length > 0 ? (
               <div className={styles.overviewList}>
                 {overview.topRequestedSongs.map((song) => (
                   <div className={styles.topSongRow} key={song.songId}>

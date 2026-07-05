@@ -1,5 +1,9 @@
-import { isTransientInfrastructureError } from "../runtime-diagnostics";
-import { PublicApiError } from "./errors";
+import {
+  getSafeErrorCode,
+  getSafeErrorMessage,
+  isTransientInfrastructureError,
+} from "../runtime-diagnostics.ts";
+import { PublicApiError } from "./errors.ts";
 
 type ApiErrorBody = {
   error: {
@@ -62,7 +66,7 @@ export function publicApiErrorResponse(error: unknown) {
   }
 
   if (isTransientInfrastructureError(error)) {
-    console.error("Public API infrastructure dependency failed.");
+    logPublicApiError("public_api_infrastructure_failure", error);
 
     return jsonResponse<ApiErrorBody>(
       {
@@ -75,7 +79,7 @@ export function publicApiErrorResponse(error: unknown) {
     );
   }
 
-  console.error("Public API operation failed.");
+  logPublicApiError("public_api_operation_failed", error);
 
   return jsonResponse<ApiErrorBody>(
     {
@@ -85,5 +89,15 @@ export function publicApiErrorResponse(error: unknown) {
       },
     },
     500,
+  );
+}
+
+function logPublicApiError(scope: string, error: unknown) {
+  console.error(
+    [
+      scope,
+      `error_code=${JSON.stringify(getSafeErrorCode(error))}`,
+      `error_message=${JSON.stringify(getSafeErrorMessage(error))}`,
+    ].join(" "),
   );
 }

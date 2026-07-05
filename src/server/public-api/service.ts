@@ -8,6 +8,7 @@ import {
   closeExpiredActiveEventInTransaction,
   getActiveEventAfterLazyClose,
 } from "../event-lifecycle";
+import { traceServerStep } from "../runtime-diagnostics";
 import { PublicApiError } from "./errors";
 import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "./queue-policy";
 import type { PublicRequestInput } from "./validation";
@@ -19,8 +20,10 @@ const activePublicEventFilter = and(
   eq(events.status, "active"),
 );
 
-export async function getActivePublicEvent() {
-  const event = await getActiveEventAfterLazyClose();
+export async function getActivePublicEvent(routeName?: string) {
+  const event = await runPublicApiStep(routeName, "activeEvent", () =>
+    getActiveEventAfterLazyClose(),
+  );
 
   if (!event) {
     throw new PublicApiError(
@@ -135,7 +138,7 @@ export async function createPublicRequest(input: PublicRequestInput) {
 }
 
 export async function getPublicQueue() {
-  const event = await getActivePublicEvent();
+  const event = await getActivePublicEvent("public.queue");
 
   if (!event.publicQueueEnabled) {
     return {
@@ -147,25 +150,27 @@ export async function getPublicQueue() {
   }
 
   if (event.publicShowSongTitles) {
-    const items = await getDb()
-      .select({
-        id: songRequests.id,
-        singerName: songRequests.displayName,
-        status: songRequests.status,
-        position: songRequests.position,
-        title: songs.title,
-        artist: songs.artist,
-        createdAt: songRequests.createdAt,
-      })
-      .from(songRequests)
-      .innerJoin(songs, eq(songRequests.songId, songs.id))
-      .where(
-        and(
-          eq(songRequests.eventId, event.id),
-          inArray(songRequests.status, PUBLIC_QUEUE_VISIBLE_STATUSES),
-        ),
-      )
-      .orderBy(songRequests.position, songRequests.id);
+    const items = await traceServerStep("public.queue", "queueItems", () =>
+      getDb()
+        .select({
+          id: songRequests.id,
+          singerName: songRequests.displayName,
+          status: songRequests.status,
+          position: songRequests.position,
+          title: songs.title,
+          artist: songs.artist,
+          createdAt: songRequests.createdAt,
+        })
+        .from(songRequests)
+        .innerJoin(songs, eq(songRequests.songId, songs.id))
+        .where(
+          and(
+            eq(songRequests.eventId, event.id),
+            inArray(songRequests.status, PUBLIC_QUEUE_VISIBLE_STATUSES),
+          ),
+        )
+        .orderBy(songRequests.position, songRequests.id),
+    );
 
     return {
       eventId: event.id,
@@ -175,22 +180,24 @@ export async function getPublicQueue() {
     };
   }
 
-  const items = await getDb()
-    .select({
-      id: songRequests.id,
-      singerName: songRequests.displayName,
-      status: songRequests.status,
-      position: songRequests.position,
-      createdAt: songRequests.createdAt,
-    })
-    .from(songRequests)
-    .where(
-      and(
-        eq(songRequests.eventId, event.id),
-        inArray(songRequests.status, PUBLIC_QUEUE_VISIBLE_STATUSES),
-      ),
-    )
-    .orderBy(songRequests.position, songRequests.id);
+  const items = await traceServerStep("public.queue", "queueItems", () =>
+    getDb()
+      .select({
+        id: songRequests.id,
+        singerName: songRequests.displayName,
+        status: songRequests.status,
+        position: songRequests.position,
+        createdAt: songRequests.createdAt,
+      })
+      .from(songRequests)
+      .where(
+        and(
+          eq(songRequests.eventId, event.id),
+          inArray(songRequests.status, PUBLIC_QUEUE_VISIBLE_STATUSES),
+        ),
+      )
+      .orderBy(songRequests.position, songRequests.id),
+  );
 
   return {
     eventId: event.id,
@@ -202,4 +209,12 @@ export async function getPublicQueue() {
 
 function escapeLikePattern(input: string) {
   return input.replace(/[\\%_]/g, "\\$&");
+}
+
+function runPublicApiStep<T>(
+  routeName: string | undefined,
+  stepName: string,
+  action: () => Promise<T>,
+) {
+  return routeName ? traceServerStep(routeName, stepName, action) : action();
 }

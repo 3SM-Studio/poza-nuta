@@ -7,8 +7,10 @@ import {
   DATABASE_STATEMENT_TIMEOUT_MS,
 } from "../src/server/db-client-options.ts";
 import {
+  isInfrastructureTimeout,
   isTransientInfrastructureError,
   ServerStepTimeoutError,
+  withRuntimeDiagnostics,
 } from "../src/server/runtime-diagnostics.ts";
 
 test("database client uses serverless-safe Postgres options", () => {
@@ -29,6 +31,20 @@ test("database client uses serverless-safe Postgres options", () => {
 
 test("runtime diagnostics classify timeout and Postgres statement timeout errors", () => {
   assert.equal(
+    isInfrastructureTimeout(
+      Object.assign(new Error("query canceled"), {
+        code: "57014",
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    isInfrastructureTimeout(
+      new Error("canceling statement due to statement timeout"),
+    ),
+    true,
+  );
+  assert.equal(
     isTransientInfrastructureError(
       new ServerStepTimeoutError("dashboard.me", "findLinkedOperator", 10),
     ),
@@ -43,4 +59,39 @@ test("runtime diagnostics classify timeout and Postgres statement timeout errors
     true,
   );
   assert.equal(isTransientInfrastructureError(new Error("validation failed")), false);
+});
+
+test("runtime diagnostics observe late promise rejection after timeout", async () => {
+  const unhandledRejections: unknown[] = [];
+  const onUnhandledRejection = (reason: unknown) => {
+    unhandledRejections.push(reason);
+  };
+  const originalWarn = console.warn;
+
+  process.on("unhandledRejection", onUnhandledRejection);
+  console.warn = () => {};
+
+  try {
+    await assert.rejects(
+      withRuntimeDiagnostics(
+        "test.route",
+        "lateRejectingStep",
+        () =>
+          new Promise((_resolve, reject) => {
+            setTimeout(() => reject(new Error("late database failure")), 20);
+          }),
+        1,
+      ),
+      ServerStepTimeoutError,
+    );
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+
+    assert.deepEqual(unhandledRejections, []);
+  } finally {
+    console.warn = originalWarn;
+    process.off("unhandledRejection", onUnhandledRejection);
+  }
 });

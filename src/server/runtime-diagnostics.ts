@@ -3,9 +3,20 @@ export const SERVER_STEP_TIMEOUT_MS = 10_000;
 const CONNECTION_URL_PATTERN = /\bpostgres(?:ql)?:\/\/[^\s'"]+/gi;
 const ENV_SECRET_PATTERN =
   /\b(DATABASE_URL|PASSWORD|TOKEN|SECRET|KEY)=\S+/gi;
+const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const AUTH_HEADER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
+
+const INFRASTRUCTURE_TIMEOUT_CODES = new Set([
+  "57014",
+  "CONNECT_TIMEOUT",
+  "CONNECTION_TIMEOUT",
+  "ETIMEDOUT",
+  "P1001",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
 
 const TRANSIENT_ERROR_CODES = new Set([
-  "57014",
+  ...INFRASTRUCTURE_TIMEOUT_CODES,
   "CONNECT_TIMEOUT",
   "CONNECTION_TIMEOUT",
   "ECONNRESET",
@@ -40,10 +51,24 @@ export async function traceServerStep<T>(
   action: () => Promise<T>,
   timeoutMs = SERVER_STEP_TIMEOUT_MS,
 ) {
+  return withRuntimeDiagnostics(routeName, stepName, action, timeoutMs);
+}
+
+export async function withRuntimeDiagnostics<T>(
+  routeName: string,
+  stepName: string,
+  action: () => Promise<T>,
+  timeoutMs = SERVER_STEP_TIMEOUT_MS,
+) {
   const start = Date.now();
 
   try {
-    const result = await withTimeout(action(), routeName, stepName, timeoutMs);
+    const result = await withTimeout(
+      Promise.resolve().then(action),
+      routeName,
+      stepName,
+      timeoutMs,
+    );
 
     logServerStep(routeName, stepName, start, "success");
 
@@ -54,8 +79,47 @@ export async function traceServerStep<T>(
   }
 }
 
-export function isTransientInfrastructureError(error: unknown) {
+export function traceServerStepSync<T>(
+  routeName: string,
+  stepName: string,
+  action: () => T,
+) {
+  const start = Date.now();
+
+  try {
+    const result = action();
+
+    logServerStep(routeName, stepName, start, "success");
+
+    return result;
+  } catch (error) {
+    logServerStep(routeName, stepName, start, "failure", error);
+    throw error;
+  }
+}
+
+export function isInfrastructureTimeout(error: unknown) {
   if (error instanceof ServerStepTimeoutError) {
+    return true;
+  }
+
+  const code = getErrorCode(error);
+  if (code && INFRASTRUCTURE_TIMEOUT_CODES.has(code)) {
+    return true;
+  }
+
+  const message = getSafeErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes("canceling statement due to statement timeout") ||
+    message.includes("statement timeout") ||
+    message.includes("timeout") ||
+    message.includes("timed out")
+  );
+}
+
+export function isTransientInfrastructureError(error: unknown) {
+  if (isInfrastructureTimeout(error)) {
     return true;
   }
 
@@ -67,8 +131,6 @@ export function isTransientInfrastructureError(error: unknown) {
   const message = getSafeErrorMessage(error).toLowerCase();
 
   return (
-    message.includes("timeout") ||
-    message.includes("timed out") ||
     message.includes("connection terminated") ||
     message.includes("connection closed") ||
     message.includes("connection refused")
@@ -127,22 +189,38 @@ function logServerStep(
   error?: unknown,
 ) {
   const durationMs = Date.now() - start;
-  const message = `${routeName} ${stepName} ${durationMs}ms ${status}`;
+  const fields = [
+    "server_step",
+    `route=${formatLogField(routeName)}`,
+    `step=${formatLogField(stepName)}`,
+    `duration_ms=${durationMs}`,
+    `status=${status}`,
+  ];
 
   if (status === "success") {
-    console.info(message);
+    console.info(fields.join(" "));
     return;
   }
 
   console.warn(
-    `${message} ${getSafeErrorCode(error)} ${getSafeErrorMessage(error)}`,
+    [
+      ...fields,
+      `error_code=${formatLogField(getSafeErrorCode(error))}`,
+      `error_message=${formatLogField(getSafeErrorMessage(error))}`,
+    ].join(" "),
   );
 }
 
 function sanitizeLogValue(value: string) {
   return value
     .replace(CONNECTION_URL_PATTERN, "postgres://[redacted]")
-    .replace(ENV_SECRET_PATTERN, "$1=[redacted]");
+    .replace(ENV_SECRET_PATTERN, "$1=[redacted]")
+    .replace(AUTH_HEADER_PATTERN, "$1 [redacted]")
+    .replace(EMAIL_PATTERN, "[redacted-email]");
+}
+
+function formatLogField(value: string) {
+  return JSON.stringify(sanitizeLogValue(value));
 }
 
 function getErrorName(error: unknown) {

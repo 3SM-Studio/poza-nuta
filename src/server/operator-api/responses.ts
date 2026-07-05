@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { isTransientInfrastructureError } from "../runtime-diagnostics";
-import { OperatorApiError } from "./errors";
+import {
+  getSafeErrorCode,
+  getSafeErrorMessage,
+  isTransientInfrastructureError,
+} from "../runtime-diagnostics.ts";
+import { OperatorApiError } from "./errors.ts";
 import type { ValidationIssue } from "./validation";
 
 type ApiErrorBody = {
@@ -60,7 +64,7 @@ export function operatorApiErrorResponse(error: unknown) {
   }
 
   if (isTransientInfrastructureError(error)) {
-    console.error("Operator API infrastructure dependency failed.");
+    logOperatorApiError("operator_api_infrastructure_failure", error);
 
     return operatorJsonResponse<ApiErrorBody>(
       {
@@ -73,7 +77,7 @@ export function operatorApiErrorResponse(error: unknown) {
     );
   }
 
-  console.error("Operator API operation failed.");
+  logOperatorApiError("operator_api_operation_failed", error);
 
   return operatorJsonResponse<ApiErrorBody>(
     {
@@ -83,5 +87,15 @@ export function operatorApiErrorResponse(error: unknown) {
       },
     },
     500,
+  );
+}
+
+function logOperatorApiError(scope: string, error: unknown) {
+  console.error(
+    [
+      scope,
+      `error_code=${JSON.stringify(getSafeErrorCode(error))}`,
+      `error_message=${JSON.stringify(getSafeErrorMessage(error))}`,
+    ].join(" "),
   );
 }

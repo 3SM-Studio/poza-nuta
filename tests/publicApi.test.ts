@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { getDashboardEntryStatus } from "../src/components/public/api.ts";
+import { publicApiErrorResponse } from "../src/server/public-api/responses.ts";
 
 test("dashboard entry is visible only for an active dashboard session", async (t) => {
   const originalFetch = globalThis.fetch;
@@ -61,6 +62,28 @@ test("public API maps database timeout to controlled 503", () => {
   assert.match(source, /isTransientInfrastructureError/);
   assert.match(source, /SERVICE_UNAVAILABLE/);
   assert.match(source, /503/);
+});
+
+test("public API response returns JSON 503 for Postgres statement timeout", async () => {
+  const originalError = console.error;
+
+  console.error = () => {};
+
+  try {
+    const response = publicApiErrorResponse(
+      new Error("canceling statement due to statement timeout"),
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "The service is temporarily unavailable.",
+      },
+    });
+  } finally {
+    console.error = originalError;
+  }
 });
 
 function restoreEnv(name: string, value: string | undefined) {

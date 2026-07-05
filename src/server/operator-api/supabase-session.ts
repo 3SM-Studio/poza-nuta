@@ -5,7 +5,10 @@ import { eq } from "drizzle-orm";
 import { operatorAuditLog, operatorUsers } from "../../db/schema";
 import { createClient as createSupabaseServerClient } from "../../lib/supabase/server";
 import { getDb } from "../db";
-import { traceServerStep } from "../runtime-diagnostics";
+import {
+  isTransientInfrastructureError,
+  traceServerStep,
+} from "../runtime-diagnostics";
 import {
   mapSupabaseLoginError,
   resolveOperatorAccess,
@@ -92,11 +95,14 @@ export async function requireOperatorSession(
   routeName = "dashboard.session",
 ): Promise<AuthenticatedOperatorSession> {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await traceServerStep(routeName, "getUser", () =>
+  const userResult = await traceServerStep(routeName, "getUser", () =>
     supabase.auth.getUser(),
   );
+  throwIfInfrastructureAuthError(userResult.error);
+
+  const {
+    data: { user },
+  } = userResult;
 
   const operator = user
     ? await traceServerStep(routeName, "findLinkedOperator", () =>
@@ -125,9 +131,14 @@ export async function requireOperatorSession(
 
 export async function getSignInPageAccess() {
   const supabase = await createSupabaseServerClient();
+  const userResult = await traceServerStep("sign-in", "getUser", () =>
+    supabase.auth.getUser(),
+  );
+  throwIfInfrastructureAuthError(userResult.error);
+
   const {
     data: { user },
-  } = await traceServerStep("sign-in", "getUser", () => supabase.auth.getUser());
+  } = userResult;
   const operator = user
     ? await traceServerStep("sign-in", "findLinkedOperator", () =>
         findLinkedOperator(user.id),
@@ -139,11 +150,14 @@ export async function getSignInPageAccess() {
 
 export async function logoutOperator() {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await traceServerStep("dashboard.logout", "getUser", () =>
+  const userResult = await traceServerStep("dashboard.logout", "getUser", () =>
     supabase.auth.getUser(),
   );
+  throwIfInfrastructureAuthError(userResult.error);
+
+  const {
+    data: { user },
+  } = userResult;
 
   if (!user) {
     throw new OperatorApiError(
@@ -192,4 +206,32 @@ async function findLinkedOperator(
     .limit(1);
 
   return operator ?? null;
+}
+
+function throwIfInfrastructureAuthError(error: unknown) {
+  if (!error) {
+    return;
+  }
+
+  if (isTransientInfrastructureError(error) || isSupabaseServiceError(error)) {
+    throw error;
+  }
+}
+
+function isSupabaseServiceError(error: unknown) {
+  const status = getNumericProperty(error, "status");
+  const statusCode = getNumericProperty(error, "statusCode");
+  const httpStatus = status ?? statusCode;
+
+  return typeof httpStatus === "number" && httpStatus >= 500;
+}
+
+function getNumericProperty(error: unknown, property: string) {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const value = (error as Record<string, unknown>)[property];
+
+  return typeof value === "number" ? value : undefined;
 }

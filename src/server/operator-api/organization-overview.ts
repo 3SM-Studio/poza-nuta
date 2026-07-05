@@ -4,7 +4,9 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 
 import { events, songs, songRequests, workspaceMembers } from "../../db/schema";
 import { getDb } from "../db";
+import { traceServerStep } from "../runtime-diagnostics";
 import { getDashboardOrganizationForAuthUser } from "./organizations";
+import { resolveOptionalOverviewSection } from "./overview-fallback";
 
 type RequestStatus = "pending" | "approved" | "now" | "done" | "skipped" | "rejected";
 
@@ -44,6 +46,10 @@ export type DashboardOrganizationOverview = {
     artist: string;
     requestCount: number;
   }>;
+  partialFailures: {
+    recentEvents: boolean;
+    topRequestedSongs: boolean;
+  };
 };
 
 const countSelection = {
@@ -54,9 +60,10 @@ export async function getDashboardOrganizationOverviewForAuthUser(
   authUserId: string,
   organizationId: string,
 ): Promise<DashboardOrganizationOverview | null> {
-  const organization = await getDashboardOrganizationForAuthUser(
-    authUserId,
-    organizationId,
+  const organization = await traceServerStep(
+    "dashboard.org",
+    "resolveOrganization",
+    () => getDashboardOrganizationForAuthUser(authUserId, organizationId),
   );
 
   if (!organization) {
@@ -69,48 +76,91 @@ export async function getDashboardOrganizationOverviewForAuthUser(
   const sevenDaysAgo = new Date(now);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const [
-    activeEvents,
-    totalEvents,
-    requestsToday,
-    requestsLastSevenDays,
-    pendingRequests,
-    acceptedRequests,
-    performedRequests,
-    memberCount,
-    catalogSongs,
-    activeEvent,
-    recentEvents,
-    topRequestedSongs,
-  ] = await Promise.all([
-    countEventsForWorkspace(organization.id, "active"),
-    countEventsForWorkspace(organization.id),
-    countRequestsForWorkspace({
-      workspaceId: organization.id,
-      createdSince: todayStart,
-    }),
-    countRequestsForWorkspace({
-      workspaceId: organization.id,
-      createdSince: sevenDaysAgo,
-    }),
-    countRequestsForWorkspace({
-      workspaceId: organization.id,
-      status: "pending",
-    }),
-    countRequestsForWorkspace({
-      workspaceId: organization.id,
-      status: "approved",
-    }),
-    countRequestsForWorkspace({
-      workspaceId: organization.id,
-      status: "done",
-    }),
-    countMembersForWorkspace(organization.id),
-    countCatalogSongs(),
-    getActiveEventForWorkspace(organization.id),
-    getRecentEventsForWorkspace(organization.id),
-    getTopRequestedSongsForWorkspace(organization.id),
-  ]);
+  const activeEvents = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.activeEvents",
+    () => countEventsForWorkspace(organization.id, "active"),
+  );
+  const totalEvents = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.totalEvents",
+    () => countEventsForWorkspace(organization.id),
+  );
+  const requestsToday = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.requestsToday",
+    () =>
+      countRequestsForWorkspace({
+        workspaceId: organization.id,
+        createdSince: todayStart,
+      }),
+  );
+  const requestsLastSevenDays = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.requestsLastSevenDays",
+    () =>
+      countRequestsForWorkspace({
+        workspaceId: organization.id,
+        createdSince: sevenDaysAgo,
+      }),
+  );
+  const pendingRequests = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.pendingRequests",
+    () =>
+      countRequestsForWorkspace({
+        workspaceId: organization.id,
+        status: "pending",
+      }),
+  );
+  const acceptedRequests = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.acceptedRequests",
+    () =>
+      countRequestsForWorkspace({
+        workspaceId: organization.id,
+        status: "approved",
+      }),
+  );
+  const performedRequests = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.performedRequests",
+    () =>
+      countRequestsForWorkspace({
+        workspaceId: organization.id,
+        status: "done",
+      }),
+  );
+  const memberCount = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.members",
+    () => countMembersForWorkspace(organization.id),
+  );
+  const catalogSongs = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.catalogSongs",
+    () => countCatalogSongs(),
+  );
+  const activeEvent = await traceServerStep(
+    "dashboard.org",
+    "activeEvent",
+    () => getActiveEventForWorkspace(organization.id),
+  );
+  const recentEventsResult = await resolveOptionalOverviewSection({
+    routeName: "dashboard.org",
+    stepName: "recentEvents",
+    action: () => getRecentEventsForWorkspace(organization.id),
+    fallback: [],
+  });
+  const topRequestedSongsResult = await resolveOptionalOverviewSection({
+    routeName: "dashboard.org",
+    stepName: "topSongs",
+    action: () => getTopRequestedSongsForWorkspace(organization.id),
+    fallback: [],
+  });
+
+  const recentEvents = recentEventsResult.data;
+  const topRequestedSongs = topRequestedSongsResult.data;
 
   return {
     organization,
@@ -128,6 +178,10 @@ export async function getDashboardOrganizationOverviewForAuthUser(
     activeEvent,
     recentEvents,
     topRequestedSongs,
+    partialFailures: {
+      recentEvents: recentEventsResult.failed,
+      topRequestedSongs: topRequestedSongsResult.failed,
+    },
   };
 }
 
@@ -225,6 +279,9 @@ async function getRecentEventsForWorkspace(workspaceId: number) {
 }
 
 async function getTopRequestedSongsForWorkspace(workspaceId: number) {
+  const requestedSince = new Date();
+  requestedSince.setDate(requestedSince.getDate() - 30);
+
   return getDb()
     .select({
       songId: songs.id,
@@ -235,7 +292,12 @@ async function getTopRequestedSongsForWorkspace(workspaceId: number) {
     .from(songRequests)
     .innerJoin(events, eq(events.id, songRequests.eventId))
     .innerJoin(songs, eq(songs.id, songRequests.songId))
-    .where(eq(events.workspaceId, workspaceId))
+    .where(
+      and(
+        eq(events.workspaceId, workspaceId),
+        gte(songRequests.createdAt, requestedSince),
+      ),
+    )
     .groupBy(songs.id, songs.title, songs.artist)
     .orderBy(desc(sql<number>`count(${songRequests.id})::int`), songs.title)
     .limit(5);

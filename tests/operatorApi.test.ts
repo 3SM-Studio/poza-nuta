@@ -124,6 +124,16 @@ test("operator API maps infrastructure timeout to controlled 503", () => {
   assert.match(source, /503/);
 });
 
+test("dashboard me route keeps session failures on the operator API response path", () => {
+  const source = readFileSync(
+    new URL("../src/app/api/dashboard/me/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /requireOperatorSession\("dashboard\.me"\)/);
+  assert.match(source, /operatorApiErrorResponse\(error\)/);
+});
+
 test("sign-in page distinguishes guests, authorized operators and denied users", () => {
   assert.deepEqual(resolveSignInPageAccess(null, null), {
     state: "guest",
