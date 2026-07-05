@@ -1,8 +1,10 @@
 .publicPage {
   min-height: 100vh;
   padding: 1rem;
-  background: #f5f7f5;
-  color: #172019;
+  background:
+    linear-gradient(180deg, var(--surface-1) 0, var(--background) 19rem),
+    var(--background);
+  color: var(--foreground);
 }
 
 .publicShell,
@@ -26,12 +28,12 @@
 
 .publicHeader p:last-child {
   margin: 0.5rem 0 0;
-  color: #657069;
+  color: var(--text-secondary);
 }
 
 .brand {
   margin: 0 0 0.4rem;
-  color: #295a36;
+  color: var(--primary);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -41,9 +43,10 @@
 .publicSection {
   margin-top: 1rem;
   padding: 1rem;
-  border: 1px solid #dce2dd;
+  border: 1px solid var(--border);
   border-radius: 0.9rem;
-  background: #ffffff;
+  background: var(--surface-1);
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 24%);
 }
 
 .publicSection h2 {
@@ -66,7 +69,7 @@
 
 .textLink,
 .backLink {
-  color: #246037;
+  color: var(--primary);
   font-size: 0.9rem;
   font-weight: 750;
   text-decoration: underline;
@@ -83,10 +86,10 @@
 .field input,
 .field textarea {
   width: 100%;
-  border: 1px solid #cbd4cd;
+  border: 1px solid var(--input);
   border-radius: 0.6rem;
-  background: #ffffff;
-  color: #172019;
+  background: var(--surface-2);
+  color: var(--foreground);
   font: inherit;
   font-size: 1rem;
   padding: 0.8rem 0.9rem;
@@ -105,15 +108,16 @@
 .searchForm input:focus,
 .field input:focus,
 .field textarea:focus {
-  border-color: #2e7442;
-  outline: 3px solid rgb(46 116 66 / 16%);
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 
 .searchForm input:disabled,
 .field input:disabled,
 .field textarea:disabled {
-  background: #f0f2f0;
-  color: #758078;
+  background: var(--surface-3);
+  color: var(--text-muted);
 }
 
 .primaryButton,
@@ -135,23 +139,36 @@
 }
 
 .primaryButton {
-  border: 1px solid #23743a;
-  background: #23743a;
-  color: #ffffff;
+  border: 1px solid var(--primary-strong);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-accent);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--primary-hover);
 }
 
 .secondaryButton,
 .queueLink {
-  border: 1px solid #2e7442;
-  background: #ffffff;
-  color: #246037;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--foreground);
+}
+
+.secondaryButton:hover:not(:disabled),
+.queueLink:hover {
+  border-color: var(--accent-soft-border);
+  background: var(--surface-3);
+  color: var(--primary);
 }
 
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
 .queueLink:focus-visible,
 .songResult:focus-visible {
-  outline: 3px solid rgb(46 116 66 / 20%);
+  box-shadow: var(--focus-ring);
+  outline: none;
   outline-offset: 2px;
 }
 
@@ -172,9 +189,9 @@
   display: grid;
   width: 100%;
   gap: 0.2rem;
-  border: 1px solid #dce2dd;
+  border: 1px solid var(--border);
   border-radius: 0.65rem;
-  background: #ffffff;
+  background: var(--surface-2);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -183,14 +200,14 @@
 }
 
 .songResult:hover:not(:disabled) {
-  border-color: #91a998;
-  background: #f8faf8;
+  border-color: var(--accent-soft-border);
+  background: var(--surface-3);
 }
 
 .selectedResult {
-  border-color: #2e7442;
-  background: #edf6ef;
-  box-shadow: inset 0 0 0 1px #2e7442;
+  border-color: var(--primary);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 .songResultTitle {
@@ -200,14 +217,14 @@
 }
 
 .songResultArtist {
-  color: #4f5b53;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   line-height: 1.4;
 }
 
 .songResultMeta {
   margin-top: 0.35rem;
-  color: #667169;
+  color: var(--text-muted);
   font-size: 0.75rem;
   line-height: 1.45;
 }
@@ -216,9 +233,9 @@
   display: grid;
   gap: 0.2rem;
   padding: 0.85rem;
-  border: 1px solid #dce2dd;
+  border: 1px solid var(--border);
   border-radius: 0.65rem;
-  background: #f8faf8;
+  background: var(--surface-2);
 }
 
 .selectedSong strong {
@@ -226,18 +243,18 @@
 }
 
 .selectedSong span:last-child {
-  color: #657069;
+  color: var(--text-secondary);
 }
 
 .fieldLabel,
 .field label {
-  color: #364239;
+  color: var(--text-secondary);
   font-size: 0.88rem;
   font-weight: 750;
 }
 
 .invalidSelection {
-  border-color: #d99c9c;
+  border-color: var(--destructive);
 }
 
 .requestForm {
@@ -253,14 +270,14 @@
 }
 
 .characterCount {
-  color: #768078;
+  color: var(--text-muted);
   font-size: 0.73rem;
   text-align: right;
 }
 
 .fieldError {
   margin: 0;
-  color: #9a2929;
+  color: var(--destructive);
   font-size: 0.82rem;
 }
 
@@ -282,7 +299,7 @@
 
 .statusMessage,
 .inlineMessage {
-  color: #657069;
+  color: var(--text-secondary);
 }
 
 .inlineMessage {
@@ -292,16 +309,16 @@
 
 .errorMessage {
   margin-top: 1rem;
-  border: 1px solid #efc4c4;
-  background: #fff4f4;
-  color: #8c2525;
+  border: 1px solid rgb(255 91 110 / 35%);
+  background: rgb(255 91 110 / 10%);
+  color: var(--destructive);
 }
 
 .successMessage {
   margin-top: 1rem;
-  border: 1px solid #b8d8bf;
-  background: #eaf5ec;
-  color: #215f34;
+  border: 1px solid rgb(49 217 139 / 35%);
+  background: rgb(49 217 139 / 10%);
+  color: var(--success);
 }
 
 .queueLink {
@@ -310,9 +327,9 @@
 
 .queueHeader {
   padding: 1rem;
-  border: 1px solid #dce2dd;
+  border: 1px solid var(--border);
   border-radius: 0.9rem;
-  background: #ffffff;
+  background: var(--surface-1);
 }
 
 .queueHeader h1 {
@@ -328,9 +345,9 @@
   display: grid;
   min-height: 10rem;
   place-items: center;
-  border: 1px solid #dce2dd;
-  background: #ffffff;
-  color: #506058;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -345,18 +362,18 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
-  border: 1px solid #dce2dd;
+  border: 1px solid var(--border);
   border-radius: 0.8rem;
-  background: #ffffff;
+  background: var(--surface-1);
 }
 
 .nowItem {
-  border-color: #79a787;
-  background: #edf6ef;
+  border-color: var(--primary);
+  background: var(--accent-soft);
 }
 
 .queueStatus {
-  color: #246037;
+  color: var(--primary);
   font-size: 0.75rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -369,12 +386,12 @@
 
 .publicQueueItem p {
   margin: 0.35rem 0 0;
-  color: #566158;
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
 .queuePosition {
-  color: #246037;
+  color: var(--primary);
   font-size: 0.9rem;
   font-weight: 800;
   white-space: nowrap;

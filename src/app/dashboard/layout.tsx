@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
+import { DashboardNavigation } from "../../components/operator/dashboard-navigation";
 import { DashboardUserMenu } from "../../components/operator/dashboard-user-menu";
 import styles from "../../components/operator/operator.module.css";
 import { OperatorApiError } from "../../server/operator-api/errors";
@@ -28,20 +28,7 @@ export default async function DashboardLayout({
             <strong>Dashboard</strong>
           </Link>
 
-          <nav
-            className={styles.dashboardNavigation}
-            aria-label="Główna nawigacja dashboardu"
-          >
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard">Dashboard</Link>
-            </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard/queue">Kolejka</Link>
-            </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard/settings">Ustawienia</Link>
-            </Button>
-          </nav>
+          <DashboardNavigation />
 
           <DashboardUserMenu
             operatorName={session.operator.name}

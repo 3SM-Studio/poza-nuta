@@ -1,7 +1,9 @@
 .loginPage {
   min-height: 100vh;
-  background: #f5f7f5;
-  color: #172019;
+  background:
+    linear-gradient(180deg, var(--surface-1) 0, var(--background) 18rem),
+    var(--background);
+  color: var(--foreground);
 }
 
 .loginPage {
@@ -13,10 +15,10 @@
 .loginCard {
   width: min(100%, 28rem);
   padding: clamp(1.5rem, 5vw, 2.5rem);
-  border: 1px solid #dce2dd;
+  border: 1px solid var(--border);
   border-radius: 1rem;
-  background: #ffffff;
-  box-shadow: 0 1rem 2.5rem rgb(28 44 32 / 8%);
+  background: var(--surface-1);
+  box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 28%);
 }
 
 .loginCard h1 {
@@ -28,13 +30,13 @@
 
 .loginIntro {
   margin: 0.75rem 0 1.75rem;
-  color: #657069;
+  color: var(--text-secondary);
   line-height: 1.55;
 }
 
 .brand {
   margin: 0 0 0.35rem;
-  color: #295a36;
+  color: var(--primary);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -59,31 +61,32 @@
 .field input {
   min-height: 3rem;
   width: 100%;
-  border: 1px solid #cbd4cd;
+  border: 1px solid var(--input);
   border-radius: 0.6rem;
-  background: #ffffff;
-  color: #172019;
+  background: var(--surface-2);
+  color: var(--foreground);
   font: inherit;
   font-size: 1rem;
   padding: 0.7rem 0.8rem;
 }
 
 .field input:focus {
-  border-color: #2e7442;
-  outline: 3px solid rgb(46 116 66 / 16%);
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 
 .field input:disabled {
-  background: #f0f2f0;
-  color: #758078;
+  background: var(--surface-3);
+  color: var(--text-muted);
 }
 
 .formError {
   margin: 0;
-  border: 1px solid #efc4c4;
+  border: 1px solid rgb(255 91 110 / 35%);
   border-radius: 0.6rem;
-  background: #fff4f4;
-  color: #8c2525;
+  background: rgb(255 91 110 / 10%);
+  color: var(--destructive);
   font-size: 0.9rem;
   line-height: 1.45;
   padding: 0.75rem 0.85rem;
@@ -110,7 +113,8 @@
 }
 
 .button:focus-visible {
-  outline: 3px solid rgb(46 116 66 / 20%);
+  box-shadow: var(--focus-ring);
+  outline: none;
   outline-offset: 2px;
 }
 
@@ -120,12 +124,14 @@
 }
 
 .primaryButton {
-  background: #23743a;
-  color: #ffffff;
+  border-color: var(--primary-strong);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-accent);
 }
 
 .primaryButton:hover:not(:disabled) {
-  background: #185e2d;
+  background: var(--primary-hover);
 }
 
 .loginButton {
@@ -134,23 +140,25 @@
 }
 
 .secondaryButton {
-  border-color: #cbd4cd;
-  background: #ffffff;
-  color: #263029;
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--foreground);
 }
 
 .secondaryButton:hover:not(:disabled) {
-  background: #f0f3f0;
+  border-color: var(--accent-soft-border);
+  background: var(--surface-3);
 }
 
 .dashboardShell {
   min-height: 100vh;
-  background: #f5f7f5;
-  color: #172019;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 .dashboardHeader {
-  background: #ffffff;
+  background: rgb(17 18 23 / 92%);
+  backdrop-filter: blur(12px);
 }
 
 .dashboardHeaderInner {
@@ -166,13 +174,13 @@
 
 .dashboardBrand {
   display: grid;
-  color: #172019;
+  color: var(--foreground);
   line-height: 1.1;
   text-decoration: none;
 }
 
 .dashboardBrand span {
-  color: #295a36;
+  color: var(--primary);
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -190,14 +198,21 @@
   gap: 0.35rem;
 }
 
+.dashboardNavigationLink[data-active="true"] {
+  border-color: var(--accent-soft-border);
+  background: var(--accent-soft);
+  color: var(--primary);
+  box-shadow: 0 0 24px rgb(255 47 163 / 16%);
+}
+
 .dashboardContent {
   min-width: 0;
 }
 
 .queuePage {
   min-height: calc(100vh - 4.5rem);
-  background: #f5f7f5;
-  color: #172019;
+  background: var(--background);
+  color: var(--foreground);
   padding: clamp(0.75rem, 2vw, 1.5rem);
 }
 
@@ -224,7 +239,7 @@
 
 .eventMeta {
   margin: 0.35rem 0 0;
-  color: #657069;
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
@@ -277,7 +292,7 @@
 }
 
 .requestRow + .requestRow {
-  border-top: 1px solid #edf0ed;
+  border-top: 1px solid var(--border);
 }
 
 .requestMain {
@@ -316,14 +331,14 @@
 
 .songArtist {
   margin: 0.14rem 0 0;
-  color: #657069;
+  color: var(--text-secondary);
   font-size: 0.84rem;
   line-height: 1.4;
 }
 
 .note {
   margin: 0.5rem 0 0;
-  color: #4d574f;
+  color: var(--text-secondary);
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -333,7 +348,7 @@
   align-items: flex-end;
   flex-direction: column;
   gap: 0.2rem;
-  color: #6b756e;
+  color: var(--text-muted);
   font-size: 0.75rem;
   white-space: nowrap;
 }
@@ -347,7 +362,7 @@
 
 .emptyPage,
 .loadingScreen {
-  color: #6b756e;
+  color: var(--text-muted);
   text-align: center;
 }
 
@@ -409,7 +424,7 @@
 .checkboxField input {
   width: 1.15rem;
   height: 1.15rem;
-  accent-color: #23743a;
+  accent-color: var(--primary);
 }
 
 .eventDetails {
@@ -421,12 +436,12 @@
 
 .eventDetails div {
   border-radius: 0.55rem;
-  background: #f5f7f5;
+  background: var(--surface-2);
   padding: 0.75rem;
 }
 
 .eventDetails dt {
-  color: #657069;
+  color: var(--text-secondary);
   font-size: 0.76rem;
   font-weight: 700;
 }
