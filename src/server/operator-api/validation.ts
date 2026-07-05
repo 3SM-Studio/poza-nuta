@@ -33,6 +33,14 @@ export type CreateDashboardEventInput = {
   facebookUrl: string | null;
 };
 
+export type UpdateDashboardEventAutoCloseAtInput = {
+  autoCloseAt: Date;
+};
+
+export type ExtendDashboardEventInput = {
+  minutes: 30 | 60 | 120;
+};
+
 export type ExtendEventInput = {
   hours: 1 | 2;
 };
@@ -323,6 +331,77 @@ export function validateCreateDashboardEventInput(
       autoCloseAt,
       facebookUrl,
     },
+  };
+}
+
+export function validateUpdateDashboardEventAutoCloseAtInput(
+  input: unknown,
+  startsAt: Date,
+): ValidationResult<UpdateDashboardEventAutoCloseAtInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  const issues: ValidationIssue[] = [];
+  const autoCloseAt = parseDateTimeInput(
+    input.autoCloseAt,
+    "autoCloseAt",
+    issues,
+  );
+
+  if (!autoCloseAt) {
+    issues.push({
+      field: "autoCloseAt",
+      message: "autoCloseAt is required.",
+    });
+  }
+
+  if (issues.length > 0 || !autoCloseAt) {
+    return { success: false, issues };
+  }
+
+  if (autoCloseAt.getTime() <= startsAt.getTime()) {
+    issues.push({
+      field: "autoCloseAt",
+      message: "autoCloseAt must be after startsAt.",
+    });
+  }
+
+  if (issues.length > 0) {
+    return { success: false, issues };
+  }
+
+  return {
+    success: true,
+    data: { autoCloseAt },
+  };
+}
+
+export function validateExtendDashboardEventInput(
+  input: unknown,
+): ValidationResult<ExtendDashboardEventInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  const minutes =
+    typeof input.minutes === "string" ? Number(input.minutes) : input.minutes;
+
+  if (minutes !== 30 && minutes !== 60 && minutes !== 120) {
+    return {
+      success: false,
+      issues: [
+        {
+          field: "minutes",
+          message: "minutes must be 30, 60 or 120.",
+        },
+      ],
+    };
+  }
+
+  return {
+    success: true,
+    data: { minutes },
   };
 }
 

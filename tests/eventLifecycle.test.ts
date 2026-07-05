@@ -8,12 +8,20 @@ import {
   shouldWarnEventClosingSoon,
 } from "../src/lib/event-lifecycle.ts";
 import {
+  calculateDashboardEventExtendedAutoCloseAt as calculateManagedEventExtendedAutoCloseAt,
+  canManageDashboardEventLifecycle as canManageManagedEventLifecycle,
+  getDashboardEventLifecycleStatus as getManagedEventLifecycleStatus,
+  shouldShowDashboardEventClosingWarning as shouldShowManagedEventClosingWarning,
+} from "../src/lib/dashboard-event-lifecycle.ts";
+import {
   calculateDefaultDashboardEventAutoCloseAt,
   DEFAULT_DASHBOARD_EVENT_DURATION_HOURS,
   validateCreateDashboardEventInput,
+  validateExtendDashboardEventInput,
   validateEventSettingsInput,
   validateExtendInput,
   validateStartEventInput,
+  validateUpdateDashboardEventAutoCloseAtInput,
 } from "../src/server/operator-api/validation.ts";
 
 test("calculateAutoCloseAt adds the default eight hours", () => {
@@ -90,6 +98,202 @@ test("dashboard event create rejects invalid Facebook URL", () => {
   assert.deepEqual(
     result.success ? [] : result.issues.map((issue) => issue.field),
     ["facebookUrl"],
+  );
+});
+
+test("dashboard managed event status is calculated at runtime", () => {
+  const now = new Date("2026-07-05T18:00:00.000Z");
+  const baseEvent = {
+    status: "draft",
+    startsAt: new Date("2026-07-05T19:00:00.000Z"),
+    autoCloseAt: new Date("2026-07-06T01:00:00.000Z"),
+    closedAt: null,
+  };
+
+  assert.equal(getManagedEventLifecycleStatus(baseEvent, now), "scheduled");
+  assert.equal(
+    getManagedEventLifecycleStatus(
+      {
+        ...baseEvent,
+        startsAt: new Date("2026-07-05T17:00:00.000Z"),
+      },
+      now,
+    ),
+    "active",
+  );
+  assert.equal(
+    getManagedEventLifecycleStatus(
+      {
+        ...baseEvent,
+        startsAt: new Date("2026-07-05T12:00:00.000Z"),
+        autoCloseAt: new Date("2026-07-05T18:00:00.000Z"),
+      },
+      now,
+    ),
+    "closed",
+  );
+  assert.equal(
+    getManagedEventLifecycleStatus(
+      {
+        ...baseEvent,
+        status: "closed",
+        closedAt: new Date("2026-07-05T17:30:00.000Z"),
+      },
+      now,
+    ),
+    "closed",
+  );
+  assert.equal(
+    getManagedEventLifecycleStatus(
+      {
+        ...baseEvent,
+        status: "cancelled",
+      },
+      now,
+    ),
+    "cancelled",
+  );
+});
+
+test("dashboard managed event warning appears during last thirty minutes", () => {
+  const now = new Date("2026-07-05T18:00:00.000Z");
+  const event = {
+    status: "active",
+    startsAt: new Date("2026-07-05T17:00:00.000Z"),
+    closedAt: null,
+  };
+
+  assert.equal(
+    shouldShowManagedEventClosingWarning(
+      {
+        ...event,
+        autoCloseAt: new Date("2026-07-05T18:30:00.000Z"),
+      },
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    shouldShowManagedEventClosingWarning(
+      {
+        ...event,
+        autoCloseAt: new Date("2026-07-05T18:30:00.001Z"),
+      },
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    shouldShowManagedEventClosingWarning(
+      {
+        ...event,
+        autoCloseAt: new Date("2026-07-05T17:59:59.999Z"),
+      },
+      now,
+    ),
+    false,
+  );
+});
+
+test("dashboard managed event extend uses max of now and auto_close_at", () => {
+  const now = new Date("2026-07-05T18:00:00.000Z");
+
+  assert.equal(
+    calculateManagedEventExtendedAutoCloseAt({
+      autoCloseAt: new Date("2026-07-05T20:00:00.000Z"),
+      minutes: 30,
+      now,
+    }).toISOString(),
+    "2026-07-05T20:30:00.000Z",
+  );
+  assert.equal(
+    calculateManagedEventExtendedAutoCloseAt({
+      autoCloseAt: new Date("2026-07-05T17:00:00.000Z"),
+      minutes: 60,
+      now,
+    }).toISOString(),
+    "2026-07-05T19:00:00.000Z",
+  );
+  assert.equal(
+    calculateManagedEventExtendedAutoCloseAt({
+      autoCloseAt: null,
+      minutes: 120,
+      now,
+    }).toISOString(),
+    "2026-07-05T20:00:00.000Z",
+  );
+});
+
+test("dashboard managed event validation rejects close time before start", () => {
+  const startsAt = new Date("2026-07-05T18:00:00.000Z");
+  const result = validateUpdateDashboardEventAutoCloseAtInput(
+    {
+      autoCloseAt: "2026-07-05T17:59:59.999Z",
+    },
+    startsAt,
+  );
+
+  assert.equal(result.success, false);
+  assert.deepEqual(
+    result.success ? [] : result.issues.map((issue) => issue.field),
+    ["autoCloseAt"],
+  );
+});
+
+test("dashboard managed event accepts only configured extension minutes", () => {
+  assert.deepEqual(validateExtendDashboardEventInput({ minutes: "30" }), {
+    success: true,
+    data: { minutes: 30 },
+  });
+  assert.deepEqual(validateExtendDashboardEventInput({ minutes: 60 }), {
+    success: true,
+    data: { minutes: 60 },
+  });
+  assert.deepEqual(validateExtendDashboardEventInput({ minutes: "120" }), {
+    success: true,
+    data: { minutes: 120 },
+  });
+  assert.equal(validateExtendDashboardEventInput({ minutes: "15" }).success, false);
+  assert.equal(validateExtendDashboardEventInput({ minutes: 90 }).success, false);
+});
+
+test("closed and cancelled dashboard managed events block management", () => {
+  const now = new Date("2026-07-05T18:00:00.000Z");
+  const baseEvent = {
+    startsAt: new Date("2026-07-05T17:00:00.000Z"),
+    autoCloseAt: new Date("2026-07-05T20:00:00.000Z"),
+    closedAt: null,
+  };
+
+  assert.equal(
+    canManageManagedEventLifecycle(
+      {
+        ...baseEvent,
+        status: "active",
+      },
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    canManageManagedEventLifecycle(
+      {
+        ...baseEvent,
+        status: "closed",
+      },
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    canManageManagedEventLifecycle(
+      {
+        ...baseEvent,
+        status: "cancelled",
+      },
+      now,
+    ),
+    false,
   );
 });
 

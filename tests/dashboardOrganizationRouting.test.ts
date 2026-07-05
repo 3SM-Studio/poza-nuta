@@ -892,6 +892,82 @@ test("organization event create persists auto_close_at and facebook_url only", (
   assert.match(organizationsSource, /facebookUrl: input\.event\.facebookUrl/);
 });
 
+test("organization event detail exposes managed event panel without session routes", () => {
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const panelSource = readFileSync(
+    "src/components/operator/event-management-panel.tsx",
+    "utf8",
+  );
+
+  assert.match(detailPageSource, /getDashboardEventLifecycleStatus/);
+  assert.match(detailPageSource, /areDashboardEventRequestsOpen/);
+  assert.match(detailPageSource, /shouldShowDashboardEventClosingWarning/);
+  assert.match(detailPageSource, /EventManagementPanel/);
+  assert.match(detailPageSource, /Link sesji zostanie dodany w kolejnym etapie/);
+  assert.match(panelSource, /Wydarzenie kończy się za mniej niż 30 minut/);
+  assert.match(panelSource, /Zamknij wydarzenie teraz/);
+  assert.equal(detailPageSource.includes("/session/"), false);
+});
+
+test("organization event management is limited to owner and manager roles", () => {
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const organizationsSource = readFileSync(
+    "src/server/operator-api/organizations.ts",
+    "utf8",
+  );
+
+  assert.match(detailPageSource, /canManageDashboardOrganizationEvent/);
+  assert.match(organizationsSource, /canManageDashboardOrganizationEvent/);
+  assert.match(
+    organizationsSource,
+    /WORKSPACE_EVENT_MANAGE_FORBIDDEN/,
+  );
+  assert.match(
+    organizationsSource,
+    /or\(\s*eq\(workspaceMembers\.role, "owner"\),\s*eq\(workspaceMembers\.role, "manager"\),\s*\)/,
+  );
+  assert.equal(
+    organizationsSource.includes('eq(workspaceMembers.role, "viewer")'),
+    false,
+  );
+  assert.equal(
+    organizationsSource.includes('eq(workspaceMembers.role, "operator")'),
+    false,
+  );
+});
+
+test("organization event management updates auto_close_at and closes without delete", () => {
+  const organizationsSource = readFileSync(
+    "src/server/operator-api/organizations.ts",
+    "utf8",
+  );
+  const manageStart = organizationsSource.indexOf(
+    "export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser",
+  );
+  const membersStart = organizationsSource.indexOf(
+    "export async function listDashboardOrganizationMembersForAuthUser",
+  );
+  const manageSource = organizationsSource.slice(manageStart, membersStart);
+
+  assert.match(manageSource, /updateDashboardOrganizationEventAutoCloseAtForAuthUser/);
+  assert.match(manageSource, /extendDashboardOrganizationEventForAuthUser/);
+  assert.match(manageSource, /closeDashboardOrganizationEventForAuthUser/);
+  assert.match(manageSource, /autoCloseAt/);
+  assert.match(manageSource, /status: "closed"/);
+  assert.match(manageSource, /closedAt: now/);
+  assert.match(manageSource, /isActivePublicEvent: false/);
+  assert.match(manageSource, /calculateDashboardEventExtendedAutoCloseAt/);
+  assert.equal(manageSource.includes(".delete("), false);
+  assert.equal(manageSource.includes("endsAt"), false);
+  assert.equal(manageSource.includes("ends_at"), false);
+});
+
 test("account identity sanitizer exposes login methods without tokens", () => {
   const identities = sanitizeAuthIdentities([
     {

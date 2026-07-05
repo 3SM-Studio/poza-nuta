@@ -20,8 +20,16 @@ import {
   buildWorkspaceHandleFromName,
   validateOrganizationName,
 } from "../../lib/organization-workspace";
+import {
+  calculateDashboardEventExtendedAutoCloseAt,
+  canManageDashboardEventLifecycle,
+} from "../../lib/dashboard-event-lifecycle";
 import { OperatorApiError } from "./errors";
-import type { CreateDashboardEventInput } from "./validation";
+import type {
+  CreateDashboardEventInput,
+  ExtendDashboardEventInput,
+  UpdateDashboardEventAutoCloseAtInput,
+} from "./validation";
 
 export type DashboardOrganizationRole =
   | "owner"
@@ -196,6 +204,12 @@ export function canCreateDashboardOrganizationEvent(
   return role === "owner" || role === "manager";
 }
 
+export function canManageDashboardOrganizationEvent(
+  role: DashboardOrganizationRole,
+) {
+  return role === "owner" || role === "manager";
+}
+
 export async function getDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
@@ -273,6 +287,190 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
     return {
       organization,
       event,
+    };
+  });
+}
+
+export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+  event: UpdateDashboardEventAutoCloseAtInput;
+}) {
+  return getDb().transaction(async (transaction) => {
+    const { organization, event } =
+      await requireEventManagerOrganizationEventInTransaction(
+        transaction,
+        input.authUserId,
+        input.organizationId,
+        input.eventId,
+      );
+    const now = new Date();
+
+    assertDashboardEventCanBeManaged(event, now);
+
+    if (input.event.autoCloseAt.getTime() <= event.startsAt.getTime()) {
+      throw new OperatorApiError(
+        400,
+        "EVENT_AUTO_CLOSE_BEFORE_START",
+        "Event close time must be after the start time.",
+      );
+    }
+
+    const [updatedEvent] = await transaction
+      .update(events)
+      .set({
+        autoCloseAt: input.event.autoCloseAt,
+        updatedAt: now,
+      })
+      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+      .returning(dashboardEventSelection);
+
+    if (!updatedEvent) {
+      throw new OperatorApiError(
+        404,
+        "EVENT_NOT_FOUND",
+        "Event was not found.",
+      );
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "update_event_auto_close_at",
+      entityId: String(event.id),
+      payload: {
+        previousAutoCloseAt: event.autoCloseAt?.toISOString() ?? null,
+        autoCloseAt: input.event.autoCloseAt.toISOString(),
+      },
+    });
+
+    return {
+      organization,
+      event: updatedEvent,
+    };
+  });
+}
+
+export async function extendDashboardOrganizationEventForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+  extension: ExtendDashboardEventInput;
+}) {
+  return getDb().transaction(async (transaction) => {
+    const { organization, event } =
+      await requireEventManagerOrganizationEventInTransaction(
+        transaction,
+        input.authUserId,
+        input.organizationId,
+        input.eventId,
+      );
+    const now = new Date();
+
+    assertDashboardEventCanBeManaged(event, now);
+
+    const autoCloseAt = calculateDashboardEventExtendedAutoCloseAt({
+      autoCloseAt: event.autoCloseAt,
+      minutes: input.extension.minutes,
+      now,
+    });
+
+    if (autoCloseAt.getTime() <= event.startsAt.getTime()) {
+      throw new OperatorApiError(
+        400,
+        "EVENT_AUTO_CLOSE_BEFORE_START",
+        "Event close time must be after the start time.",
+      );
+    }
+
+    const [updatedEvent] = await transaction
+      .update(events)
+      .set({
+        autoCloseAt,
+        updatedAt: now,
+      })
+      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+      .returning(dashboardEventSelection);
+
+    if (!updatedEvent) {
+      throw new OperatorApiError(
+        404,
+        "EVENT_NOT_FOUND",
+        "Event was not found.",
+      );
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "extend_dashboard_event",
+      entityId: String(event.id),
+      payload: {
+        minutes: input.extension.minutes,
+        previousAutoCloseAt: event.autoCloseAt?.toISOString() ?? null,
+        autoCloseAt: autoCloseAt.toISOString(),
+      },
+    });
+
+    return {
+      organization,
+      event: updatedEvent,
+    };
+  });
+}
+
+export async function closeDashboardOrganizationEventForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+}) {
+  return getDb().transaction(async (transaction) => {
+    const { organization, event } =
+      await requireEventManagerOrganizationEventInTransaction(
+        transaction,
+        input.authUserId,
+        input.organizationId,
+        input.eventId,
+      );
+    const now = new Date();
+
+    assertDashboardEventCanBeManaged(event, now);
+
+    const [closedEvent] = await transaction
+      .update(events)
+      .set({
+        status: "closed",
+        isActivePublicEvent: false,
+        closedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+      .returning(dashboardEventSelection);
+
+    if (!closedEvent) {
+      throw new OperatorApiError(
+        404,
+        "EVENT_NOT_FOUND",
+        "Event was not found.",
+      );
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "close_dashboard_event",
+      entityId: String(event.id),
+      payload: {
+        previousStatus: event.status,
+        previousAutoCloseAt: event.autoCloseAt?.toISOString() ?? null,
+        closedAt: now.toISOString(),
+      },
+    });
+
+    return {
+      organization,
+      event: closedEvent,
     };
   });
 }
@@ -571,4 +769,96 @@ async function requireEventCreatorOrganizationInTransaction(
   }
 
   return organization;
+}
+
+async function requireEventManagerOrganizationEventInTransaction(
+  transaction: DatabaseTransaction,
+  authUserId: string,
+  organizationId: string,
+  eventId: number,
+) {
+  if (!isOrganizationPublicId(organizationId)) {
+    throw new OperatorApiError(
+      404,
+      "WORKSPACE_NOT_FOUND",
+      "Organization was not found.",
+    );
+  }
+
+  const [organization] = await transaction
+    .select({
+      id: workspaces.id,
+      publicId: workspaces.publicId,
+      name: workspaces.name,
+      handle: workspaces.handle,
+      active: workspaces.active,
+      role: workspaceMembers.role,
+      operatorId: operatorUsers.id,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      eq(workspaceMembers.workspaceId, workspaces.id),
+    )
+    .innerJoin(
+      operatorUsers,
+      eq(operatorUsers.id, workspaceMembers.operatorUserId),
+    )
+    .where(
+      and(
+        eq(workspaces.publicId, organizationId),
+        eq(workspaces.active, true),
+        eq(operatorUsers.authUserId, authUserId),
+        eq(operatorUsers.active, true),
+        eq(workspaceMembers.active, true),
+        or(
+          eq(workspaceMembers.role, "owner"),
+          eq(workspaceMembers.role, "manager"),
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (!organization) {
+    throw new OperatorApiError(
+      403,
+      "WORKSPACE_EVENT_MANAGE_FORBIDDEN",
+      "Only an owner or manager can manage events.",
+    );
+  }
+
+  const [event] = await transaction
+    .select(dashboardEventSelection)
+    .from(events)
+    .where(and(eq(events.workspaceId, organization.id), eq(events.id, eventId)))
+    .for("update")
+    .limit(1);
+
+  if (!event) {
+    throw new OperatorApiError(
+      404,
+      "EVENT_NOT_FOUND",
+      "Event was not found.",
+    );
+  }
+
+  return {
+    organization,
+    event,
+  };
+}
+
+function assertDashboardEventCanBeManaged(
+  event: DashboardOrganizationEvent,
+  now: Date,
+) {
+  if (canManageDashboardEventLifecycle(event, now)) {
+    return;
+  }
+
+  throw new OperatorApiError(
+    409,
+    "EVENT_MANAGEMENT_LOCKED",
+    "Closed or cancelled events cannot be managed in this MVP.",
+  );
 }
