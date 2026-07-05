@@ -11,6 +11,7 @@ import {
   getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
   getDashboardOrganizationTeamPath,
+  isDashboardNavigationLinkActive,
 } from "@/lib/dashboard-routes";
 
 import styles from "./operator.module.css";
@@ -23,19 +24,19 @@ export function DashboardNavigation() {
     ? [
         {
           href: getDashboardOrganizationPath(organizationId),
-          label: "Overview",
+          label: "Przegląd",
         },
         {
           href: getDashboardOrganizationEventsPath(organizationId),
-          label: "Events",
+          label: "Wydarzenia",
         },
         {
           href: getDashboardOrganizationTeamPath(organizationId),
-          label: "Team",
+          label: "Zespół",
         },
         {
           href: getDashboardOrganizationSettingsPath(organizationId),
-          label: "Settings",
+          label: "Ustawienia",
         },
       ]
     : [
@@ -43,7 +44,7 @@ export function DashboardNavigation() {
           href: isNewOrganizationRoute
             ? getDashboardNewOrganizationPath()
             : getDashboardOrganizationsPath(),
-          label: isNewOrganizationRoute ? "New organization" : "Organizations",
+          label: isNewOrganizationRoute ? "Nowa organizacja" : "Organizacje",
         },
       ];
 
@@ -53,8 +54,7 @@ export function DashboardNavigation() {
       aria-label="Glowna nawigacja dashboardu"
     >
       {links.map((link) => {
-        const isActive =
-          pathname === link.href || pathname.startsWith(`${link.href}/`);
+        const isActive = isDashboardNavigationLinkActive(pathname, link.href);
 
         return (
           <Button

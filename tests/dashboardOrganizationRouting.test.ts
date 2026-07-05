@@ -24,6 +24,7 @@ import {
   getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
   getDashboardOrganizationTeamPath,
+  isDashboardNavigationLinkActive,
   resolveDashboardHomeRedirect,
 } from "../src/lib/dashboard-routes.ts";
 import { sanitizeAuthIdentities } from "../src/server/operator-api/account.ts";
@@ -144,14 +145,14 @@ test("dashboard new is canonical create organization route", () => {
   const actionStart = source.indexOf("async function createOrganization");
   const actionSource = source.slice(actionStart);
 
-  assert.match(source, /Create a new organization/);
-  assert.match(source, /Organizations group your karaoke events/);
-  assert.match(source, /Type/);
-  assert.match(source, /Personal/);
+  assert.match(source, /Utwórz nową organizację/);
+  assert.match(source, /Organizacje grupują Twoje wydarzenia karaoke/);
+  assert.match(source, /Typ/);
+  assert.match(source, /Osobista/);
   assert.match(source, /Plan/);
-  assert.match(source, /Free/);
-  assert.match(source, /Cancel/);
-  assert.match(source, /Create organization/);
+  assert.match(source, /Darmowy/);
+  assert.match(source, /Anuluj/);
+  assert.match(source, /Utwórz organizację/);
   assert.match(source, /createDashboardOrganizationForOperator/);
   assert.match(source, /getDashboardOrganizationPath\(organization\.publicId\)/);
   assert.match(actionSource, /revalidatePath\("\/dashboard", "layout"\)/);
@@ -172,9 +173,10 @@ test("organizations chooser links to organization public IDs and canonical creat
   );
 
   assert.match(source, /Twoje organizacje/);
-  assert.match(source, /Create organization/);
-  assert.match(source, /Open/);
-  assert.match(source, /public_id:/);
+  assert.match(source, /Utwórz organizację/);
+  assert.match(source, /Otwórz/);
+  assert.match(source, /ID organizacji:/);
+  assert.match(source, /Rola:/);
   assert.match(source, /getDashboardOrganizationPath\(organization\.publicId\)/);
   assert.match(source, /getDashboardNewOrganizationPath\(\)/);
   assert.equal(source.includes("/dashboard/organizations/new"), false);
@@ -202,8 +204,8 @@ test("organization general settings page redirects to canonical settings", () =>
 });
 
 test("dashboard organization links use settings canonical path", () => {
-  const navigationSource = readFileSync(
-    "src/components/operator/dashboard-navigation.tsx",
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
   const overviewSource = readFileSync(
@@ -211,10 +213,10 @@ test("dashboard organization links use settings canonical path", () => {
     "utf8",
   );
 
-  assert.match(navigationSource, /getDashboardOrganizationSettingsPath/);
+  assert.match(shellSource, /getDashboardOrganizationSettingsPath/);
   assert.match(overviewSource, /getDashboardOrganizationSettingsPath/);
   assert.equal(
-    navigationSource.includes("getDashboardOrganizationGeneralSettingsPath"),
+    shellSource.includes("getDashboardOrganizationGeneralSettingsPath"),
     false,
   );
   assert.equal(
@@ -267,12 +269,13 @@ test("organization danger zone requires publicId confirmation before archive", (
 
   assert.match(settingsSource, /confirmationOrganizationId !== organizationId/);
   assert.match(settingsSource, /Organization archive confirmation did not match/);
-  assert.match(dangerSource, /Danger zone/);
+  assert.match(dangerSource, /Strefa niebezpieczna/);
   assert.match(dangerSource, /confirmation === organizationId/);
   assert.match(dangerSource, /name="confirmationOrganizationId"/);
-  assert.match(dangerSource, /Archive organization/);
+  assert.match(dangerSource, /Zarchiwizuj organizację/);
   assert.match(dangerSource, /disabled=\{!canArchive \|\| !isConfirmed\}/);
-  assert.match(dangerSource, /Events, requests and members/);
+  assert.match(dangerSource, /nie usunie fizycznie wydarzeń/);
+  assert.match(dangerSource, /Wpisz ID organizacji, aby potwierdzić/);
   assert.equal(/permanent/i.test(dangerSource), false);
   assert.equal(/hard delete/i.test(dangerSource), false);
 });
@@ -294,48 +297,323 @@ test("organization team route requires membership before exposing members", () =
   assert.match(serviceSource, /eq\(workspaceMembers\.workspaceId, organization\.id\)/);
 });
 
-test("dashboard header shows organization dropdown only in org context", () => {
-  const switcherSource = readFileSync(
-    "src/components/operator/dashboard-organization-switcher.tsx",
+test("organization overview requires membership before exposing metrics", () => {
+  const pageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/page.tsx",
     "utf8",
   );
-  const navigationSource = readFileSync(
-    "src/components/operator/dashboard-navigation.tsx",
+  const serviceSource = readFileSync(
+    "src/server/operator-api/organization-overview.ts",
     "utf8",
   );
 
-  assert.match(switcherSource, /if \(!currentOrganizationId\) \{\s+return null;/);
-  assert.match(switcherSource, /getDashboardNewOrganizationPath\(\)/);
-  assert.match(switcherSource, /getDashboardOrganizationsPath\(\)/);
-  assert.match(navigationSource, /isNewOrganizationRoute/);
-  assert.match(navigationSource, /label: isNewOrganizationRoute \? "New organization" : "Organizations"/);
-  assert.match(navigationSource, /label: "Overview"/);
-  assert.match(navigationSource, /label: "Events"/);
-  assert.match(navigationSource, /label: "Team"/);
-  assert.match(navigationSource, /label: "Settings"/);
+  assert.match(pageSource, /getDashboardOrganizationOverviewForAuthUser/);
+  assert.match(pageSource, /notFound\(\)/);
+  assert.match(serviceSource, /getDashboardOrganizationForAuthUser/);
+  assert.match(serviceSource, /if \(!organization\) \{\s+return null;/);
+});
+
+test("organization overview queries are scoped to workspace public access target", () => {
+  const source = readFileSync(
+    "src/server/operator-api/organization-overview.ts",
+    "utf8",
+  );
+
+  assert.match(source, /countEventsForWorkspace\(organization\.id/);
+  assert.match(source, /getRecentEventsForWorkspace\(organization\.id\)/);
+  assert.match(source, /getTopRequestedSongsForWorkspace\(organization\.id\)/);
+  assert.match(source, /workspaceId: organization\.id/);
+  assert.match(source, /eq\(events\.workspaceId, workspaceId\)/);
+  assert.match(source, /innerJoin\(events, eq\(events\.id, songRequests\.eventId\)\)/);
+  assert.match(source, /innerJoin\(songs, eq\(songs\.id, songRequests\.songId\)\)/);
+  assert.equal(source.includes("eq(workspaces.handle, organizationId)"), false);
+});
+
+test("organization overview renders empty states and no fake dashboard data", () => {
+  const source = readFileSync(
+    "src/app/dashboard/org/[organizationId]/page.tsx",
+    "utf8",
+  );
+
+  assert.match(source, /overview\.stats\.activeEvents/);
+  assert.match(source, /overview\.stats\.requestsToday/);
+  assert.match(source, /overview\.stats\.pendingRequests/);
+  assert.match(source, /overview\.stats\.catalogSongs/);
+  assert.match(source, /overview\.recentEvents\.length > 0/);
+  assert.match(source, /overview\.topRequestedSongs\.length > 0/);
+  assert.match(source, /Brak wydarzeń/);
+  assert.match(source, /Brak requestów/);
+  assert.equal(source.includes("Math.random"), false);
+  assert.equal(source.includes("placeholder"), false);
+  assert.equal(source.includes("fake"), false);
+});
+
+test("dashboard shell uses separate simple organization and account layouts", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+
+  assert.match(shellSource, /data-dashboard-layout=\{layout\}/);
+  assert.match(shellSource, /data-dashboard-topbar="true"/);
+  assert.match(shellSource, /data-dashboard-body="true"/);
+  assert.match(shellSource, /organizationId\s+\?\s+"organization"/);
+  assert.match(shellSource, /:\s+isAccountRoute\s+\?\s+"account"/);
+  assert.match(shellSource, /:\s+"simple"/);
+  assert.match(shellSource, /pathname\.startsWith\("\/dashboard\/account"\)/);
+  assert.match(shellSource, /getSelectedOrganizationId\(pathname\)/);
+});
+
+test("dashboard topbar is global and renders breadcrumbs with organization switcher", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+  const topbarStart = shellSource.indexOf('data-dashboard-topbar="true"');
+  const topbarEnd = shellSource.indexOf('data-dashboard-body="true"');
+  const topbarSource = shellSource.slice(topbarStart, topbarEnd);
+
+  assert.match(topbarSource, /<DashboardLogo \/>/);
+  assert.match(topbarSource, /<DashboardHeaderBreadcrumbs/);
+  assert.match(topbarSource, /organizations=\{organizations\}/);
+  assert.match(topbarSource, /<DashboardUserMenu/);
+  assert.equal(topbarSource.includes("dashboardHeaderLabel"), false);
+  assert.equal(topbarSource.includes("<strong>Dashboard</strong>"), false);
+});
+
+test("simple dashboard routes do not render organization sidebar", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+
+  assert.match(shellSource, /sidebar\s+\?\s+styles\.dashboardBody/);
+  assert.match(shellSource, /styles\.dashboardBodySimple/);
+  assert.match(shellSource, /getDashboardNewOrganizationPath\(\)/);
+  assert.match(shellSource, /getDashboardOrganizationsPath\(\)/);
+});
+
+test("organization routes render org sidebar navigation without org switcher", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+  const sidebarStart = shellSource.indexOf("function OrganizationSidebar");
+  const sidebarEnd = shellSource.indexOf("function AccountSidebar");
+  const sidebarSource = shellSource.slice(sidebarStart, sidebarEnd);
+
+  assert.match(shellSource, /function OrganizationSidebar/);
+  assert.match(sidebarSource, /data-dashboard-org-sidebar="true"/);
+  assert.match(sidebarSource, /label: "Przegl/);
+  assert.match(sidebarSource, /label: "Wydarzenia"/);
+  assert.match(sidebarSource, /label: "Zesp/);
+  assert.match(sidebarSource, /label: "Ustawienia"/);
+  assert.match(sidebarSource, /Wszystkie organizacje/);
+  assert.match(sidebarSource, /Utw/);
+  assert.equal(sidebarSource.includes("DashboardOrganizationSwitcher"), false);
+  assert.equal(/label: "(Overview|Events|Team|Settings)"/.test(shellSource), false);
+});
+
+test("account routes render account sidebar without organization switcher", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+  const accountStart = shellSource.indexOf("function AccountSidebar");
+  const accountEnd = shellSource.indexOf("function DashboardLogo");
+  const accountSource = shellSource.slice(accountStart, accountEnd);
+
+  assert.match(accountSource, /data-dashboard-account-sidebar="true"/);
+  assert.match(accountSource, /Wr/);
+  assert.match(accountSource, /Profil/);
+  assert.match(accountSource, /Bezpiecze/);
+  assert.match(accountSource, /Dziennik audytu/);
+  assert.match(accountSource, /Wkr/);
+  assert.equal(/Back to dashboard|Profile|Security|Audit logs/.test(accountSource), false);
+  assert.equal(accountSource.includes("DashboardOrganizationSwitcher"), false);
+  assert.equal(accountSource.includes("data-dashboard-org-sidebar"), false);
+  assert.match(shellSource, /\/dashboard\/account\/security/);
+});
+
+test("dashboard shell renders breadcrumbs in the global header", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+
+  assert.match(shellSource, /function DashboardHeaderBreadcrumbs/);
+  assert.match(shellSource, /data-dashboard-header-breadcrumbs="true"/);
+  assert.match(shellSource, /<Breadcrumb>/);
+  assert.match(shellSource, /getBreadcrumbItems/);
+  assert.match(shellSource, /kind: "organizationSwitcher"/);
+  assert.match(shellSource, /label: "Organizacje"/);
+  assert.match(shellSource, /label: "Ustawienia"/);
+  assert.match(shellSource, /label: "Konto"/);
+  assert.match(shellSource, /label: "Profil"/);
+  assert.match(shellSource, /label: "Bezpiecze/);
+  assert.match(shellSource, /label: "Nowa organizacja"/);
+  assert.equal(shellSource.includes("DashboardContentHeader"), false);
+  assert.equal(shellSource.includes("dashboardContentHeader"), false);
+});
+
+test("organization dropdown is only used for organization breadcrumbs", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+  const organizationBranchStart = shellSource.indexOf("if (input.organizationId)");
+  const accountBranchStart = shellSource.indexOf(
+    'if (input.pathname.startsWith("/dashboard/account"))',
+  );
+  const newOrganizationBranchStart = shellSource.indexOf(
+    "if (input.pathname === getDashboardNewOrganizationPath())",
+  );
+  const organizationsBranchStart = shellSource.indexOf(
+    "if (input.pathname === getDashboardOrganizationsPath())",
+  );
+  const fallbackStart = shellSource.indexOf('label: "Panel"', organizationsBranchStart);
+  const organizationBranch = shellSource.slice(
+    organizationBranchStart,
+    accountBranchStart,
+  );
+  const accountBranch = shellSource.slice(
+    accountBranchStart,
+    newOrganizationBranchStart,
+  );
+  const newOrganizationBranch = shellSource.slice(
+    newOrganizationBranchStart,
+    organizationsBranchStart,
+  );
+  const organizationsBranch = shellSource.slice(
+    organizationsBranchStart,
+    fallbackStart,
+  );
+
+  assert.match(organizationBranch, /kind: "organizationSwitcher"/);
+  assert.equal(accountBranch.includes('kind: "organizationSwitcher"'), false);
+  assert.equal(
+    newOrganizationBranch.includes('kind: "organizationSwitcher"'),
+    false,
+  );
+  assert.equal(
+    organizationsBranch.includes('kind: "organizationSwitcher"'),
+    false,
+  );
+});
+
+test("dashboard breadcrumbs render separator as a BreadcrumbList sibling", () => {
+  const shellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+  const headerStart = shellSource.indexOf("function DashboardHeaderBreadcrumbs");
+  const headerEnd = shellSource.indexOf("function OrganizationSidebar");
+  const headerSource = shellSource.slice(headerStart, headerEnd);
+  const itemBlocks = headerSource.match(
+    /<BreadcrumbItem[\s\S]*?<\/BreadcrumbItem>/g,
+  ) ?? [];
+
+  assert.ok(itemBlocks.length > 0);
+  assert.match(headerSource, /<Fragment key=/);
+  assert.match(headerSource, /<\/BreadcrumbItem>\s+\{!isLast \? <BreadcrumbSeparator \/> : null\}/);
+  assert.equal(
+    itemBlocks.some((block) => block.includes("BreadcrumbSeparator")),
+    false,
+  );
 });
 
 test("account is in avatar menu and not a main header nav link", () => {
-  const navigationSource = readFileSync(
-    "src/components/operator/dashboard-navigation.tsx",
-    "utf8",
-  );
   const userMenuSource = readFileSync(
     "src/components/operator/dashboard-user-menu.tsx",
     "utf8",
   );
 
-  assert.equal(navigationSource.includes("/dashboard/account/me"), false);
-  assert.equal(navigationSource.includes("Konto"), false);
   assert.match(userMenuSource, /href="\/dashboard\/account\/me"/);
   assert.match(userMenuSource, /Moje konto/);
 });
 
+test("dashboard logo links to dashboard while public logos link home", () => {
+  const dashboardShellSource = readFileSync(
+    "src/components/operator/dashboard-shell.tsx",
+    "utf8",
+  );
+  const publicRequestSource = readFileSync(
+    "src/components/public/public-request-page.tsx",
+    "utf8",
+  );
+  const publicQueueSource = readFileSync(
+    "src/components/public/public-queue-page.tsx",
+    "utf8",
+  );
+
+  assert.match(
+    dashboardShellSource,
+    /className=\{styles\.dashboardBrand\}[\s\S]*?href="\/dashboard"/,
+  );
+  assert.match(
+    publicRequestSource,
+    /className=\{styles\.brand\}[\s\S]*?href="\/"/,
+  );
+  assert.match(
+    publicQueueSource,
+    /className=\{styles\.brand\}[\s\S]*?href="\/"/,
+  );
+});
+
+test("dashboard organization navigation activates overview only on exact route", () => {
+  const overviewPath = getDashboardOrganizationPath(exampleOrganizationId);
+  const settingsPath =
+    getDashboardOrganizationSettingsPath(exampleOrganizationId);
+  const teamPath = getDashboardOrganizationTeamPath(exampleOrganizationId);
+  const eventsPath = getDashboardOrganizationEventsPath(exampleOrganizationId);
+
+  assert.equal(
+    isDashboardNavigationLinkActive(overviewPath, overviewPath),
+    true,
+  );
+  assert.equal(
+    isDashboardNavigationLinkActive(settingsPath, overviewPath),
+    false,
+  );
+  assert.equal(isDashboardNavigationLinkActive(teamPath, overviewPath), false);
+  assert.equal(isDashboardNavigationLinkActive(eventsPath, overviewPath), false);
+});
+
+test("dashboard organization navigation activates section links on their routes", () => {
+  const settingsPath =
+    getDashboardOrganizationSettingsPath(exampleOrganizationId);
+  const teamPath = getDashboardOrganizationTeamPath(exampleOrganizationId);
+  const eventsPath = getDashboardOrganizationEventsPath(exampleOrganizationId);
+
+  assert.equal(
+    isDashboardNavigationLinkActive(settingsPath, settingsPath),
+    true,
+  );
+  assert.equal(
+    isDashboardNavigationLinkActive(`${settingsPath}/advanced`, settingsPath),
+    true,
+  );
+  assert.equal(isDashboardNavigationLinkActive(teamPath, teamPath), true);
+  assert.equal(isDashboardNavigationLinkActive(`${teamPath}/members`, teamPath), true);
+  assert.equal(isDashboardNavigationLinkActive(eventsPath, eventsPath), true);
+  assert.equal(
+    isDashboardNavigationLinkActive(`${eventsPath}/upcoming`, eventsPath),
+    true,
+  );
+});
+
 test("organization dropdown links use organizationId route targets", () => {
+  const switcherSource = readFileSync(
+    "src/components/operator/dashboard-organization-switcher.tsx",
+    "utf8",
+  );
+
   assert.equal(
     getDashboardOrganizationPath(exampleOrganizationId),
     `/dashboard/org/${exampleOrganizationId}`,
   );
+  assert.match(switcherSource, /Wszystkie organizacje/);
+  assert.match(switcherSource, /Utw/);
 });
 
 test("organization resolver uses publicId and not handle fallback", () => {

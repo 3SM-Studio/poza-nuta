@@ -45,7 +45,7 @@ export default async function DashboardOrganizationsPage() {
           {organizations.length > 0 ? (
             <Button asChild>
               <Link href={getDashboardNewOrganizationPath()}>
-                Create organization
+                Utwórz organizację
               </Link>
             </Button>
           ) : null}
@@ -58,18 +58,20 @@ export default async function DashboardOrganizationsPage() {
                 <CardHeader>
                   <CardTitle>{organization.name}</CardTitle>
                   <CardDescription className={styles.breakValue}>
-                    public_id: {organization.publicId}
+                    ID organizacji: {organization.publicId}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Badge variant="secondary">{formatRole(organization.role)}</Badge>
+                  <Badge variant="secondary">
+                    Rola: {formatRole(organization.role)}
+                  </Badge>
                 </CardContent>
                 <CardFooter>
                   <Button variant="outline" asChild>
                     <Link
                       href={getDashboardOrganizationPath(organization.publicId)}
                     >
-                      Open
+                      Otwórz
                     </Link>
                   </Button>
                 </CardFooter>
@@ -88,7 +90,7 @@ export default async function DashboardOrganizationsPage() {
             <CardFooter>
               <Button asChild>
                 <Link href={getDashboardNewOrganizationPath()}>
-                  Create organization
+                  Utwórz organizację
                 </Link>
               </Button>
             </CardFooter>
@@ -102,13 +104,13 @@ export default async function DashboardOrganizationsPage() {
 function formatRole(role: string) {
   switch (role) {
     case "owner":
-      return "Owner";
+      return "Właściciel";
     case "manager":
-      return "Manager";
+      return "Menedżer";
     case "operator":
       return "Operator";
     case "viewer":
-      return "Viewer";
+      return "Podgląd";
     default:
       return role;
   }

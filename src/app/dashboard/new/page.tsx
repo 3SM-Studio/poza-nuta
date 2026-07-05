@@ -43,16 +43,16 @@ export default async function NewDashboardOrganizationPage() {
       <section className={styles.onboardingShell}>
         <Card className={styles.onboardingCard}>
           <CardHeader>
-            <CardTitle>Create a new organization</CardTitle>
+            <CardTitle>Utwórz nową organizację</CardTitle>
             <CardDescription>
-              Organizations group your karaoke events, team members and
-              settings.
+              Organizacje grupują Twoje wydarzenia karaoke, zespół i
+              ustawienia.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form className={styles.settingsForm} action={createOrganization}>
               <div className={styles.dashboardField}>
-                <label htmlFor="organization-name">Name</label>
+                <label htmlFor="organization-name">Nazwa</label>
                 <input
                   id="organization-name"
                   name="name"
@@ -65,41 +65,41 @@ export default async function NewDashboardOrganizationPage() {
 
               <section className={styles.formSection} aria-labelledby="type-title">
                 <div>
-                  <h2 id="type-title">Type</h2>
+                  <h2 id="type-title">Typ</h2>
                   <p className={styles.eventMeta}>
-                    This is informational for now and is not saved to the
-                    database.
+                    To pole jest teraz tylko informacyjne i nie jest zapisywane
+                    w bazie.
                   </p>
                 </div>
-                <div className={styles.readOnlyOption}>Personal</div>
+                <div className={styles.readOnlyOption}>Osobista</div>
               </section>
 
               <section className={styles.formSection} aria-labelledby="plan-title">
                 <div>
                   <h2 id="plan-title">Plan</h2>
                   <p className={styles.eventMeta}>
-                    Billing is not implemented in this stage.
+                    Rozliczenia nie są wdrażane w tym etapie.
                   </p>
                 </div>
-                <div className={styles.readOnlyOption}>Free</div>
+                <div className={styles.readOnlyOption}>Darmowy</div>
               </section>
 
               <div className={styles.formActions}>
                 <Button variant="outline" asChild>
-                  <Link href={cancelPath}>Cancel</Link>
+                  <Link href={cancelPath}>Anuluj</Link>
                 </Button>
                 <button
                   className={`${styles.button} ${styles.primaryButton}`}
                   type="submit"
                 >
-                  Create organization
+                  Utwórz organizację
                 </button>
               </div>
             </form>
           </CardContent>
           <CardFooter>
             <p className={styles.eventMeta}>
-              Organization ID is generated automatically after creation.
+              ID organizacji jest generowane automatycznie po utworzeniu.
             </p>
           </CardFooter>
         </Card>

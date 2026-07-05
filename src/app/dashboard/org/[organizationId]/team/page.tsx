@@ -95,13 +95,13 @@ export default async function OrganizationTeamPage({
 function formatRole(role: string) {
   switch (role) {
     case "owner":
-      return "Owner";
+      return "Właściciel";
     case "manager":
-      return "Manager";
+      return "Menedżer";
     case "operator":
       return "Operator";
     case "viewer":
-      return "Viewer";
+      return "Podgląd";
     default:
       return role;
   }

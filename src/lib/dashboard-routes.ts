@@ -32,6 +32,25 @@ export function getDashboardOrganizationTeamPath(organizationId: string) {
   return `${getDashboardOrganizationPath(organizationId)}/team`;
 }
 
+export function isDashboardNavigationLinkActive(
+  pathname: string,
+  href: string,
+) {
+  const currentPath = normalizeDashboardPath(pathname);
+  const targetPath = normalizeDashboardPath(href);
+  const targetSegments = targetPath.split("/").filter(Boolean);
+  const isOrganizationOverviewLink =
+    targetSegments[0] === "dashboard" &&
+    targetSegments[1] === "org" &&
+    targetSegments.length === 3;
+
+  if (isOrganizationOverviewLink) {
+    return currentPath === targetPath;
+  }
+
+  return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
+}
+
 export function resolveDashboardHomeRedirect(
   organizations: DashboardHomeOrganization[],
   lastSelectedOrganizationId: string | null = null,
@@ -54,4 +73,12 @@ export function resolveDashboardHomeRedirect(
   }
 
   return getDashboardOrganizationsPath();
+}
+
+function normalizeDashboardPath(path: string) {
+  if (path.length > 1 && path.endsWith("/")) {
+    return path.slice(0, -1);
+  }
+
+  return path;
 }

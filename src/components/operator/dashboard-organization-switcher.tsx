@@ -96,7 +96,7 @@ export function DashboardOrganizationSwitcher({
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href={getDashboardNewOrganizationPath()}>
-            Utwórz nową organizację
+            Utwórz organizację
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -117,13 +117,13 @@ function getSelectedOrganizationId(pathname: string) {
 function formatRole(role: string) {
   switch (role) {
     case "owner":
-      return "Owner";
+      return "Właściciel";
     case "manager":
-      return "Manager";
+      return "Menedżer";
     case "operator":
       return "Operator";
     case "viewer":
-      return "Viewer";
+      return "Podgląd";
     default:
       return role;
   }

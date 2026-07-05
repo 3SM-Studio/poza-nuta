@@ -32,10 +32,10 @@ export function ArchiveOrganizationForm({
   return (
     <Card className={styles.dangerZoneCard}>
       <CardHeader>
-        <CardTitle>Danger zone</CardTitle>
+        <CardTitle>Strefa niebezpieczna</CardTitle>
         <CardDescription>
-          Archiving disables this organization. Events, requests and members
-          remain in the database.
+          To wyłączy organizację, ale nie usunie fizycznie wydarzeń, zgłoszeń
+          ani członków.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -43,7 +43,7 @@ export function ArchiveOrganizationForm({
           <input type="hidden" name="organizationId" value={organizationId} />
           <div className={styles.dashboardField}>
             <label htmlFor="archive-confirmation">
-              Type the organization ID to confirm
+              Wpisz ID organizacji, aby potwierdzić
             </label>
             <input
               id="archive-confirmation"
@@ -57,7 +57,7 @@ export function ArchiveOrganizationForm({
             />
           </div>
           <p className={styles.eventMeta}>
-            Organization: {organizationName}. Required ID:{" "}
+            Organizacja: {organizationName}. Wymagane ID:{" "}
             <span className={styles.breakValue}>{organizationId}</span>
           </p>
           <Button
@@ -65,7 +65,7 @@ export function ArchiveOrganizationForm({
             type="submit"
             disabled={!canArchive || !isConfirmed}
           >
-            Archive organization
+            Zarchiwizuj organizację
           </Button>
         </form>
       </CardContent>

@@ -78,7 +78,7 @@ export default async function OrganizationSettingsPage({
                   <dd>{access.organization.name}</dd>
                 </div>
                 <div>
-                  <dt>Organization ID</dt>
+                  <dt>ID organizacji</dt>
                   <dd className={styles.breakValue}>
                     {access.organization.publicId}
                   </dd>
@@ -99,7 +99,7 @@ export default async function OrganizationSettingsPage({
             <CardHeader>
               <CardTitle>Zmień nazwę</CardTitle>
               <CardDescription>
-                Tylko owner może zmienić nazwę organizacji.
+                Tylko właściciel może zmienić nazwę organizacji.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -178,13 +178,13 @@ async function archiveOrganization(formData: FormData) {
 function formatRole(role: string) {
   switch (role) {
     case "owner":
-      return "Owner";
+      return "Właściciel";
     case "manager":
-      return "Manager";
+      return "Menedżer";
     case "operator":
       return "Operator";
     case "viewer":
-      return "Viewer";
+      return "Podgląd";
     default:
       return role;
   }
