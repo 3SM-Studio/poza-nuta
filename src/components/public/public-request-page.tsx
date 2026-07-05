@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -145,7 +146,19 @@ export function PublicRequestPage() {
     <main className={styles.publicPage}>
       <div className={styles.publicShell}>
         <header className={styles.publicHeader}>
-          <p className={styles.brand}>Poza Nutą</p>
+          <Link
+            className={styles.brand}
+            href="/"
+            aria-label="Przejdź na stronę główną"
+          >
+            <Image
+              className={styles.brandLogo}
+              src="/brand/poza_nuta_logo-white.png"
+              alt="Poza Nutą"
+              width={1254}
+              height={1254}
+            />
+          </Link>
           <h1>{event?.name ?? "Karaoke"}</h1>
           {event?.venue ? <p>{event.venue}</p> : null}
         </header>

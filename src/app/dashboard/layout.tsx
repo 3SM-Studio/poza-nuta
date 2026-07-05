@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -23,8 +24,18 @@ export default async function DashboardLayout({
     <div className={styles.dashboardShell}>
       <header className={styles.dashboardHeader}>
         <div className={styles.dashboardHeaderInner}>
-          <Link className={styles.dashboardBrand} href="/dashboard">
-            <span>Poza Nutą</span>
+          <Link
+            className={styles.dashboardBrand}
+            href="/"
+            aria-label="Przejdź na stronę główną"
+          >
+            <Image
+              className={styles.dashboardBrandLogo}
+              src="/brand/poza_nuta_logo-white.png"
+              alt="Poza Nutą"
+              width={1254}
+              height={1254}
+            />
             <strong>Dashboard</strong>
           </Link>
 

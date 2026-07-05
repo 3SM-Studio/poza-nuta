@@ -32,12 +32,24 @@
 }
 
 .brand {
-  margin: 0 0 0.4rem;
-  color: var(--primary);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  display: inline-flex;
+  width: fit-content;
+  margin: 0 0 0.65rem;
+  align-items: center;
+  line-height: 0;
+}
+
+.brand:focus-visible {
+  border-radius: 0.45rem;
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.brandLogo {
+  display: block;
+  width: auto;
+  height: clamp(1.75rem, 7vw, 2.25rem);
+  object-fit: contain;
 }
 
 .publicSection {

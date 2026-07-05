@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { OperatorLoginForm } from "../../components/operator/login-form";
@@ -22,7 +24,19 @@ export default async function SignInPage() {
   return (
     <main className={styles.loginPage}>
       <section className={styles.loginCard}>
-        <p className={styles.brand}>Poza Nutą</p>
+        <Link
+          className={styles.brand}
+          href="/"
+          aria-label="Przejdź na stronę główną"
+        >
+          <Image
+            className={styles.brandLogo}
+            src="/brand/poza_nuta_logo-white.png"
+            alt="Poza Nutą"
+            width={1254}
+            height={1254}
+          />
+        </Link>
         {access.state === "unauthorized" ? (
           <UnauthorizedSignIn />
         ) : (

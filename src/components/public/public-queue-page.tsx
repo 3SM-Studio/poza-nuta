@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -62,7 +63,19 @@ export function PublicQueuePage() {
       <div className={styles.queueShell}>
         <header className={styles.queueHeader}>
           <div>
-            <p className={styles.brand}>Poza Nutą</p>
+            <Link
+              className={styles.brand}
+              href="/"
+              aria-label="Przejdź na stronę główną"
+            >
+              <Image
+                className={styles.brandLogo}
+                src="/brand/poza_nuta_logo-white.png"
+                alt="Poza Nutą"
+                width={1254}
+                height={1254}
+              />
+            </Link>
             <h1>Publiczna kolejka</h1>
           </div>
           <button
