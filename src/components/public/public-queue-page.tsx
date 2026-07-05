@@ -9,6 +9,10 @@ import {
   PublicClientError,
   type PublicQueueResponse,
 } from "./api";
+import {
+  PUBLIC_QUEUE_POLL_INTERVAL_MS,
+  shouldPollPublicQueue,
+} from "./public-queue-polling";
 import styles from "./public.module.css";
 
 export function PublicQueuePage() {
@@ -16,6 +20,7 @@ export function PublicQueuePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shouldPoll = shouldPollPublicQueue(queue);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +49,33 @@ export function PublicQueuePage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!shouldPoll) {
+      return;
+    }
+
+    let active = true;
+    const intervalId = window.setInterval(() => {
+      getPublicQueue()
+        .then((response) => {
+          if (active) {
+            setQueue(response);
+            setError(null);
+          }
+        })
+        .catch((caughtError) => {
+          if (active) {
+            setError(getQueueErrorMessage(caughtError));
+          }
+        });
+    }, PUBLIC_QUEUE_POLL_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [shouldPoll]);
 
   async function refreshQueue() {
     setIsRefreshing(true);
