@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isTransientInfrastructureError } from "../runtime-diagnostics";
 import { OperatorApiError } from "./errors";
 import type { ValidationIssue } from "./validation";
 
@@ -55,6 +56,20 @@ export function operatorApiErrorResponse(error: unknown) {
         },
       },
       error.status,
+    );
+  }
+
+  if (isTransientInfrastructureError(error)) {
+    console.error("Operator API infrastructure dependency failed.");
+
+    return operatorJsonResponse<ApiErrorBody>(
+      {
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "The service is temporarily unavailable.",
+        },
+      },
+      503,
     );
   }
 

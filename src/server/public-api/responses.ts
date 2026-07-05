@@ -1,3 +1,4 @@
+import { isTransientInfrastructureError } from "../runtime-diagnostics";
 import { PublicApiError } from "./errors";
 
 type ApiErrorBody = {
@@ -57,6 +58,20 @@ export function publicApiErrorResponse(error: unknown) {
         },
       },
       error.status,
+    );
+  }
+
+  if (isTransientInfrastructureError(error)) {
+    console.error("Public API infrastructure dependency failed.");
+
+    return jsonResponse<ApiErrorBody>(
+      {
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "The service is temporarily unavailable.",
+        },
+      },
+      503,
     );
   }
 

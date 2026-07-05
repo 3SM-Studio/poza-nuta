@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { operatorAuditLog, operatorUsers } from "../../db/schema";
 import { createClient as createSupabaseServerClient } from "../../lib/supabase/server";
 import { getDb } from "../db";
+import { traceServerStep } from "../runtime-diagnostics";
 import {
   mapSupabaseLoginError,
   resolveOperatorAccess,
@@ -33,7 +34,11 @@ export type AuthenticatedOperatorSession = {
 
 export async function loginOperator(input: LoginInput) {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.signInWithPassword(input);
+  const { data, error } = await traceServerStep(
+    "dashboard.login",
+    "signInWithPassword",
+    () => supabase.auth.signInWithPassword(input),
+  );
 
   if (error || !data.user || !data.session) {
     const mappedError = mapSupabaseLoginError(error ?? {});
@@ -50,7 +55,11 @@ export async function loginOperator(input: LoginInput) {
   }
 
   try {
-    const operator = await findLinkedOperator(data.user.id);
+    const operator = await traceServerStep(
+      "dashboard.login",
+      "findLinkedOperator",
+      () => findLinkedOperator(data.user.id),
+    );
     const decision = resolveOperatorAccess(data.user.id, operator);
 
     if (!decision.allowed) {
@@ -61,12 +70,14 @@ export async function loginOperator(input: LoginInput) {
       );
     }
 
-    await getDb().insert(operatorAuditLog).values({
-      operatorId: decision.operator.id,
-      action: "login",
-      entityId: data.user.id,
-      payload: {},
-    });
+    await traceServerStep("dashboard.login", "writeAuditLog", () =>
+      getDb().insert(operatorAuditLog).values({
+        operatorId: decision.operator.id,
+        action: "login",
+        entityId: data.user.id,
+        payload: {},
+      }),
+    );
 
     return {
       operator: decision.operator,
@@ -77,13 +88,21 @@ export async function loginOperator(input: LoginInput) {
   }
 }
 
-export async function requireOperatorSession(): Promise<AuthenticatedOperatorSession> {
+export async function requireOperatorSession(
+  routeName = "dashboard.session",
+): Promise<AuthenticatedOperatorSession> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await traceServerStep(routeName, "getUser", () =>
+    supabase.auth.getUser(),
+  );
 
-  const operator = user ? await findLinkedOperator(user.id) : null;
+  const operator = user
+    ? await traceServerStep(routeName, "findLinkedOperator", () =>
+        findLinkedOperator(user.id),
+      )
+    : null;
   const decision = resolveOperatorAccess(user?.id ?? null, operator);
 
   if (!decision.allowed) {
@@ -108,8 +127,12 @@ export async function getSignInPageAccess() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
-  const operator = user ? await findLinkedOperator(user.id) : null;
+  } = await traceServerStep("sign-in", "getUser", () => supabase.auth.getUser());
+  const operator = user
+    ? await traceServerStep("sign-in", "findLinkedOperator", () =>
+        findLinkedOperator(user.id),
+      )
+    : null;
 
   return resolveSignInPageAccess(user?.id ?? null, operator);
 }
@@ -118,7 +141,9 @@ export async function logoutOperator() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await traceServerStep("dashboard.logout", "getUser", () =>
+    supabase.auth.getUser(),
+  );
 
   if (!user) {
     throw new OperatorApiError(
@@ -128,20 +153,28 @@ export async function logoutOperator() {
     );
   }
 
-  const operator = await findLinkedOperator(user.id);
-  const { error } = await supabase.auth.signOut();
+  const operator = await traceServerStep(
+    "dashboard.logout",
+    "findLinkedOperator",
+    () => findLinkedOperator(user.id),
+  );
+  const { error } = await traceServerStep("dashboard.logout", "signOut", () =>
+    supabase.auth.signOut(),
+  );
 
   if (error) {
     throw new Error("Supabase Auth sign-out failed.");
   }
 
   if (operator) {
-    await getDb().insert(operatorAuditLog).values({
-      operatorId: operator.id,
-      action: "logout",
-      entityId: user.id,
-      payload: {},
-    });
+    await traceServerStep("dashboard.logout", "writeAuditLog", () =>
+      getDb().insert(operatorAuditLog).values({
+        operatorId: operator.id,
+        action: "logout",
+        entityId: user.id,
+        payload: {},
+      }),
+    );
   }
 }
 
