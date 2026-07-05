@@ -14,7 +14,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getDashboardOrganizationPath } from "@/lib/dashboard-routes";
+import {
+  getDashboardNewOrganizationPath,
+  getDashboardOrganizationsPath,
+  getDashboardOrganizationPath,
+} from "@/lib/dashboard-routes";
 
 import styles from "./operator.module.css";
 
@@ -88,10 +92,10 @@ export function DashboardOrganizationSwitcher({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/organizations">Wszystkie organizacje</Link>
+          <Link href={getDashboardOrganizationsPath()}>Wszystkie organizacje</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/organizations/new">
+          <Link href={getDashboardNewOrganizationPath()}>
             Utwórz nową organizację
           </Link>
         </DropdownMenuItem>

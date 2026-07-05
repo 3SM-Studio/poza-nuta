@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -97,6 +98,9 @@ export function DashboardUserMenu({
         ) : null}
 
         <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/account/me">Moje konto</Link>
+          </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isLoggingOut}
             onSelect={() => void handleLogout()}

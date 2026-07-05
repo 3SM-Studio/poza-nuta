@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
+  getDashboardNewOrganizationPath,
+  getDashboardOrganizationsPath,
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
@@ -13,46 +15,46 @@ import {
 
 import styles from "./operator.module.css";
 
-const dashboardLinks = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard/organizations", label: "Organizacje" },
-  { href: "/dashboard/account/me", label: "Konto" },
-] as const;
-
 export function DashboardNavigation() {
   const pathname = usePathname();
   const organizationId = getSelectedOrganizationId(pathname);
-  const organizationLinks = organizationId
+  const isNewOrganizationRoute = pathname === getDashboardNewOrganizationPath();
+  const links = organizationId
     ? [
         {
           href: getDashboardOrganizationPath(organizationId),
-          label: "Organizacja",
+          label: "Overview",
         },
         {
           href: getDashboardOrganizationEventsPath(organizationId),
-          label: "Eventy",
+          label: "Events",
         },
         {
           href: getDashboardOrganizationTeamPath(organizationId),
-          label: "Zespół",
+          label: "Team",
         },
         {
           href: getDashboardOrganizationSettingsPath(organizationId),
-          label: "Ustawienia",
+          label: "Settings",
         },
       ]
-    : [];
+    : [
+        {
+          href: isNewOrganizationRoute
+            ? getDashboardNewOrganizationPath()
+            : getDashboardOrganizationsPath(),
+          label: isNewOrganizationRoute ? "New organization" : "Organizations",
+        },
+      ];
 
   return (
     <nav
       className={styles.dashboardNavigation}
       aria-label="Glowna nawigacja dashboardu"
     >
-      {[...dashboardLinks, ...organizationLinks].map((link) => {
+      {links.map((link) => {
         const isActive =
-          link.href === "/dashboard"
-            ? pathname === link.href
-            : pathname === link.href || pathname.startsWith(`${link.href}/`);
+          pathname === link.href || pathname.startsWith(`${link.href}/`);
 
         return (
           <Button

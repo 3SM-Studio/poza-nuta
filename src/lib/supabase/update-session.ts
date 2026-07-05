@@ -1,6 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  getDashboardOrganizationIdFromPath,
+  LAST_SELECTED_ORGANIZATION_COOKIE,
+  LAST_SELECTED_ORGANIZATION_MAX_AGE_SECONDS,
+} from "../dashboard-last-selected-organization";
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -54,6 +60,24 @@ export async function updateSession(request: NextRequest) {
     });
 
     return redirectResponse;
+  }
+
+  const selectedOrganizationId = data?.claims
+    ? getDashboardOrganizationIdFromPath(pathname)
+    : null;
+
+  if (selectedOrganizationId) {
+    supabaseResponse.cookies.set(
+      LAST_SELECTED_ORGANIZATION_COOKIE,
+      selectedOrganizationId,
+      {
+        httpOnly: true,
+        maxAge: LAST_SELECTED_ORGANIZATION_MAX_AGE_SECONDS,
+        path: "/dashboard",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      },
+    );
   }
 
   return supabaseResponse;

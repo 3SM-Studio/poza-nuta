@@ -62,6 +62,14 @@ const organizationSelection = {
   role: workspaceMembers.role,
 };
 
+const workspaceSelection = {
+  id: workspaces.id,
+  publicId: workspaces.publicId,
+  name: workspaces.name,
+  handle: workspaces.handle,
+  active: workspaces.active,
+};
+
 const ownerOrganizationSelection = {
   id: workspaces.id,
   publicId: workspaces.publicId,
@@ -225,13 +233,16 @@ export async function updateDashboardOrganizationNameForAuthUser(input: {
         updatedAt: new Date(),
       })
       .where(eq(workspaces.id, organization.id))
-      .returning(ownerOrganizationSelection);
+      .returning(workspaceSelection);
 
     if (!updatedOrganization) {
       throw new Error("Organization name could not be updated.");
     }
 
-    return updatedOrganization;
+    return {
+      ...updatedOrganization,
+      role: "owner" as const,
+    };
   });
 }
 
@@ -253,13 +264,16 @@ export async function archiveDashboardOrganizationForAuthUser(input: {
         updatedAt: new Date(),
       })
       .where(eq(workspaces.id, organization.id))
-      .returning(ownerOrganizationSelection);
+      .returning(workspaceSelection);
 
     if (!archivedOrganization) {
       throw new Error("Organization could not be archived.");
     }
 
-    return archivedOrganization;
+    return {
+      ...archivedOrganization,
+      role: "owner" as const,
+    };
   });
 }
 
@@ -304,7 +318,7 @@ export async function createDashboardOrganizationForOperator(input: {
         handle,
         active: true,
       })
-      .returning(organizationSelection);
+      .returning(workspaceSelection);
 
     if (!workspace) {
       throw new Error("Organization could not be created.");
@@ -317,7 +331,10 @@ export async function createDashboardOrganizationForOperator(input: {
       }),
     );
 
-    return workspace;
+    return {
+      ...workspace,
+      role: "owner" as const,
+    };
   });
 }
 

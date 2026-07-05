@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { resolveDashboardOrganizationAccess } from "@/lib/dashboard-organization-access";
 
+import { ArchiveOrganizationForm } from "../../../../../components/operator/archive-organization-form";
 import styles from "../../../../../components/operator/operator.module.css";
 import {
   archiveDashboardOrganizationForAuthUser,
@@ -127,27 +128,12 @@ export default async function OrganizationSettingsPage({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Archiwizacja</CardTitle>
-              <CardDescription>
-                Archiwizacja ustawia active=false. Nie usuwa eventów, requestów
-                ani membershipów.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className={styles.settingsForm} action={archiveOrganization}>
-                <input type="hidden" name="organizationId" value={organizationId} />
-                <button
-                  className={`${styles.button} ${styles.secondaryButton}`}
-                  type="submit"
-                  disabled={!canManageOrganization}
-                >
-                  Archiwizuj organizację
-                </button>
-              </form>
-            </CardContent>
-          </Card>
+          <ArchiveOrganizationForm
+            action={archiveOrganization}
+            canArchive={canManageOrganization}
+            organizationId={access.organization.publicId}
+            organizationName={access.organization.name}
+          />
         </div>
       </section>
     </main>
@@ -173,6 +159,14 @@ async function archiveOrganization(formData: FormData) {
 
   const session = await requireOperatorSession();
   const organizationId = String(formData.get("organizationId") ?? "");
+  const confirmationOrganizationId = String(
+    formData.get("confirmationOrganizationId") ?? "",
+  );
+
+  if (confirmationOrganizationId !== organizationId) {
+    throw new Error("Organization archive confirmation did not match.");
+  }
+
   await archiveDashboardOrganizationForAuthUser({
     authUserId: session.authUser.id,
     organizationId,

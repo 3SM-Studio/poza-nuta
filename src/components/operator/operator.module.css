@@ -417,6 +417,18 @@
   margin: 0 auto;
 }
 
+.onboardingShell {
+  display: grid;
+  min-height: calc(100vh - 7.5rem);
+  place-items: center;
+  width: min(100%, 42rem);
+  margin: 0 auto;
+}
+
+.onboardingCard {
+  width: 100%;
+}
+
 .organizationGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -426,6 +438,47 @@
 .organizationList {
   display: grid;
   gap: 1rem;
+}
+
+.emptyStateCard {
+  max-width: 38rem;
+}
+
+.formSection {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface-2);
+  padding: 0.85rem;
+}
+
+.formSection h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.readOnlyOption {
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--foreground);
+  font-size: 0.86rem;
+  font-weight: 750;
+  padding: 0.38rem 0.7rem;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.dangerZoneCard {
+  border-color: rgb(255 91 110 / 42%);
 }
 
 .inlineLink {

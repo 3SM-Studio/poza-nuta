@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,7 +11,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getDashboardOrganizationPath } from "@/lib/dashboard-routes";
+import {
+  getDashboardNewOrganizationPath,
+  getDashboardOrganizationPath,
+} from "@/lib/dashboard-routes";
 
 import styles from "../../../components/operator/operator.module.css";
 import { listDashboardOrganizationsForAuthUser } from "../../../server/operator-api/organizations";
@@ -33,51 +37,63 @@ export default async function DashboardOrganizationsPage() {
       <section className={styles.organizationShell}>
         <header className={styles.pageHeader}>
           <div>
-            <h1>Organizacje</h1>
+            <h1>Twoje organizacje</h1>
             <p className={styles.eventMeta}>
-              Workspace’y przypisane do zalogowanego operatora.
+              Wybierz organizację, którą chcesz teraz zarządzać.
             </p>
           </div>
+          {organizations.length > 0 ? (
+            <Button asChild>
+              <Link href={getDashboardNewOrganizationPath()}>
+                Create organization
+              </Link>
+            </Button>
+          ) : null}
         </header>
 
         {organizations.length > 0 ? (
-          <div className={styles.organizationGrid}>
+          <div className={styles.organizationList}>
             {organizations.map((organization) => (
               <Card key={organization.id}>
                 <CardHeader>
                   <CardTitle>{organization.name}</CardTitle>
-                  <CardDescription>ID: {organization.publicId}</CardDescription>
+                  <CardDescription className={styles.breakValue}>
+                    public_id: {organization.publicId}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Badge variant="secondary">{formatRole(organization.role)}</Badge>
                 </CardContent>
                 <CardFooter>
-                  <Link
-                    className={styles.inlineLink}
-                    href={getDashboardOrganizationPath(organization.publicId)}
-                  >
-                    Otwórz organizację
-                  </Link>
+                  <Button variant="outline" asChild>
+                    <Link
+                      href={getDashboardOrganizationPath(organization.publicId)}
+                    >
+                      Open
+                    </Link>
+                  </Button>
                 </CardFooter>
               </Card>
             ))}
           </div>
         ) : (
-          <Card>
+          <Card className={styles.emptyStateCard}>
             <CardHeader>
-              <CardTitle>Brak przypisanych organizacji</CardTitle>
+              <CardTitle>Nie masz jeszcze organizacji</CardTitle>
               <CardDescription>
-                Konto operatora jest aktywne, ale nie ma aktywnego wpisu w
-                workspace_members.
+                Utwórz organizację, żeby grupować eventy karaoke, zespół i
+                ustawienia.
               </CardDescription>
             </CardHeader>
+            <CardFooter>
+              <Button asChild>
+                <Link href={getDashboardNewOrganizationPath()}>
+                  Create organization
+                </Link>
+              </Button>
+            </CardFooter>
           </Card>
         )}
-        <p className={styles.eventMeta}>
-          <Link className={styles.inlineLink} href="/dashboard/organizations/new">
-            Utwórz nową organizację
-          </Link>
-        </p>
       </section>
     </main>
   );
