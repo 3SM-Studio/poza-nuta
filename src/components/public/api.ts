@@ -37,6 +37,14 @@ export type PublicQueueResponse = {
   items: PublicQueueItem[];
 };
 
+type DashboardMeResponse = {
+  operator: {
+    id: number;
+    name: string;
+    active: true;
+  };
+};
+
 type ApiErrorBody = {
   error?: {
     code?: string;
@@ -85,6 +93,16 @@ export function createPublicRequest(input: {
 
 export function getPublicQueue() {
   return requestJson<PublicQueueResponse>("/api/public/queue");
+}
+
+export async function getDashboardEntryStatus() {
+  try {
+    await requestJson<DashboardMeResponse>("/api/dashboard/me");
+
+    return { canEnterDashboard: true };
+  } catch {
+    return { canEnterDashboard: false };
+  }
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {

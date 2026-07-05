@@ -18,6 +18,10 @@
   margin-bottom: 1rem;
 }
 
+.publicHeader {
+  text-align: center;
+}
+
 .publicHeader h1,
 .queueHeader h1 {
   margin: 0;
@@ -26,17 +30,52 @@
   letter-spacing: -0.045em;
 }
 
-.publicHeader p:last-child {
+.publicHeader p {
   margin: 0.5rem 0 0;
   color: var(--text-secondary);
+}
+
+.dashboardEntryLink {
+  display: inline-flex;
+  min-height: 2.75rem;
+  margin-top: 0.9rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent-soft-border);
+  border-radius: 0.6rem;
+  background: var(--accent-soft);
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-weight: 750;
+  padding: 0.7rem 0.95rem;
+  text-decoration: none;
+}
+
+.dashboardEntryLink:hover {
+  border-color: var(--primary);
+  background: var(--surface-3);
+  color: var(--primary-hover);
+}
+
+.dashboardEntryLink:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+  outline-offset: 2px;
 }
 
 .brand {
   display: inline-flex;
   width: fit-content;
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.85rem;
   align-items: center;
   line-height: 0;
+}
+
+.publicHeader .brand {
+  display: flex;
+  margin-right: auto;
+  margin-left: auto;
+  justify-content: center;
 }
 
 .brand:focus-visible {
@@ -48,7 +87,7 @@
 .brandLogo {
   display: block;
   width: auto;
-  height: clamp(1.75rem, 7vw, 2.25rem);
+  height: clamp(3rem, 13vw, 3.75rem);
   object-fit: contain;
 }
 
@@ -73,6 +112,34 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.queueHeader > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.queueHeader .brand {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.queueHeader h1 {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.queueHeader h1::before {
+  display: block;
+  width: 1px;
+  height: 1.75rem;
+  margin-right: 0.75rem;
+  background: var(--border);
+  content: "";
 }
 
 .sectionHeading h2 {
@@ -425,6 +492,14 @@
     padding: 2rem;
   }
 
+  .brand {
+    margin-bottom: 1rem;
+  }
+
+  .brandLogo {
+    height: 4.75rem;
+  }
+
   .publicSection {
     padding: 1.25rem;
   }
@@ -448,8 +523,18 @@
     flex-direction: column;
   }
 
+  .queueHeader > div {
+    width: 100%;
+  }
+
   .queueHeader .secondaryButton {
     width: 100%;
+  }
+}
+
+@media (min-width: 1024px) {
+  .brandLogo {
+    height: 6rem;
   }
 }
 

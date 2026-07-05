@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import {
   createPublicRequest,
+  getDashboardEntryStatus,
   getPublicEvent,
   PublicClientError,
   type PublicEvent,
@@ -30,6 +31,7 @@ export function PublicRequestPage() {
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [eventError, setEventError] = useState<string | null>(null);
   const [isEventLoading, setIsEventLoading] = useState(true);
+  const [canEnterDashboard, setCanEnterDashboard] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PublicSong[]>([]);
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
@@ -43,6 +45,14 @@ export function PublicRequestPage() {
 
   useEffect(() => {
     let active = true;
+
+    async function loadDashboardEntryStatus() {
+      const status = await getDashboardEntryStatus();
+
+      if (active) {
+        setCanEnterDashboard(status.canEnterDashboard);
+      }
+    }
 
     async function loadEvent() {
       try {
@@ -67,6 +77,7 @@ export function PublicRequestPage() {
       }
     }
 
+    void loadDashboardEntryStatus();
     void loadEvent();
 
     return () => {
@@ -161,6 +172,11 @@ export function PublicRequestPage() {
           </Link>
           <h1>{event?.name ?? "Karaoke"}</h1>
           {event?.venue ? <p>{event.venue}</p> : null}
+          {canEnterDashboard ? (
+            <Link href="/dashboard" className={styles.dashboardEntryLink}>
+              Przejdź do dashboardu
+            </Link>
+          ) : null}
         </header>
 
         {isEventLoading ? (
