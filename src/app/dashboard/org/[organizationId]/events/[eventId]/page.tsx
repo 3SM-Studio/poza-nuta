@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { EventManagementPanel } from "@/components/operator/event-management-panel";
 import type { EventManagementActionState } from "@/components/operator/event-management-panel";
+import { EventSessionLinkPanel } from "@/components/operator/event-session-link-panel";
+import type { EventSessionLinkActionState } from "@/components/operator/event-session-link-panel";
 import styles from "@/components/operator/operator.module.css";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +35,8 @@ import {
   canManageDashboardOrganizationEvent,
   closeDashboardOrganizationEventForAuthUser,
   extendDashboardOrganizationEventForAuthUser,
-  getDashboardOrganizationEventForAuthUser,
+  generateDashboardOrganizationEventSessionLinkForAuthUser,
+  getDashboardOrganizationEventSessionLinkForAuthUser,
   updateDashboardOrganizationEventDetailsForAuthUser,
 } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
@@ -75,7 +79,7 @@ export default async function OrganizationEventDetailPage({
   }
 
   const session = await requireOperatorSession();
-  const result = await getDashboardOrganizationEventForAuthUser({
+  const result = await getDashboardOrganizationEventSessionLinkForAuthUser({
     authUserId: session.authUser.id,
     organizationId,
     eventId: eventIdValidation.data,
@@ -168,38 +172,45 @@ export default async function OrganizationEventDetailPage({
                   <dt>Publiczna kolejka</dt>
                   <dd>{result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
                 </div>
+                <div>
+                  <dt>Facebook</dt>
+                  <dd>
+                    {result.event.facebookUrl ? (
+                      <a
+                        className={styles.inlineLink}
+                        href={result.event.facebookUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Otwórz wydarzenie
+                      </a>
+                    ) : (
+                      "Nie ustawiono"
+                    )}
+                  </dd>
+                </div>
               </dl>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Link sesji</CardTitle>
-              <CardDescription>
-                Link sesji zostanie dodany w kolejnym etapie.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {result.event.facebookUrl ? (
-                <p className={styles.eventMeta}>
-                  Facebook:{" "}
-                  <a
-                    className={styles.inlineLink}
-                    href={result.event.facebookUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Otwórz wydarzenie na Facebooku
-                  </a>
-                </p>
-              ) : (
-                <p className={styles.eventMeta}>
-                  Facebook URL nie został ustawiony.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
+          <EventSessionLinkPanel
+            canManage={roleCanManage}
+            activeLink={
+              result.sessionLink
+                ? {
+                    createdAt: result.sessionLink.createdAt.toISOString(),
+                    lastUsedAt:
+                      result.sessionLink.lastUsedAt?.toISOString() ?? null,
+                    useCount: result.sessionLink.useCount,
+                  }
+                : null
+            }
+            action={generateSessionLink.bind(
+              null,
+              result.organization.publicId,
+              result.event.id,
+            )}
+          />
           <EventManagementPanel
             canManage={canManage}
             manageBlockedReason={getManageBlockedReason({
@@ -359,6 +370,59 @@ async function closeEvent(
   }
 }
 
+async function generateSessionLink(
+  organizationId: string,
+  eventId: number,
+  _state: EventSessionLinkActionState,
+  _formData: FormData,
+): Promise<EventSessionLinkActionState> {
+  "use server";
+
+  const session = await requireOperatorSession();
+
+  try {
+    const result =
+      await generateDashboardOrganizationEventSessionLinkForAuthUser({
+        authUserId: session.authUser.id,
+        organizationId,
+        eventId,
+      });
+    const eventPath = getDashboardOrganizationEventPath(
+      result.organization.publicId,
+      result.event.id,
+    );
+
+    revalidatePath(eventPath);
+
+    return {
+      success: true,
+      message:
+        "Link sesji został wygenerowany. Poprzedni aktywny link, jeśli istniał, został unieważniony.",
+      sessionUrl: await buildSessionUrl(result.sessionPath),
+    };
+  } catch (error) {
+    if (error instanceof OperatorApiError) {
+      if (error.status === 403) {
+        return {
+          success: false,
+          message: "Nie masz uprawnień do generowania linku sesji.",
+          sessionUrl: null,
+        };
+      }
+
+      if (error.status === 404) {
+        return {
+          success: false,
+          message: "Nie znaleziono wydarzenia albo organizacji.",
+          sessionUrl: null,
+        };
+      }
+    }
+
+    throw error;
+  }
+}
+
 function mapEventManagementActionError(
   error: unknown,
 ): EventManagementActionState {
@@ -467,6 +531,23 @@ function getActionMessage(value: string | string[] | undefined) {
     default:
       return null;
   }
+}
+
+async function buildSessionUrl(sessionPath: string) {
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
+
+  if (!host) {
+    return sessionPath;
+  }
+
+  const protocol =
+    headerList.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") || host.startsWith("127.0.0.1")
+      ? "http"
+      : "https");
+
+  return `${protocol}://${host}${sessionPath}`;
 }
 
 function formatDateTime(date: Date | null) {

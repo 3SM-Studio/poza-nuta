@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -19,6 +20,8 @@ test("event access codes have a stable URL-safe format and high entropy", () => 
 
   for (const code of codes) {
     assert.match(code, /^[A-Za-z0-9_-]{32}$/);
+    assert.ok(code.length >= 16);
+    assert.doesNotMatch(code, /^\d{6}$/);
     assert.equal(Buffer.from(code, "base64url").length, 24);
   }
 });
@@ -32,6 +35,22 @@ test("event access code hashing is deterministic and hides plaintext", () => {
   assert.equal(hash.includes(code), false);
   assert.match(hash, /^[A-Za-z0-9_-]{43}$/);
   assert.notEqual(hashEventAccessCode(generateEventAccessCode()), hash);
+});
+
+test("event access links are stored hash-only in the schema", () => {
+  const migrationSource = readFileSync(
+    new URL("../drizzle/0003_event_access_links.sql", import.meta.url),
+    "utf8",
+  );
+  const schemaSource = readFileSync(
+    new URL("../src/db/schema.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(migrationSource, /"code_hash" text NOT NULL/);
+  assert.doesNotMatch(migrationSource, /"code"\s+text/i);
+  assert.match(schemaSource, /codeHash: text\("code_hash"\)\.notNull\(\)/);
+  assert.doesNotMatch(schemaSource, /code: text\("code"\)/);
 });
 
 test("event access link labels are normalized and validated", () => {

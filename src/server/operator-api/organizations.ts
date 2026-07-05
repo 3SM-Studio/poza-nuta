@@ -1,9 +1,10 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq, ne, or } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or } from "drizzle-orm";
 
 import {
+  eventAccessLinks,
   events,
   operatorAuditLog,
   operatorUsers,
@@ -24,6 +25,10 @@ import {
   calculateDashboardEventExtendedAutoCloseAt,
   canManageDashboardEventLifecycle,
 } from "../../lib/dashboard-event-lifecycle";
+import {
+  generateEventAccessCode,
+  hashEventAccessCode,
+} from "./crypto";
 import { OperatorApiError } from "./errors";
 import type {
   CreateDashboardEventInput,
@@ -61,6 +66,18 @@ export type DashboardOrganizationEvent = {
   closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type DashboardOrganizationEventSessionLink = {
+  id: number;
+  eventId: number;
+  label: string | null;
+  active: boolean;
+  createdAt: Date;
+  revokedAt: Date | null;
+  lastUsedAt: Date | null;
+  useCount: number;
+  createdByOperatorId: number | null;
 };
 
 export type DashboardOrganizationMember = {
@@ -103,6 +120,18 @@ const dashboardEventSelection = {
   closedAt: events.closedAt,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
+};
+
+const dashboardEventSessionLinkSelection = {
+  id: eventAccessLinks.id,
+  eventId: eventAccessLinks.eventId,
+  label: eventAccessLinks.label,
+  active: eventAccessLinks.active,
+  createdAt: eventAccessLinks.createdAt,
+  revokedAt: eventAccessLinks.revokedAt,
+  lastUsedAt: eventAccessLinks.lastUsedAt,
+  useCount: eventAccessLinks.useCount,
+  createdByOperatorId: eventAccessLinks.createdByOperatorId,
 };
 
 const ownerOrganizationSelection = {
@@ -239,6 +268,116 @@ export async function getDashboardOrganizationEventForAuthUser(input: {
     organization,
     event,
   };
+}
+
+export async function getDashboardOrganizationEventSessionLinkForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+}) {
+  const result = await getDashboardOrganizationEventForAuthUser(input);
+
+  if (!result) {
+    return null;
+  }
+
+  const [link] = await getDb()
+    .select(dashboardEventSessionLinkSelection)
+    .from(eventAccessLinks)
+    .where(
+      and(
+        eq(eventAccessLinks.eventId, result.event.id),
+        eq(eventAccessLinks.active, true),
+        isNull(eventAccessLinks.revokedAt),
+      ),
+    )
+    .orderBy(desc(eventAccessLinks.createdAt), desc(eventAccessLinks.id))
+    .limit(1);
+
+  return {
+    ...result,
+    sessionLink: link ?? null,
+  };
+}
+
+export async function generateDashboardOrganizationEventSessionLinkForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+}) {
+  return getDb().transaction(async (transaction) => {
+    const { organization, event } =
+      await requireEventManagerOrganizationEventInTransaction(
+        transaction,
+        input.authUserId,
+        input.organizationId,
+        input.eventId,
+      );
+    const now = new Date();
+    const code = generateEventAccessCode();
+    const codeHash = hashEventAccessCode(code);
+
+    const activeLinks = await transaction
+      .select({ id: eventAccessLinks.id })
+      .from(eventAccessLinks)
+      .where(
+        and(
+          eq(eventAccessLinks.eventId, event.id),
+          eq(eventAccessLinks.active, true),
+          isNull(eventAccessLinks.revokedAt),
+        ),
+      )
+      .for("update");
+
+    if (activeLinks.length > 0) {
+      await transaction
+        .update(eventAccessLinks)
+        .set({
+          active: false,
+          revokedAt: now,
+        })
+        .where(
+          and(
+            eq(eventAccessLinks.eventId, event.id),
+            eq(eventAccessLinks.active, true),
+            isNull(eventAccessLinks.revokedAt),
+          ),
+        );
+    }
+
+    const [link] = await transaction
+      .insert(eventAccessLinks)
+      .values({
+        eventId: event.id,
+        codeHash,
+        label: "Link sesji",
+        createdByOperatorId: organization.operatorId,
+      })
+      .returning(dashboardEventSessionLinkSelection);
+
+    if (!link) {
+      throw new Error("Session link could not be created.");
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "generate_event_session_link",
+      entityId: String(link.id),
+      payload: {
+        active: link.active,
+        revokedPreviousLinks: activeLinks.length,
+      },
+    });
+
+    return {
+      organization,
+      event,
+      link,
+      code,
+      sessionPath: `/session/${encodeURIComponent(code)}`,
+    };
+  });
 }
 
 export async function createDashboardOrganizationEventForAuthUser(input: {

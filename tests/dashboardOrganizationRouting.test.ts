@@ -869,7 +869,11 @@ test("organization events support owner and manager create flow", () => {
   assert.match(newPageSource, /formData\.has\("publicShowSongTitles"\)/);
   assert.match(newPageSource, /formData\.has\("isActivePublicEvent"\)/);
   assert.match(newPageSource, /redirect\(/);
-  assert.match(detailPageSource, /Link sesji zostanie dodany w kolejnym etapie/);
+  assert.match(detailPageSource, /EventSessionLinkPanel/);
+  assert.match(
+    detailPageSource,
+    /generateDashboardOrganizationEventSessionLinkForAuthUser/,
+  );
   assert.match(detailPageSource, /result\.event\.autoCloseAt/);
   assert.match(detailPageSource, /result\.event\.facebookUrl/);
   assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
@@ -916,7 +920,7 @@ test("organization event create persists scheduling and public visibility fields
   assert.match(organizationsSource, /ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS/);
 });
 
-test("organization event detail exposes managed event panel without session routes", () => {
+test("organization event detail exposes managed event and session link panels", () => {
   const detailPageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
     "utf8",
@@ -930,9 +934,11 @@ test("organization event detail exposes managed event panel without session rout
   assert.match(detailPageSource, /areDashboardEventRequestsOpen/);
   assert.match(detailPageSource, /shouldShowDashboardEventClosingWarning/);
   assert.match(detailPageSource, /EventManagementPanel/);
+  assert.match(detailPageSource, /EventSessionLinkPanel/);
   assert.match(detailPageSource, /detailsAction=\{updateEventDetails\.bind/);
   assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
-  assert.match(detailPageSource, /Link sesji zostanie dodany w kolejnym etapie/);
+  assert.match(detailPageSource, /generateSessionLink\.bind/);
+  assert.match(detailPageSource, /buildSessionUrl/);
   assert.match(panelSource, /Wydarzenie kończy się za mniej niż 30 minut/);
   assert.match(panelSource, /name="title"/);
   assert.match(panelSource, /name="venue"/);
@@ -943,7 +949,7 @@ test("organization event detail exposes managed event panel without session rout
   assert.match(panelSource, /name="publicShowSongTitles"/);
   assert.match(panelSource, /name="isActivePublicEvent"/);
   assert.match(panelSource, /Zamknij wydarzenie teraz/);
-  assert.equal(detailPageSource.includes("/session/"), false);
+  assert.match(detailPageSource, /sessionPath/);
 });
 
 test("organization event management is limited to owner and manager roles", () => {
