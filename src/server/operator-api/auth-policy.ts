@@ -104,7 +104,7 @@ type SupabaseAuthErrorLike = {
 };
 
 export type LoginAuthErrorDecision = {
-  status: 401 | 429 | 500;
+  status: 401 | 429 | 503;
   code: "INVALID_CREDENTIALS" | "AUTH_RATE_LIMITED" | "AUTH_SERVICE_ERROR";
   message: string;
 };
@@ -138,7 +138,7 @@ export function mapSupabaseLoginError(
   }
 
   return {
-    status: 500,
+    status: 503,
     code: "AUTH_SERVICE_ERROR",
     message: "Authentication is temporarily unavailable.",
   };

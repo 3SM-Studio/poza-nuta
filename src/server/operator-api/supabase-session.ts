@@ -50,10 +50,6 @@ export async function loginOperator(input: LoginInput) {
   if (error || !data.user || !data.session) {
     const mappedError = mapSupabaseLoginError(error ?? {});
 
-    if (mappedError.status === 500) {
-      throw new Error(mappedError.message);
-    }
-
     throw new OperatorApiError(
       mappedError.status,
       mappedError.code,

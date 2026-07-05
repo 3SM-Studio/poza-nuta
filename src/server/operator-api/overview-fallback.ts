@@ -42,3 +42,20 @@ export async function resolveOptionalOverviewSection<T>(input: {
     };
   }
 }
+
+export function logDashboardOverviewDegraded(input: {
+  routeName: string;
+  sections: string[];
+}) {
+  if (input.sections.length === 0) {
+    return;
+  }
+
+  console.warn(
+    [
+      "dashboard_overview_degraded",
+      `route=${JSON.stringify(input.routeName)}`,
+      `sections=${JSON.stringify(input.sections.join(","))}`,
+    ].join(" "),
+  );
+}

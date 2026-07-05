@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { and, desc, eq } from "drizzle-orm";
 
 import { events, operatorUsers, workspaceMembers, workspaces } from "../../db/schema";
@@ -79,30 +80,30 @@ const ownerOrganizationSelection = {
   role: workspaceMembers.role,
 };
 
-export async function listDashboardOrganizationsForAuthUser(
-  authUserId: string,
-) {
-  return getDb()
-    .select(organizationSelection)
-    .from(workspaces)
-    .innerJoin(
-      workspaceMembers,
-      eq(workspaceMembers.workspaceId, workspaces.id),
-    )
-    .innerJoin(
-      operatorUsers,
-      eq(operatorUsers.id, workspaceMembers.operatorUserId),
-    )
-    .where(
-      and(
-        eq(operatorUsers.authUserId, authUserId),
-        eq(operatorUsers.active, true),
-        eq(workspaceMembers.active, true),
-        eq(workspaces.active, true),
-      ),
-    )
-    .orderBy(workspaces.name, workspaces.publicId);
-}
+export const listDashboardOrganizationsForAuthUser = cache(
+  async (authUserId: string) => {
+    return getDb()
+      .select(organizationSelection)
+      .from(workspaces)
+      .innerJoin(
+        workspaceMembers,
+        eq(workspaceMembers.workspaceId, workspaces.id),
+      )
+      .innerJoin(
+        operatorUsers,
+        eq(operatorUsers.id, workspaceMembers.operatorUserId),
+      )
+      .where(
+        and(
+          eq(operatorUsers.authUserId, authUserId),
+          eq(operatorUsers.active, true),
+          eq(workspaceMembers.active, true),
+          eq(workspaces.active, true),
+        ),
+      )
+      .orderBy(workspaces.name, workspaces.publicId);
+  },
+);
 
 export async function getDashboardOrganizationForAuthUser(
   authUserId: string,

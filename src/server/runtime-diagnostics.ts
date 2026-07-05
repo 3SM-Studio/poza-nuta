@@ -26,6 +26,17 @@ const TRANSIENT_ERROR_CODES = new Set([
   "UND_ERR_CONNECT_TIMEOUT",
 ]);
 
+const INFRASTRUCTURE_TIMEOUT_MESSAGE_PATTERNS = [
+  "canceling statement due to statement timeout",
+  "statement timeout",
+  "connection timed out",
+  "connection timeout",
+  "connect timeout",
+  "timed out fetching a new connection",
+  "timeout acquiring a connection",
+  "pool timeout",
+];
+
 export class ServerStepTimeoutError extends Error {
   readonly code = "UPSTREAM_TIMEOUT";
   readonly routeName: string;
@@ -129,11 +140,8 @@ export function isInfrastructureTimeout(error: unknown) {
 
   const message = getSafeErrorMessage(error).toLowerCase();
 
-  return (
-    message.includes("canceling statement due to statement timeout") ||
-    message.includes("statement timeout") ||
-    message.includes("timeout") ||
-    message.includes("timed out")
+  return INFRASTRUCTURE_TIMEOUT_MESSAGE_PATTERNS.some((pattern) =>
+    message.includes(pattern),
   );
 }
 
@@ -152,7 +160,9 @@ export function isTransientInfrastructureError(error: unknown) {
   return (
     message.includes("connection terminated") ||
     message.includes("connection closed") ||
-    message.includes("connection refused")
+    message.includes("connection refused") ||
+    message === "fetch failed" ||
+    message.includes("network error")
   );
 }
 

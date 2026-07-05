@@ -87,6 +87,10 @@ test("runtime diagnostics classify timeout and Postgres statement timeout errors
     ),
     true,
   );
+  assert.equal(
+    isInfrastructureTimeout(new Error("business timeout window expired")),
+    false,
+  );
   assert.equal(isTransientInfrastructureError(new Error("validation failed")), false);
 });
 

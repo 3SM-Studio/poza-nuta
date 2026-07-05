@@ -65,7 +65,11 @@ test("Supabase login errors are mapped to safe API errors", () => {
     mapSupabaseLoginError({ code: "over_request_rate_limit" }).status,
     429,
   );
-  assert.equal(mapSupabaseLoginError({ status: 503 }).status, 500);
+  assert.deepEqual(mapSupabaseLoginError({ status: 503 }), {
+    status: 503,
+    code: "AUTH_SERVICE_ERROR",
+    message: "Authentication is temporarily unavailable.",
+  });
 });
 
 test("Supabase Auth users must map to an active local operator", () => {
@@ -137,6 +141,17 @@ test("operator session lookup is memoized without routeName as cache key", () =>
   assert.match(source, /SESSION_DB_STEP_TIMEOUT_MS = 4_000/);
   assert.match(source, /"findLinkedOperator"[\s\S]*SESSION_DB_STEP_TIMEOUT_MS/);
   assert.equal(source.includes("getCachedOperatorSession(routeName"), false);
+});
+
+test("dashboard organization list is memoized per request render", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /import \{ cache \} from "react"/);
+  assert.match(source, /export const listDashboardOrganizationsForAuthUser = cache\(/);
+  assert.match(source, /async \(authUserId: string\)/);
 });
 
 test("operator API preserves auth and permission errors before infra fallback", () => {

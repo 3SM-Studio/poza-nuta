@@ -92,6 +92,13 @@ export default async function DashboardOrganizationPage({
           </div>
         </header>
 
+        {overview.partialFailures.counts ? (
+          <p className={styles.eventMeta}>
+            Nie udało się chwilowo wczytać statystyk. Pozostałe sekcje są
+            dostępne.
+          </p>
+        ) : null}
+
         <section className={styles.overviewMetricGrid} aria-label="Statystyki">
           <StatCard label="Aktywne eventy" value={overview.stats.activeEvents} />
           <StatCard label="Wszystkie eventy" value={overview.stats.totalEvents} />
@@ -119,19 +126,30 @@ export default async function DashboardOrganizationPage({
               <div>
                 <CardDescription>Stan kolejki i wydarzenia</CardDescription>
                 <CardTitle>
-                  {overview.activeEvent
-                    ? overview.activeEvent.name
-                    : "Brak aktywnego wydarzenia"}
+                  {overview.partialFailures.activeEvent
+                    ? "Status wydarzenia chwilowo niedostępny"
+                    : overview.activeEvent
+                      ? overview.activeEvent.name
+                      : "Brak aktywnego wydarzenia"}
                 </CardTitle>
               </div>
               <CardAction>
                 <Badge variant={overview.activeEvent ? "default" : "secondary"}>
-                  {overview.activeEvent ? "Aktywne" : "Spoczynek"}
+                  {overview.partialFailures.activeEvent
+                    ? "Niedostępne"
+                    : overview.activeEvent
+                      ? "Aktywne"
+                      : "Spoczynek"}
                 </Badge>
               </CardAction>
             </CardHeader>
             <CardContent>
-              {overview.activeEvent ? (
+              {overview.partialFailures.activeEvent ? (
+                <p className={styles.eventMeta}>
+                  Nie udało się wczytać stanu aktywnego wydarzenia. Pozostałe
+                  dane są dostępne.
+                </p>
+              ) : overview.activeEvent ? (
                 <dl className={styles.eventDetails}>
                   <div>
                     <dt>Miejsce</dt>
@@ -206,7 +224,9 @@ export default async function DashboardOrganizationPage({
 
         <Card className={styles.overviewCard}>
           <CardHeader>
-            <CardDescription>Najczęściej zgłaszane utwory</CardDescription>
+            <CardDescription>
+              Najczęściej zgłaszane utwory - ostatnie 30 dni
+            </CardDescription>
             <CardTitle>Najczęściej zgłaszane piosenki</CardTitle>
           </CardHeader>
           <CardContent>

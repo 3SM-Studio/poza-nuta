@@ -6,9 +6,10 @@ import { events, songs, songRequests, workspaceMembers } from "../../db/schema";
 import { getDb } from "../db";
 import { traceServerStep } from "../runtime-diagnostics";
 import { getDashboardOrganizationForAuthUser } from "./organizations";
-import { resolveOptionalOverviewSection } from "./overview-fallback";
-
-type RequestStatus = "pending" | "approved" | "now" | "done" | "skipped" | "rejected";
+import {
+  logDashboardOverviewDegraded,
+  resolveOptionalOverviewSection,
+} from "./overview-fallback";
 
 export type DashboardOrganizationOverview = {
   organization: NonNullable<
@@ -47,6 +48,8 @@ export type DashboardOrganizationOverview = {
     requestCount: number;
   }>;
   partialFailures: {
+    counts: boolean;
+    activeEvent: boolean;
     recentEvents: boolean;
     topRequestedSongs: boolean;
   };
@@ -54,6 +57,18 @@ export type DashboardOrganizationOverview = {
 
 const countSelection = {
   value: sql<number>`count(*)::int`,
+};
+
+const EMPTY_OVERVIEW_STATS: DashboardOrganizationOverview["stats"] = {
+  activeEvents: 0,
+  totalEvents: 0,
+  requestsToday: 0,
+  requestsLastSevenDays: 0,
+  pendingRequests: 0,
+  acceptedRequests: 0,
+  performedRequests: 0,
+  members: 0,
+  catalogSongs: 0,
 };
 
 export async function getDashboardOrganizationOverviewForAuthUser(
@@ -76,76 +91,23 @@ export async function getDashboardOrganizationOverviewForAuthUser(
   const sevenDaysAgo = new Date(now);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const activeEvents = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.activeEvents",
-    () => countEventsForWorkspace(organization.id, "active"),
-  );
-  const totalEvents = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.totalEvents",
-    () => countEventsForWorkspace(organization.id),
-  );
-  const requestsToday = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.requestsToday",
-    () =>
-      countRequestsForWorkspace({
+  const statsResult = await resolveOptionalOverviewSection({
+    routeName: "dashboard.org",
+    stepName: "overview.counts",
+    action: () =>
+      getOverviewStatsForWorkspace({
         workspaceId: organization.id,
-        createdSince: todayStart,
+        todayStart,
+        sevenDaysAgo,
       }),
-  );
-  const requestsLastSevenDays = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.requestsLastSevenDays",
-    () =>
-      countRequestsForWorkspace({
-        workspaceId: organization.id,
-        createdSince: sevenDaysAgo,
-      }),
-  );
-  const pendingRequests = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.pendingRequests",
-    () =>
-      countRequestsForWorkspace({
-        workspaceId: organization.id,
-        status: "pending",
-      }),
-  );
-  const acceptedRequests = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.acceptedRequests",
-    () =>
-      countRequestsForWorkspace({
-        workspaceId: organization.id,
-        status: "approved",
-      }),
-  );
-  const performedRequests = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.performedRequests",
-    () =>
-      countRequestsForWorkspace({
-        workspaceId: organization.id,
-        status: "done",
-      }),
-  );
-  const memberCount = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.members",
-    () => countMembersForWorkspace(organization.id),
-  );
-  const catalogSongs = await traceServerStep(
-    "dashboard.org",
-    "overview.counts.catalogSongs",
-    () => countCatalogSongs(),
-  );
-  const activeEvent = await traceServerStep(
-    "dashboard.org",
-    "activeEvent",
-    () => getActiveEventForWorkspace(organization.id),
-  );
+    fallback: EMPTY_OVERVIEW_STATS,
+  });
+  const activeEventResult = await resolveOptionalOverviewSection({
+    routeName: "dashboard.org",
+    stepName: "activeEvent",
+    action: () => getActiveEventForWorkspace(organization.id),
+    fallback: null,
+  });
   const recentEventsResult = await resolveOptionalOverviewSection({
     routeName: "dashboard.org",
     stepName: "recentEvents",
@@ -159,70 +121,115 @@ export async function getDashboardOrganizationOverviewForAuthUser(
     fallback: [],
   });
 
+  const stats = statsResult.data;
+  const activeEvent = activeEventResult.data;
   const recentEvents = recentEventsResult.data;
   const topRequestedSongs = topRequestedSongsResult.data;
+  const degradedSections = [
+    statsResult.failed ? "counts" : null,
+    activeEventResult.failed ? "activeEvent" : null,
+    recentEventsResult.failed ? "recentEvents" : null,
+    topRequestedSongsResult.failed ? "topSongs" : null,
+  ].filter((section): section is string => Boolean(section));
+
+  logDashboardOverviewDegraded({
+    routeName: "dashboard.org",
+    sections: degradedSections,
+  });
 
   return {
     organization,
-    stats: {
-      activeEvents,
-      totalEvents,
-      requestsToday,
-      requestsLastSevenDays,
-      pendingRequests,
-      acceptedRequests,
-      performedRequests,
-      members: memberCount,
-      catalogSongs,
-    },
+    stats,
     activeEvent,
     recentEvents,
     topRequestedSongs,
     partialFailures: {
+      counts: statsResult.failed,
+      activeEvent: activeEventResult.failed,
       recentEvents: recentEventsResult.failed,
       topRequestedSongs: topRequestedSongsResult.failed,
     },
   };
 }
 
-async function countEventsForWorkspace(
-  workspaceId: number,
-  status?: "draft" | "active" | "closed",
-) {
-  const [result] = await getDb()
-    .select(countSelection)
-    .from(events)
-    .where(
-      status
-        ? and(eq(events.workspaceId, workspaceId), eq(events.status, status))
-        : eq(events.workspaceId, workspaceId),
-    );
+async function getOverviewStatsForWorkspace(input: {
+  workspaceId: number;
+  todayStart: Date;
+  sevenDaysAgo: Date;
+}): Promise<DashboardOrganizationOverview["stats"]> {
+  const eventStats = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.events",
+    () => countEventStatsForWorkspace(input.workspaceId),
+  );
+  const requestStats = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.requests",
+    () =>
+      countRequestStatsForWorkspace({
+        workspaceId: input.workspaceId,
+        todayStart: input.todayStart,
+        sevenDaysAgo: input.sevenDaysAgo,
+      }),
+  );
+  const members = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.members",
+    () => countMembersForWorkspace(input.workspaceId),
+  );
+  const catalogSongs = await traceServerStep(
+    "dashboard.org",
+    "overview.counts.catalogSongs",
+    () => countCatalogSongs(),
+  );
 
-  return result?.value ?? 0;
+  return {
+    ...eventStats,
+    ...requestStats,
+    members,
+    catalogSongs,
+  };
 }
 
-async function countRequestsForWorkspace(input: {
-  workspaceId: number;
-  status?: RequestStatus;
-  createdSince?: Date;
-}) {
-  const conditions = [eq(events.workspaceId, input.workspaceId)];
-
-  if (input.status) {
-    conditions.push(eq(songRequests.status, input.status));
-  }
-
-  if (input.createdSince) {
-    conditions.push(gte(songRequests.createdAt, input.createdSince));
-  }
-
+async function countEventStatsForWorkspace(workspaceId: number) {
   const [result] = await getDb()
-    .select(countSelection)
+    .select({
+      activeEvents: sql<number>`count(*) filter (where ${events.status} = 'active')::int`,
+      totalEvents: sql<number>`count(*)::int`,
+    })
+    .from(events)
+    .where(eq(events.workspaceId, workspaceId));
+
+  return {
+    activeEvents: result?.activeEvents ?? 0,
+    totalEvents: result?.totalEvents ?? 0,
+  };
+}
+
+async function countRequestStatsForWorkspace(input: {
+  workspaceId: number;
+  todayStart: Date;
+  sevenDaysAgo: Date;
+}) {
+  const [result] = await getDb()
+    .select({
+      requestsToday: sql<number>`count(*) filter (where ${songRequests.createdAt} >= ${input.todayStart})::int`,
+      requestsLastSevenDays: sql<number>`count(*) filter (where ${songRequests.createdAt} >= ${input.sevenDaysAgo})::int`,
+      pendingRequests: sql<number>`count(*) filter (where ${songRequests.status} = 'pending')::int`,
+      acceptedRequests: sql<number>`count(*) filter (where ${songRequests.status} = 'approved')::int`,
+      performedRequests: sql<number>`count(*) filter (where ${songRequests.status} = 'done')::int`,
+    })
     .from(songRequests)
     .innerJoin(events, eq(events.id, songRequests.eventId))
-    .where(and(...conditions));
+    .where(eq(events.workspaceId, input.workspaceId));
 
-  return result?.value ?? 0;
+  return {
+    requestsToday: result?.requestsToday ?? 0,
+    requestsLastSevenDays: result?.requestsLastSevenDays ?? 0,
+    pendingRequests: result?.pendingRequests ?? 0,
+    acceptedRequests: result?.acceptedRequests ?? 0,
+    performedRequests: result?.performedRequests ?? 0,
+  };
 }
 
 async function countMembersForWorkspace(workspaceId: number) {
