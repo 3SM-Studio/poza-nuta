@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import {
   createPublicRequest,
@@ -159,7 +159,7 @@ export function PublicRequestPage() {
         <header className={styles.publicHeader}>
           <Link
             className={styles.brand}
-            href="/"
+            href="/session/od_kzXO48n4zyRr63wkJm-9_cOkSY11Y"
             aria-label="Przejdź na stronę główną"
           >
             <Image
