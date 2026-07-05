@@ -21,6 +21,7 @@ import {
   validateEventSettingsInput,
   validateExtendInput,
   validateStartEventInput,
+  validateUpdateDashboardEventDetailsInput,
   validateUpdateDashboardEventAutoCloseAtInput,
 } from "../src/server/operator-api/validation.ts";
 
@@ -57,12 +58,17 @@ test("dashboard event create defaults close time to start plus six hours", () =>
 test("dashboard event create accepts a custom close time and Facebook URL", () => {
   const result = validateCreateDashboardEventInput({
     title: "Karaoke Night",
+    venue: "Klub Miejski",
     startsAt: "2026-07-05T18:00:00.000Z",
     autoCloseAt: "2026-07-05T23:30:00.000Z",
     facebookUrl: "https://www.facebook.com/events/123",
+    publicQueueEnabled: true,
+    publicShowSongTitles: false,
+    isActivePublicEvent: true,
   });
 
   assert.equal(result.success, true);
+  assert.equal(result.success ? result.data.venue : null, "Klub Miejski");
   assert.equal(
     result.success ? result.data.autoCloseAt.toISOString() : null,
     "2026-07-05T23:30:00.000Z",
@@ -71,6 +77,22 @@ test("dashboard event create accepts a custom close time and Facebook URL", () =
     result.success ? result.data.facebookUrl : null,
     "https://www.facebook.com/events/123",
   );
+  assert.equal(result.success ? result.data.publicQueueEnabled : null, true);
+  assert.equal(result.success ? result.data.publicShowSongTitles : null, false);
+  assert.equal(result.success ? result.data.isActivePublicEvent : null, true);
+});
+
+test("dashboard event create defaults public queue flags conservatively", () => {
+  const result = validateCreateDashboardEventInput({
+    title: "Karaoke Night",
+    startsAt: "2026-07-05T18:00:00.000Z",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.success ? result.data.venue : null, null);
+  assert.equal(result.success ? result.data.publicQueueEnabled : null, false);
+  assert.equal(result.success ? result.data.publicShowSongTitles : null, true);
+  assert.equal(result.success ? result.data.isActivePublicEvent : null, false);
 });
 
 test("dashboard event create rejects close time before start", () => {
@@ -232,6 +254,45 @@ test("dashboard managed event validation rejects close time before start", () =>
     },
     startsAt,
   );
+
+  assert.equal(result.success, false);
+  assert.deepEqual(
+    result.success ? [] : result.issues.map((issue) => issue.field),
+    ["autoCloseAt"],
+  );
+});
+
+test("dashboard managed event details allow editing start before close", () => {
+  const result = validateUpdateDashboardEventDetailsInput({
+    title: "  Nowa nazwa  ",
+    venue: "  Klub  ",
+    startsAt: "2026-07-05T19:00:00.000Z",
+    autoCloseAt: "2026-07-06T01:00:00.000Z",
+    facebookUrl: "",
+    publicQueueEnabled: true,
+    publicShowSongTitles: true,
+    isActivePublicEvent: false,
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.success ? result.data.title : null, "Nowa nazwa");
+  assert.equal(result.success ? result.data.venue : null, "Klub");
+  assert.equal(
+    result.success ? result.data.startsAt.toISOString() : null,
+    "2026-07-05T19:00:00.000Z",
+  );
+  assert.equal(
+    result.success ? result.data.autoCloseAt.toISOString() : null,
+    "2026-07-06T01:00:00.000Z",
+  );
+});
+
+test("dashboard managed event details reject auto_close_at before starts_at", () => {
+  const result = validateUpdateDashboardEventDetailsInput({
+    title: "Karaoke Night",
+    startsAt: "2026-07-05T19:00:00.000Z",
+    autoCloseAt: "2026-07-05T18:59:59.999Z",
+  });
 
   assert.equal(result.success, false);
   assert.deepEqual(

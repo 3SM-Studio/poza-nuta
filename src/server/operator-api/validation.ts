@@ -28,9 +28,24 @@ export type StartEventInput = {
 
 export type CreateDashboardEventInput = {
   title: string;
+  venue: string | null;
   startsAt: Date;
   autoCloseAt: Date;
   facebookUrl: string | null;
+  publicQueueEnabled: boolean;
+  publicShowSongTitles: boolean;
+  isActivePublicEvent: boolean;
+};
+
+export type UpdateDashboardEventDetailsInput = {
+  title: string;
+  venue: string | null;
+  startsAt: Date;
+  autoCloseAt: Date;
+  facebookUrl: string | null;
+  publicQueueEnabled: boolean;
+  publicShowSongTitles: boolean;
+  isActivePublicEvent: boolean;
 };
 
 export type UpdateDashboardEventAutoCloseAtInput = {
@@ -278,8 +293,26 @@ export function validateCreateDashboardEventInput(
     return invalidBodyResult();
   }
 
+  return validateDashboardEventDetailsInput(input);
+}
+
+export function validateUpdateDashboardEventDetailsInput(
+  input: unknown,
+): ValidationResult<UpdateDashboardEventDetailsInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  return validateDashboardEventDetailsInput(input);
+}
+
+function validateDashboardEventDetailsInput(
+  input: Record<string, unknown>,
+): ValidationResult<CreateDashboardEventInput> {
   const issues: ValidationIssue[] = [];
   const title = typeof input.title === "string" ? input.title.trim() : "";
+  const venue =
+    typeof input.venue === "string" ? input.venue.trim() || null : null;
   const startsAt = parseDateTimeInput(input.startsAt, "startsAt", issues);
   const requestedAutoCloseAt = parseOptionalDateTimeInput(
     input.autoCloseAt,
@@ -298,6 +331,22 @@ export function validateCreateDashboardEventInput(
     issues.push({
       field: "title",
       message: `title must contain at most ${MAX_EVENT_NAME_LENGTH} characters.`,
+    });
+  }
+
+  if (
+    input.venue !== undefined &&
+    input.venue !== null &&
+    typeof input.venue !== "string"
+  ) {
+    issues.push({
+      field: "venue",
+      message: "venue must be a string or null.",
+    });
+  } else if (venue && venue.length > MAX_EVENT_VENUE_LENGTH) {
+    issues.push({
+      field: "venue",
+      message: `venue must contain at most ${MAX_EVENT_VENUE_LENGTH} characters.`,
     });
   }
 
@@ -327,9 +376,13 @@ export function validateCreateDashboardEventInput(
     success: true,
     data: {
       title,
+      venue,
       startsAt,
       autoCloseAt,
       facebookUrl,
+      publicQueueEnabled: parseBooleanInput(input.publicQueueEnabled, false),
+      publicShowSongTitles: parseBooleanInput(input.publicShowSongTitles, true),
+      isActivePublicEvent: parseBooleanInput(input.isActivePublicEvent, false),
     },
   };
 }
@@ -534,6 +587,18 @@ function parseOptionalUrlInput(
     issues.push({ field, message: `${field} must be a valid URL.` });
     return null;
   }
+}
+
+function parseBooleanInput(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  return value === "on" || value === "true" || value === "1";
 }
 
 function validateEventNameAndVenue(input: Record<string, unknown>) {

@@ -30,6 +30,17 @@ export type EventManagementAction = (
   formData: FormData,
 ) => Promise<EventManagementActionState>;
 
+export type EventManagementInitialValues = {
+  title: string;
+  venue: string;
+  startsAtInputValue: string;
+  autoCloseAtInputValue: string;
+  facebookUrl: string;
+  publicQueueEnabled: boolean;
+  publicShowSongTitles: boolean;
+  isActivePublicEvent: boolean;
+};
+
 const initialState: EventManagementActionState = {
   issues: [],
   message: null,
@@ -38,22 +49,22 @@ const initialState: EventManagementActionState = {
 export function EventManagementPanel({
   canManage,
   manageBlockedReason,
-  autoCloseAtInputValue,
+  initialValues,
   showClosingWarning,
-  updateAutoCloseAtAction,
+  detailsAction,
   extendAction,
   closeAction,
 }: {
   canManage: boolean;
   manageBlockedReason: string;
-  autoCloseAtInputValue: string;
+  initialValues: EventManagementInitialValues;
   showClosingWarning: boolean;
-  updateAutoCloseAtAction: EventManagementAction;
+  detailsAction: EventManagementAction;
   extendAction: EventManagementAction;
   closeAction: EventManagementAction;
 }) {
-  const [updateState, updateFormAction, isUpdating] = useActionState(
-    updateAutoCloseAtAction,
+  const [detailsState, detailsFormAction, isSavingDetails] = useActionState(
+    detailsAction,
     initialState,
   );
   const [extendState, extendFormAction, isExtending] = useActionState(
@@ -93,32 +104,133 @@ export function EventManagementPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle>Czas zamknięcia</CardTitle>
+          <CardTitle>Szczegóły i widoczność</CardTitle>
           <CardDescription>
-            Zmieniasz moment, po którym wydarzenie przestaje przyjmować
-            zgłoszenia.
+            Te ustawienia kontrolują harmonogram wydarzenia oraz to, czy jest
+            ono używane przez publiczny widok kolejki.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={styles.settingsForm} action={updateFormAction}>
-            <ActionMessage state={updateState} />
+          <form className={styles.settingsForm} action={detailsFormAction}>
+            <ActionMessage state={detailsState} />
+
+            <div className={styles.dashboardField}>
+              <label htmlFor="event-manage-title">Nazwa wydarzenia</label>
+              <input
+                id="event-manage-title"
+                name="title"
+                type="text"
+                required
+                maxLength={120}
+                defaultValue={initialValues.title}
+                aria-invalid={hasIssue(detailsState, "title") || undefined}
+              />
+              <FieldIssue state={detailsState} field="title" />
+            </div>
+
+            <div className={styles.dashboardField}>
+              <label htmlFor="event-manage-venue">Miejsce</label>
+              <input
+                id="event-manage-venue"
+                name="venue"
+                type="text"
+                maxLength={120}
+                defaultValue={initialValues.venue}
+                aria-invalid={hasIssue(detailsState, "venue") || undefined}
+              />
+              <FieldIssue state={detailsState} field="venue" />
+            </div>
+
+            <div className={styles.dashboardField}>
+              <label htmlFor="event-manage-starts-at">Start wydarzenia</label>
+              <input
+                id="event-manage-starts-at"
+                name="startsAt"
+                type="datetime-local"
+                required
+                defaultValue={initialValues.startsAtInputValue}
+                aria-invalid={hasIssue(detailsState, "startsAt") || undefined}
+              />
+              <FieldIssue state={detailsState} field="startsAt" />
+            </div>
+
             <div className={styles.dashboardField}>
               <label htmlFor="event-manage-auto-close-at">
-                Nowy czas zamknięcia
+                Czas zamknięcia
               </label>
               <input
                 id="event-manage-auto-close-at"
                 name="autoCloseAt"
                 type="datetime-local"
-                required
-                defaultValue={autoCloseAtInputValue}
-                aria-invalid={hasIssue(updateState, "autoCloseAt") || undefined}
+                defaultValue={initialValues.autoCloseAtInputValue}
+                aria-invalid={hasIssue(detailsState, "autoCloseAt") || undefined}
               />
-              <FieldIssue state={updateState} field="autoCloseAt" />
+              <p className={styles.eventMeta}>
+                Jeśli zostawisz puste, czas zamknięcia zostanie ustawiony na 6
+                godzin po starcie.
+              </p>
+              <FieldIssue state={detailsState} field="autoCloseAt" />
             </div>
+
+            <div className={styles.dashboardField}>
+              <label htmlFor="event-manage-facebook-url">Facebook URL</label>
+              <input
+                id="event-manage-facebook-url"
+                name="facebookUrl"
+                type="url"
+                defaultValue={initialValues.facebookUrl}
+                placeholder="https://www.facebook.com/events/..."
+                aria-invalid={hasIssue(detailsState, "facebookUrl") || undefined}
+              />
+              <FieldIssue state={detailsState} field="facebookUrl" />
+            </div>
+
+            <div className={styles.formSection}>
+              <h2>Widoczność i kolejka publiczna</h2>
+              <label className={styles.checkboxField}>
+                <input
+                  name="publicQueueEnabled"
+                  type="checkbox"
+                  defaultChecked={initialValues.publicQueueEnabled}
+                />
+                <span>Publiczna kolejka włączona</span>
+              </label>
+              <p className={styles.eventMeta}>
+                Decyduje, czy ludzie mogą korzystać z publicznego widoku kolejki
+                dla tego wydarzenia.
+              </p>
+
+              <label className={styles.checkboxField}>
+                <input
+                  name="publicShowSongTitles"
+                  type="checkbox"
+                  defaultChecked={initialValues.publicShowSongTitles}
+                />
+                <span>Pokazuj tytuły piosenek publicznie</span>
+              </label>
+              <p className={styles.eventMeta}>
+                Decyduje, czy publicznie widać tytuły zgłoszeń, czy tylko osoby
+                i statusy.
+              </p>
+
+              <label className={styles.checkboxField}>
+                <input
+                  name="isActivePublicEvent"
+                  type="checkbox"
+                  defaultChecked={initialValues.isActivePublicEvent}
+                />
+                <span>Event aktywny publicznie</span>
+              </label>
+              <p className={styles.eventMeta}>
+                Ten event jest używany przez publiczny widok /queue. Organizacja
+                może mieć tylko jeden aktywny publicznie event.
+              </p>
+              <FieldIssue state={detailsState} field="isActivePublicEvent" />
+            </div>
+
             <div className={styles.formActions}>
-              <Button type="submit" disabled={isUpdating}>
-                {isUpdating ? "Zapisywanie..." : "Zapisz czas zamknięcia"}
+              <Button type="submit" disabled={isSavingDetails}>
+                {isSavingDetails ? "Zapisywanie..." : "Zapisz szczegóły"}
               </Button>
             </div>
           </form>

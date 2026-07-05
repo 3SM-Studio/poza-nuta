@@ -99,7 +99,27 @@ test("public active event API uses a read-only lookup path", () => {
   );
   assert.equal(readOnlySource.includes(".transaction("), false);
   assert.equal(readOnlySource.includes(".update("), false);
+  assert.match(readOnlySource, /lte\(events\.startsAt, now\)/);
   assert.match(readOnlySource, /gt\(events\.autoCloseAt, now\)/);
+});
+
+test("public queue respects queue visibility before loading items", () => {
+  const publicServiceSource = readFileSync(
+    new URL("../src/server/public-api/service.ts", import.meta.url),
+    "utf8",
+  );
+  const queueStart = publicServiceSource.indexOf(
+    "export async function getPublicQueue",
+  );
+  const queueEnd = publicServiceSource.indexOf("function escapeLikePattern");
+  const queueSource = publicServiceSource.slice(queueStart, queueEnd);
+  const disabledBranchStart = queueSource.indexOf("if (!event.publicQueueEnabled)");
+  const firstQueueItemsStart = queueSource.indexOf("queueItems");
+
+  assert.ok(disabledBranchStart >= 0);
+  assert.ok(firstQueueItemsStart > disabledBranchStart);
+  assert.match(queueSource, /enabled: false as const/);
+  assert.match(queueSource, /showSongTitles: event\.publicShowSongTitles/);
 });
 
 test("public API response returns JSON 503 for Postgres statement timeout", async () => {

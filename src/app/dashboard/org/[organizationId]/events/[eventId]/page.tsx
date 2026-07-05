@@ -24,6 +24,7 @@ import {
 } from "@/lib/dashboard-event-lifecycle";
 import {
   getDashboardOrganizationEventPath,
+  getDashboardOrganizationEventQueuePath,
   getDashboardOrganizationEventsPath,
 } from "@/lib/dashboard-routes";
 import { OperatorApiError } from "@/server/operator-api/errors";
@@ -32,13 +33,13 @@ import {
   closeDashboardOrganizationEventForAuthUser,
   extendDashboardOrganizationEventForAuthUser,
   getDashboardOrganizationEventForAuthUser,
-  updateDashboardOrganizationEventAutoCloseAtForAuthUser,
+  updateDashboardOrganizationEventDetailsForAuthUser,
 } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 import {
   validateEventId,
   validateExtendDashboardEventInput,
-  validateUpdateDashboardEventAutoCloseAtInput,
+  validateUpdateDashboardEventDetailsInput,
 } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
@@ -55,7 +56,7 @@ type OrganizationEventDetailPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type EventAction = "close-time-updated" | "extended" | "closed";
+type EventAction = "details-updated" | "extended" | "closed";
 
 const emptyActionState: EventManagementActionState = {
   issues: [],
@@ -98,6 +99,10 @@ export default async function OrganizationEventDetailPage({
   const eventsPath = getDashboardOrganizationEventsPath(
     result.organization.publicId,
   );
+  const queuePath = getDashboardOrganizationEventQueuePath(
+    result.organization.publicId,
+    result.event.id,
+  );
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const actionMessage = getActionMessage(resolvedSearchParams.eventAction);
 
@@ -113,6 +118,9 @@ export default async function OrganizationEventDetailPage({
             <Badge variant={getLifecycleStatusBadgeVariant(lifecycleStatus)}>
               {formatLifecycleStatus(lifecycleStatus)}
             </Badge>
+            <Button asChild>
+              <Link href={queuePath}>Zarządzaj kolejką</Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link href={eventsPath}>Wróć do eventów</Link>
             </Button>
@@ -198,18 +206,28 @@ export default async function OrganizationEventDetailPage({
               roleCanManage,
               lifecycleStatus,
             })}
-            autoCloseAtInputValue={formatDateTimeLocalInput(
-              result.event.autoCloseAt,
-            )}
+            initialValues={{
+              title: result.event.name,
+              venue: result.event.venue ?? "",
+              startsAtInputValue: formatDateTimeLocalInput(
+                result.event.startsAt,
+              ),
+              autoCloseAtInputValue: formatDateTimeLocalInput(
+                result.event.autoCloseAt,
+              ),
+              facebookUrl: result.event.facebookUrl ?? "",
+              publicQueueEnabled: result.event.publicQueueEnabled,
+              publicShowSongTitles: result.event.publicShowSongTitles,
+              isActivePublicEvent: result.event.isActivePublicEvent,
+            }}
             showClosingWarning={shouldShowDashboardEventClosingWarning(
               result.event,
               now,
             )}
-            updateAutoCloseAtAction={updateEventAutoCloseAt.bind(
+            detailsAction={updateEventDetails.bind(
               null,
               result.organization.publicId,
               result.event.id,
-              result.event.startsAt.toISOString(),
             )}
             extendAction={extendEvent.bind(
               null,
@@ -228,33 +246,36 @@ export default async function OrganizationEventDetailPage({
   );
 }
 
-async function updateEventAutoCloseAt(
+async function updateEventDetails(
   organizationId: string,
   eventId: number,
-  startsAtIso: string,
   _state: EventManagementActionState,
   formData: FormData,
 ): Promise<EventManagementActionState> {
   "use server";
 
-  const validation = validateUpdateDashboardEventAutoCloseAtInput(
-    {
-      autoCloseAt: formData.get("autoCloseAt"),
-    },
-    new Date(startsAtIso),
-  );
+  const validation = validateUpdateDashboardEventDetailsInput({
+    title: formData.get("title"),
+    venue: formData.get("venue"),
+    startsAt: formData.get("startsAt"),
+    autoCloseAt: formData.get("autoCloseAt"),
+    facebookUrl: formData.get("facebookUrl"),
+    publicQueueEnabled: formData.has("publicQueueEnabled"),
+    publicShowSongTitles: formData.has("publicShowSongTitles"),
+    isActivePublicEvent: formData.has("isActivePublicEvent"),
+  });
 
   if (!validation.success) {
     return {
       issues: validation.issues,
-      message: "Popraw czas zamknięcia wydarzenia.",
+      message: "Popraw szczegóły wydarzenia.",
     };
   }
 
   const session = await requireOperatorSession();
 
   try {
-    const result = await updateDashboardOrganizationEventAutoCloseAtForAuthUser({
+    const result = await updateDashboardOrganizationEventDetailsForAuthUser({
       authUserId: session.authUser.id,
       organizationId,
       eventId,
@@ -266,7 +287,7 @@ async function updateEventAutoCloseAt(
     );
 
     revalidatePath(path);
-    redirect(`${path}?eventAction=close-time-updated`);
+    redirect(`${path}?eventAction=details-updated`);
   } catch (error) {
     return mapEventManagementActionError(error);
   }
@@ -357,6 +378,19 @@ function mapEventManagementActionError(
     }
 
     if (error.status === 409) {
+      if (error.code === "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS") {
+        return {
+          issues: [
+            {
+              field: "isActivePublicEvent",
+              message:
+                "Ta organizacja ma już aktywny publicznie event. Wyłącz go przed ustawieniem kolejnego.",
+            },
+          ],
+          message: "Nie można ustawić dwóch aktywnych publicznie eventów.",
+        };
+      }
+
       return {
         ...emptyActionState,
         message:
@@ -424,8 +458,8 @@ function getActionMessage(value: string | string[] | undefined) {
   const action = Array.isArray(value) ? value[0] : value;
 
   switch (action as EventAction | undefined) {
-    case "close-time-updated":
-      return "Czas zamknięcia wydarzenia został zapisany.";
+    case "details-updated":
+      return "Szczegóły wydarzenia zostały zapisane.";
     case "extended":
       return "Wydarzenie zostało wydłużone.";
     case "closed":

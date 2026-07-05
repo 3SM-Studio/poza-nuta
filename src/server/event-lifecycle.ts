@@ -70,6 +70,7 @@ export async function getActivePublicEventReadOnly(now = new Date()) {
         eq(events.workspaceId, workspaces.id),
         eq(events.isActivePublicEvent, true),
         eq(events.status, "active"),
+        lte(events.startsAt, now),
         or(isNull(events.autoCloseAt), gt(events.autoCloseAt, now)),
       ),
     )

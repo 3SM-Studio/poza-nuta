@@ -58,6 +58,19 @@ export function CreateEventForm({
       </div>
 
       <div className={styles.dashboardField}>
+        <label htmlFor="event-venue">Miejsce</label>
+        <input
+          id="event-venue"
+          name="venue"
+          type="text"
+          maxLength={120}
+          placeholder="np. Klub Miejski"
+          aria-invalid={hasIssue(state, "venue") || undefined}
+        />
+        <FieldIssue state={state} field="venue" />
+      </div>
+
+      <div className={styles.dashboardField}>
         <label htmlFor="event-starts-at">Start wydarzenia</label>
         <input
           id="event-starts-at"
@@ -94,6 +107,37 @@ export function CreateEventForm({
           aria-invalid={hasIssue(state, "facebookUrl") || undefined}
         />
         <FieldIssue state={state} field="facebookUrl" />
+      </div>
+
+      <div className={styles.formSection}>
+        <h2>Widoczność i kolejka publiczna</h2>
+        <label className={styles.checkboxField}>
+          <input name="publicQueueEnabled" type="checkbox" />
+          <span>Publiczna kolejka włączona</span>
+        </label>
+        <p className={styles.eventMeta}>
+          Decyduje, czy publiczny widok kolejki może pokazywać zgłoszenia dla
+          tego wydarzenia.
+        </p>
+
+        <label className={styles.checkboxField}>
+          <input name="publicShowSongTitles" type="checkbox" defaultChecked />
+          <span>Pokazuj tytuły piosenek publicznie</span>
+        </label>
+        <p className={styles.eventMeta}>
+          Gdy wyłączone, publiczna kolejka pokazuje osoby i statusy bez tytułów
+          utworów.
+        </p>
+
+        <label className={styles.checkboxField}>
+          <input name="isActivePublicEvent" type="checkbox" />
+          <span>Event aktywny publicznie</span>
+        </label>
+        <p className={styles.eventMeta}>
+          Ten event będzie używany przez publiczny widok /queue. W organizacji
+          może być tylko jeden taki event.
+        </p>
+        <FieldIssue state={state} field="isActivePublicEvent" />
       </div>
 
       <div className={styles.formActions}>

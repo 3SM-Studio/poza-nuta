@@ -31,6 +31,13 @@ export function getDashboardOrganizationEventPath(
   )}/${encodeURIComponent(String(eventId))}`;
 }
 
+export function getDashboardOrganizationEventQueuePath(
+  organizationId: string,
+  eventId: number | string,
+) {
+  return `${getDashboardOrganizationEventPath(organizationId, eventId)}/queue`;
+}
+
 export function getDashboardOrganizationSettingsPath(organizationId: string) {
   return `${getDashboardOrganizationPath(organizationId)}/settings`;
 }

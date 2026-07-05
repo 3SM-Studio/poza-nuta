@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, ne, or } from "drizzle-orm";
 
 import {
   events,
@@ -28,6 +28,7 @@ import { OperatorApiError } from "./errors";
 import type {
   CreateDashboardEventInput,
   ExtendDashboardEventInput,
+  UpdateDashboardEventDetailsInput,
   UpdateDashboardEventAutoCloseAtInput,
 } from "./validation";
 
@@ -252,18 +253,25 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       input.organizationId,
     );
     const now = new Date();
+
+    await assertNoActivePublicEventConflictInTransaction(transaction, {
+      workspaceId: organization.id,
+      nextIsActivePublicEvent: input.event.isActivePublicEvent,
+    });
+
     const [event] = await transaction
       .insert(events)
       .values({
         workspaceId: organization.id,
         name: input.event.title,
+        venue: input.event.venue,
         startsAt: input.event.startsAt,
         autoCloseAt: input.event.autoCloseAt,
         facebookUrl: input.event.facebookUrl,
-        status: "draft",
-        isActivePublicEvent: false,
-        publicQueueEnabled: false,
-        publicShowSongTitles: true,
+        status: input.event.isActivePublicEvent ? "active" : "draft",
+        isActivePublicEvent: input.event.isActivePublicEvent,
+        publicQueueEnabled: input.event.publicQueueEnabled,
+        publicShowSongTitles: input.event.publicShowSongTitles,
         updatedAt: now,
       })
       .returning(dashboardEventSelection);
@@ -280,6 +288,9 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       payload: {
         startsAt: input.event.startsAt.toISOString(),
         autoCloseAt: input.event.autoCloseAt.toISOString(),
+        publicQueueEnabled: input.event.publicQueueEnabled,
+        publicShowSongTitles: input.event.publicShowSongTitles,
+        isActivePublicEvent: input.event.isActivePublicEvent,
         facebookUrlProvided: Boolean(input.event.facebookUrl),
       },
     });
@@ -342,6 +353,95 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
       payload: {
         previousAutoCloseAt: event.autoCloseAt?.toISOString() ?? null,
         autoCloseAt: input.event.autoCloseAt.toISOString(),
+      },
+    });
+
+    return {
+      organization,
+      event: updatedEvent,
+    };
+  });
+}
+
+export async function updateDashboardOrganizationEventDetailsForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+  event: UpdateDashboardEventDetailsInput;
+}) {
+  return getDb().transaction(async (transaction) => {
+    const { organization, event } =
+      await requireEventManagerOrganizationEventInTransaction(
+        transaction,
+        input.authUserId,
+        input.organizationId,
+        input.eventId,
+      );
+    const now = new Date();
+
+    assertDashboardEventCanBeManaged(event, now);
+
+    if (input.event.autoCloseAt.getTime() <= input.event.startsAt.getTime()) {
+      throw new OperatorApiError(
+        400,
+        "EVENT_AUTO_CLOSE_BEFORE_START",
+        "Event close time must be after the start time.",
+      );
+    }
+
+    await assertNoActivePublicEventConflictInTransaction(transaction, {
+      workspaceId: organization.id,
+      nextIsActivePublicEvent: input.event.isActivePublicEvent,
+      eventId: event.id,
+    });
+
+    const [updatedEvent] = await transaction
+      .update(events)
+      .set({
+        name: input.event.title,
+        venue: input.event.venue,
+        startsAt: input.event.startsAt,
+        autoCloseAt: input.event.autoCloseAt,
+        facebookUrl: input.event.facebookUrl,
+        status: input.event.isActivePublicEvent ? "active" : event.status,
+        isActivePublicEvent: input.event.isActivePublicEvent,
+        publicQueueEnabled: input.event.publicQueueEnabled,
+        publicShowSongTitles: input.event.publicShowSongTitles,
+        updatedAt: now,
+      })
+      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+      .returning(dashboardEventSelection);
+
+    if (!updatedEvent) {
+      throw new OperatorApiError(
+        404,
+        "EVENT_NOT_FOUND",
+        "Event was not found.",
+      );
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "update_dashboard_event_details",
+      entityId: String(event.id),
+      payload: {
+        previous: {
+          startsAt: event.startsAt.toISOString(),
+          autoCloseAt: event.autoCloseAt?.toISOString() ?? null,
+          publicQueueEnabled: event.publicQueueEnabled,
+          publicShowSongTitles: event.publicShowSongTitles,
+          isActivePublicEvent: event.isActivePublicEvent,
+          facebookUrlProvided: Boolean(event.facebookUrl),
+        },
+        next: {
+          startsAt: input.event.startsAt.toISOString(),
+          autoCloseAt: input.event.autoCloseAt.toISOString(),
+          publicQueueEnabled: input.event.publicQueueEnabled,
+          publicShowSongTitles: input.event.publicShowSongTitles,
+          isActivePublicEvent: input.event.isActivePublicEvent,
+          facebookUrlProvided: Boolean(input.event.facebookUrl),
+        },
       },
     });
 
@@ -860,5 +960,43 @@ function assertDashboardEventCanBeManaged(
     409,
     "EVENT_MANAGEMENT_LOCKED",
     "Closed or cancelled events cannot be managed in this MVP.",
+  );
+}
+
+async function assertNoActivePublicEventConflictInTransaction(
+  transaction: DatabaseTransaction,
+  input: {
+    workspaceId: number;
+    nextIsActivePublicEvent: boolean;
+    eventId?: number;
+  },
+) {
+  if (!input.nextIsActivePublicEvent) {
+    return;
+  }
+
+  const filters = [
+    eq(events.workspaceId, input.workspaceId),
+    eq(events.isActivePublicEvent, true),
+  ];
+
+  if (input.eventId !== undefined) {
+    filters.push(ne(events.id, input.eventId));
+  }
+
+  const [activePublicEvent] = await transaction
+    .select({ id: events.id })
+    .from(events)
+    .where(and(...filters))
+    .limit(1);
+
+  if (!activePublicEvent) {
+    return;
+  }
+
+  throw new OperatorApiError(
+    409,
+    "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
+    "Another public event is already active for this organization.",
   );
 }

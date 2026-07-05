@@ -20,6 +20,7 @@ import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
   getDashboardOrganizationEventPath,
+  getDashboardOrganizationEventQueuePath,
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationGeneralSettingsPath,
   getDashboardOrganizationNewEventPath,
@@ -69,6 +70,10 @@ test("organization route helpers encode organizationId values", () => {
   assert.equal(
     getDashboardOrganizationEventPath(exampleOrganizationId, 42),
     `/dashboard/org/${exampleOrganizationId}/events/42`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventQueuePath(exampleOrganizationId, 42),
+    `/dashboard/org/${exampleOrganizationId}/events/42/queue`,
   );
   assert.equal(
     getDashboardOrganizationSettingsPath(exampleOrganizationId),
@@ -859,10 +864,15 @@ test("organization events support owner and manager create flow", () => {
   assert.match(newPageSource, /validateCreateDashboardEventInput/);
   assert.match(newPageSource, /createDashboardOrganizationEventForAuthUser/);
   assert.match(newPageSource, /getDashboardOrganizationEventPath/);
+  assert.match(newPageSource, /formData\.get\("venue"\)/);
+  assert.match(newPageSource, /formData\.has\("publicQueueEnabled"\)/);
+  assert.match(newPageSource, /formData\.has\("publicShowSongTitles"\)/);
+  assert.match(newPageSource, /formData\.has\("isActivePublicEvent"\)/);
   assert.match(newPageSource, /redirect\(/);
   assert.match(detailPageSource, /Link sesji zostanie dodany w kolejnym etapie/);
   assert.match(detailPageSource, /result\.event\.autoCloseAt/);
   assert.match(detailPageSource, /result\.event\.facebookUrl/);
+  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
   assert.match(
     organizationsSource,
     /or\(eq\(workspaceMembers\.role, "owner"\), eq\(workspaceMembers\.role, "manager"\)\)/,
@@ -873,7 +883,7 @@ test("organization events support owner and manager create flow", () => {
   );
 });
 
-test("organization event create persists auto_close_at and facebook_url only", () => {
+test("organization event create persists scheduling and public visibility fields", () => {
   const schemaSource = readFileSync("src/db/schema.ts", "utf8");
   const migrationSource = readFileSync(
     "drizzle/0007_lonely_midnight.sql",
@@ -888,8 +898,22 @@ test("organization event create persists auto_close_at and facebook_url only", (
   assert.equal(schemaSource.includes("endsAt"), false);
   assert.match(migrationSource, /ADD COLUMN "facebook_url" text/);
   assert.equal(migrationSource.includes("ends_at"), false);
+  assert.match(organizationsSource, /venue: input\.event\.venue/);
   assert.match(organizationsSource, /autoCloseAt: input\.event\.autoCloseAt/);
   assert.match(organizationsSource, /facebookUrl: input\.event\.facebookUrl/);
+  assert.match(
+    organizationsSource,
+    /publicQueueEnabled: input\.event\.publicQueueEnabled/,
+  );
+  assert.match(
+    organizationsSource,
+    /publicShowSongTitles: input\.event\.publicShowSongTitles/,
+  );
+  assert.match(
+    organizationsSource,
+    /isActivePublicEvent: input\.event\.isActivePublicEvent/,
+  );
+  assert.match(organizationsSource, /ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS/);
 });
 
 test("organization event detail exposes managed event panel without session routes", () => {
@@ -906,8 +930,18 @@ test("organization event detail exposes managed event panel without session rout
   assert.match(detailPageSource, /areDashboardEventRequestsOpen/);
   assert.match(detailPageSource, /shouldShowDashboardEventClosingWarning/);
   assert.match(detailPageSource, /EventManagementPanel/);
+  assert.match(detailPageSource, /detailsAction=\{updateEventDetails\.bind/);
+  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
   assert.match(detailPageSource, /Link sesji zostanie dodany w kolejnym etapie/);
   assert.match(panelSource, /Wydarzenie kończy się za mniej niż 30 minut/);
+  assert.match(panelSource, /name="title"/);
+  assert.match(panelSource, /name="venue"/);
+  assert.match(panelSource, /name="startsAt"/);
+  assert.match(panelSource, /name="autoCloseAt"/);
+  assert.match(panelSource, /name="facebookUrl"/);
+  assert.match(panelSource, /name="publicQueueEnabled"/);
+  assert.match(panelSource, /name="publicShowSongTitles"/);
+  assert.match(panelSource, /name="isActivePublicEvent"/);
   assert.match(panelSource, /Zamknij wydarzenie teraz/);
   assert.equal(detailPageSource.includes("/session/"), false);
 });
@@ -956,9 +990,14 @@ test("organization event management updates auto_close_at and closes without del
   const manageSource = organizationsSource.slice(manageStart, membersStart);
 
   assert.match(manageSource, /updateDashboardOrganizationEventAutoCloseAtForAuthUser/);
+  assert.match(manageSource, /updateDashboardOrganizationEventDetailsForAuthUser/);
   assert.match(manageSource, /extendDashboardOrganizationEventForAuthUser/);
   assert.match(manageSource, /closeDashboardOrganizationEventForAuthUser/);
+  assert.match(manageSource, /startsAt: input\.event\.startsAt/);
   assert.match(manageSource, /autoCloseAt/);
+  assert.match(manageSource, /publicQueueEnabled/);
+  assert.match(manageSource, /publicShowSongTitles/);
+  assert.match(manageSource, /isActivePublicEvent/);
   assert.match(manageSource, /status: "closed"/);
   assert.match(manageSource, /closedAt: now/);
   assert.match(manageSource, /isActivePublicEvent: false/);
@@ -966,6 +1005,23 @@ test("organization event management updates auto_close_at and closes without del
   assert.equal(manageSource.includes(".delete("), false);
   assert.equal(manageSource.includes("endsAt"), false);
   assert.equal(manageSource.includes("ends_at"), false);
+});
+
+test("organization event queue placeholder route is available", () => {
+  const queuePageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
+    "utf8",
+  );
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+
+  assert.match(queuePageSource, /getDashboardOrganizationEventForAuthUser/);
+  assert.match(queuePageSource, /Zarządzanie kolejką zostanie rozbudowane/);
+  assert.match(queuePageSource, /getDashboardOrganizationEventPath/);
+  assert.match(detailPageSource, /Zarządzaj kolejką/);
+  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
 });
 
 test("account identity sanitizer exposes login methods without tokens", () => {

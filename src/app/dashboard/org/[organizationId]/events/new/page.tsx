@@ -106,9 +106,13 @@ async function createEvent(
 
   const validation = validateCreateDashboardEventInput({
     title: formData.get("title"),
+    venue: formData.get("venue"),
     startsAt: formData.get("startsAt"),
     autoCloseAt: formData.get("autoCloseAt"),
     facebookUrl: formData.get("facebookUrl"),
+    publicQueueEnabled: formData.has("publicQueueEnabled"),
+    publicShowSongTitles: formData.has("publicShowSongTitles"),
+    isActivePublicEvent: formData.has("isActivePublicEvent"),
   });
 
   if (!validation.success) {
@@ -142,6 +146,19 @@ async function createEvent(
       return {
         issues: [],
         message: "Nie masz uprawnień do tworzenia wydarzeń w tej organizacji.",
+      };
+    }
+
+    if (error instanceof OperatorApiError && error.status === 409) {
+      return {
+        issues: [
+          {
+            field: "isActivePublicEvent",
+            message:
+              "Ta organizacja ma już aktywny publicznie event. Wyłącz go przed ustawieniem kolejnego.",
+          },
+        ],
+        message: "Nie można ustawić dwóch aktywnych publicznie eventów.",
       };
     }
 
