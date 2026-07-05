@@ -9,6 +9,7 @@ import {
 import {
   isInfrastructureTimeout,
   isTransientInfrastructureError,
+  SERVER_STEP_TIMEOUT_MS,
   ServerStepTimeoutError,
   withRuntimeDiagnostics,
 } from "../src/server/runtime-diagnostics.ts";
@@ -17,8 +18,9 @@ test("database client uses serverless-safe Postgres options", () => {
   assert.equal(DATABASE_MAX_CONNECTIONS <= 2, true);
   assert.equal(databaseClientOptions.max, DATABASE_MAX_CONNECTIONS);
   assert.equal(databaseClientOptions.prepare, false);
-  assert.equal(databaseClientOptions.connect_timeout, 10);
+  assert.equal(databaseClientOptions.connect_timeout, 5);
   assert.equal(databaseClientOptions.idle_timeout, 20);
+  assert.equal(SERVER_STEP_TIMEOUT_MS < DATABASE_STATEMENT_TIMEOUT_MS, true);
   assert.equal(
     databaseClientOptions.connection.statement_timeout,
     DATABASE_STATEMENT_TIMEOUT_MS,

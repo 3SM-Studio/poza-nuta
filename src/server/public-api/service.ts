@@ -6,7 +6,7 @@ import { events, songRequests, songs } from "../../db/schema";
 import { getDb } from "../db";
 import {
   closeExpiredActiveEventInTransaction,
-  getActiveEventAfterLazyClose,
+  getActivePublicEventReadOnly,
 } from "../event-lifecycle";
 import { traceServerStep } from "../runtime-diagnostics";
 import { PublicApiError } from "./errors";
@@ -22,7 +22,7 @@ const activePublicEventFilter = and(
 
 export async function getActivePublicEvent(routeName?: string) {
   const event = await runPublicApiStep(routeName, "activeEvent", () =>
-    getActiveEventAfterLazyClose(),
+    getActivePublicEventReadOnly(),
   );
 
   if (!event) {

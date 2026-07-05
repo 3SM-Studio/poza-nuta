@@ -1,7 +1,7 @@
-export const DATABASE_CONNECT_TIMEOUT_SECONDS = 10;
+export const DATABASE_CONNECT_TIMEOUT_SECONDS = 5;
 export const DATABASE_IDLE_TIMEOUT_SECONDS = 20;
 export const DATABASE_MAX_CONNECTIONS = 1;
-export const DATABASE_STATEMENT_TIMEOUT_MS = 10_000;
+export const DATABASE_STATEMENT_TIMEOUT_MS = 9_000;
 
 export const databaseClientOptions = {
   connect_timeout: DATABASE_CONNECT_TIMEOUT_SECONDS,

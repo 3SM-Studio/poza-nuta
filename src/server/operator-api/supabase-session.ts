@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { eq } from "drizzle-orm";
 
 import { operatorAuditLog, operatorUsers } from "../../db/schema";
@@ -91,9 +92,20 @@ export async function loginOperator(input: LoginInput) {
   }
 }
 
-export async function requireOperatorSession(
-  routeName = "dashboard.session",
-): Promise<AuthenticatedOperatorSession> {
+export async function requireOperatorSession(routeName = "dashboard.session") {
+  return traceServerStep(routeName, "getSession", () =>
+    getCachedOperatorSession(),
+  );
+}
+
+const getCachedOperatorSession = cache(
+  async (): Promise<AuthenticatedOperatorSession> => {
+    return resolveOperatorSession();
+  },
+);
+
+async function resolveOperatorSession(): Promise<AuthenticatedOperatorSession> {
+  const routeName = "dashboard.session";
   const supabase = await createSupabaseServerClient();
   const userResult = await traceServerStep(routeName, "getUser", () =>
     supabase.auth.getUser(),

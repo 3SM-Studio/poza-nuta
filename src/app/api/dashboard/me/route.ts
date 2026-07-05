@@ -3,16 +3,13 @@ import {
   operatorJsonResponse,
 } from "../../../../server/operator-api/responses";
 import { requireOperatorSession } from "../../../../server/operator-api/supabase-session";
-import { traceServerStep } from "../../../../server/runtime-diagnostics";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const session = await traceServerStep("dashboard.me", "getSession", () =>
-      requireOperatorSession("dashboard.me"),
-    );
+    const session = await requireOperatorSession("dashboard.me");
 
     return operatorJsonResponse({
       operator: session.operator,

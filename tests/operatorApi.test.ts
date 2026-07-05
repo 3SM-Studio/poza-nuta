@@ -124,6 +124,36 @@ test("operator API maps infrastructure timeout to controlled 503", () => {
   assert.match(source, /503/);
 });
 
+test("operator session lookup is memoized without routeName as cache key", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/supabase-session.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /import \{ cache \} from "react"/);
+  assert.match(source, /const getCachedOperatorSession = cache\(/);
+  assert.match(source, /getCachedOperatorSession\(\)/);
+  assert.match(source, /traceServerStep\(routeName, "getSession"/);
+  assert.equal(source.includes("getCachedOperatorSession(routeName"), false);
+});
+
+test("operator API preserves auth and permission errors before infra fallback", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/responses.ts", import.meta.url),
+    "utf8",
+  );
+  const operatorErrorBranch = source.indexOf("error instanceof OperatorApiError");
+  const infrastructureBranch = source.indexOf(
+    "if (isTransientInfrastructureError(error))",
+  );
+
+  assert.ok(operatorErrorBranch >= 0);
+  assert.ok(infrastructureBranch >= 0);
+  assert.ok(operatorErrorBranch < infrastructureBranch);
+  assert.match(source, /error\.status/);
+  assert.match(source, /code: error\.code/);
+});
+
 test("dashboard me route keeps session failures on the operator API response path", () => {
   const source = readFileSync(
     new URL("../src/app/api/dashboard/me/route.ts", import.meta.url),

@@ -10,7 +10,10 @@ import {
   type PublicQueueResponse,
 } from "./api";
 import {
-  PUBLIC_QUEUE_POLL_INTERVAL_MS,
+  createPublicQueuePollingState,
+  getPublicQueuePollDelayMs,
+  recordPublicQueuePollFailure,
+  recordPublicQueuePollSuccess,
   shouldPollPublicQueue,
 } from "./public-queue-polling";
 import styles from "./public.module.css";
@@ -20,7 +23,10 @@ export function PublicQueuePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const shouldPoll = shouldPollPublicQueue(queue);
+  const [pollingState, setPollingState] = useState(
+    createPublicQueuePollingState,
+  );
+  const shouldPoll = shouldPollPublicQueue(queue, pollingState);
 
   useEffect(() => {
     let active = true;
@@ -31,9 +37,16 @@ export function PublicQueuePage() {
 
         if (active) {
           setQueue(response);
+          setPollingState(recordPublicQueuePollSuccess());
         }
       } catch (caughtError) {
         if (active) {
+          setPollingState((state) =>
+            recordPublicQueuePollFailure(
+              state,
+              getPublicClientErrorStatus(caughtError),
+            ),
+          );
           setError(getQueueErrorMessage(caughtError));
         }
       } finally {
@@ -56,34 +69,49 @@ export function PublicQueuePage() {
     }
 
     let active = true;
-    const intervalId = window.setInterval(() => {
+    const timeoutId = window.setTimeout(() => {
       getPublicQueue()
         .then((response) => {
           if (active) {
             setQueue(response);
+            setPollingState(recordPublicQueuePollSuccess());
             setError(null);
           }
         })
         .catch((caughtError) => {
           if (active) {
+            setPollingState((state) =>
+              recordPublicQueuePollFailure(
+                state,
+                getPublicClientErrorStatus(caughtError),
+              ),
+            );
             setError(getQueueErrorMessage(caughtError));
           }
         });
-    }, PUBLIC_QUEUE_POLL_INTERVAL_MS);
+    }, getPublicQueuePollDelayMs(pollingState));
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
     };
-  }, [shouldPoll]);
+  }, [pollingState, shouldPoll]);
 
   async function refreshQueue() {
     setIsRefreshing(true);
     setError(null);
+    setPollingState(createPublicQueuePollingState());
 
     try {
       setQueue(await getPublicQueue());
+      setPollingState(recordPublicQueuePollSuccess());
     } catch (caughtError) {
+      setPollingState((state) =>
+        recordPublicQueuePollFailure(
+          state,
+          getPublicClientErrorStatus(caughtError),
+        ),
+      );
       setError(getQueueErrorMessage(caughtError));
     } finally {
       setIsRefreshing(false);
@@ -181,7 +209,18 @@ export function PublicQueuePage() {
   );
 }
 
+function getPublicClientErrorStatus(error: unknown) {
+  return error instanceof PublicClientError ? error.status : null;
+}
+
 function getQueueErrorMessage(error: unknown) {
+  if (error instanceof PublicClientError && error.status === 404) {
+    return "Aktualnie nie ma aktywnego wydarzenia. Automatyczne odświeżanie zostało zatrzymane.";
+  }
+
+  if (error instanceof PublicClientError && error.status === 503) {
+    return "Serwer jest chwilowo niedostępny. Spróbujemy ponownie za dłuższą chwilę.";
+  }
   return error instanceof PublicClientError && error.status === 404
     ? "Aktualnie nie ma aktywnego wydarzenia."
     : "Nie udało się wczytać kolejki. Spróbuj ponownie.";

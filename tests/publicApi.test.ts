@@ -64,6 +64,44 @@ test("public API maps database timeout to controlled 503", () => {
   assert.match(source, /503/);
 });
 
+test("public active event API uses a read-only lookup path", () => {
+  const publicServiceSource = readFileSync(
+    new URL("../src/server/public-api/service.ts", import.meta.url),
+    "utf8",
+  );
+  const lifecycleSource = readFileSync(
+    new URL("../src/server/event-lifecycle.ts", import.meta.url),
+    "utf8",
+  );
+  const activeEventStart = publicServiceSource.indexOf(
+    "export async function getActivePublicEvent",
+  );
+  const activeEventEnd = publicServiceSource.indexOf(
+    "export async function searchPublicSongs",
+  );
+  const activeEventSource = publicServiceSource.slice(
+    activeEventStart,
+    activeEventEnd,
+  );
+  const readOnlyStart = lifecycleSource.indexOf(
+    "export async function getActivePublicEventReadOnly",
+  );
+  const readOnlyEnd = lifecycleSource.indexOf(
+    "export async function closeExpiredActiveEventInTransaction",
+  );
+  const readOnlySource = lifecycleSource.slice(readOnlyStart, readOnlyEnd);
+
+  assert.match(activeEventSource, /getActivePublicEventReadOnly/);
+  assert.equal(activeEventSource.includes("getActiveEventAfterLazyClose"), false);
+  assert.equal(
+    activeEventSource.includes("closeExpiredActiveEventInTransaction"),
+    false,
+  );
+  assert.equal(readOnlySource.includes(".transaction("), false);
+  assert.equal(readOnlySource.includes(".update("), false);
+  assert.match(readOnlySource, /gt\(events\.autoCloseAt, now\)/);
+});
+
 test("public API response returns JSON 503 for Postgres statement timeout", async () => {
   const originalError = console.error;
 

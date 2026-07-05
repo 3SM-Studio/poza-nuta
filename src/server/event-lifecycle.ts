@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 
 import { events, operatorAuditLog, workspaces } from "../db/schema";
 import { calculateAutoCloseAt } from "../lib/event-lifecycle";
@@ -55,6 +55,26 @@ export async function getActiveEventAfterLazyClose(now = new Date()) {
 
     return event ?? null;
   });
+}
+
+export async function getActivePublicEventReadOnly(now = new Date()) {
+  const [event] = await getDb()
+    .select(activeEventSelection)
+    .from(events)
+    .innerJoin(workspaces, eq(workspaces.id, events.workspaceId))
+    .where(
+      and(
+        eq(workspaces.handle, DEFAULT_WORKSPACE_HANDLE),
+        eq(workspaces.active, true),
+        eq(events.workspaceId, workspaces.id),
+        eq(events.isActivePublicEvent, true),
+        eq(events.status, "active"),
+        or(isNull(events.autoCloseAt), gt(events.autoCloseAt, now)),
+      ),
+    )
+    .limit(1);
+
+  return event ?? null;
 }
 
 export async function closeExpiredActiveEventInTransaction(
