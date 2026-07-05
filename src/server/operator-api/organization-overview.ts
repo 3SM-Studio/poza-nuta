@@ -211,10 +211,13 @@ async function countRequestStatsForWorkspace(input: {
   todayStart: Date;
   sevenDaysAgo: Date;
 }) {
+  const todayStart = input.todayStart.toISOString();
+  const sevenDaysAgo = input.sevenDaysAgo.toISOString();
+
   const [result] = await getDb()
     .select({
-      requestsToday: sql<number>`count(*) filter (where ${songRequests.createdAt} >= ${input.todayStart})::int`,
-      requestsLastSevenDays: sql<number>`count(*) filter (where ${songRequests.createdAt} >= ${input.sevenDaysAgo})::int`,
+      requestsToday: sql<number>`count(*) filter (where ${songRequests.createdAt} >= ${todayStart}::timestamptz)::int`,
+      requestsLastSevenDays: sql<number>`count(*) filter (where ${songRequests.createdAt} >= ${sevenDaysAgo}::timestamptz)::int`,
       pendingRequests: sql<number>`count(*) filter (where ${songRequests.status} = 'pending')::int`,
       acceptedRequests: sql<number>`count(*) filter (where ${songRequests.status} = 'approved')::int`,
       performedRequests: sql<number>`count(*) filter (where ${songRequests.status} = 'done')::int`,
