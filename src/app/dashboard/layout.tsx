@@ -5,6 +5,7 @@ import { DashboardShell } from "../../components/operator/dashboard-shell";
 import { OperatorApiError } from "../../server/operator-api/errors";
 import { listDashboardOrganizationsForAuthUser } from "../../server/operator-api/organizations";
 import { requireOperatorSession } from "../../server/operator-api/supabase-session";
+import { traceServerStep } from "../../server/runtime-diagnostics";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,10 @@ export default async function DashboardLayout({
   children: ReactNode;
 }>) {
   const session = await getDashboardSession();
-  const organizations = await listDashboardOrganizationsForAuthUser(
-    session.authUser.id,
+  const organizations = await traceServerStep(
+    "dashboard.layout",
+    "listOrganizations",
+    () => listDashboardOrganizationsForAuthUser(session.authUser.id),
   ).then((items) =>
     items.map((organization) => ({
       id: organization.id,
@@ -38,7 +41,7 @@ export default async function DashboardLayout({
 
 async function getDashboardSession() {
   try {
-    return await requireOperatorSession();
+    return await requireOperatorSession("dashboard.layout");
   } catch (error) {
     if (
       error instanceof OperatorApiError &&

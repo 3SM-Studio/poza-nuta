@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { getDashboardEntryStatus } from "../src/components/public/api.ts";
@@ -49,6 +50,17 @@ test("dashboard entry is visible only for an active dashboard session", async (t
   assert.deepEqual(await getDashboardEntryStatus(), {
     canEnterDashboard: false,
   });
+});
+
+test("public API maps database timeout to controlled 503", () => {
+  const source = readFileSync(
+    new URL("../src/server/public-api/responses.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /isTransientInfrastructureError/);
+  assert.match(source, /SERVICE_UNAVAILABLE/);
+  assert.match(source, /503/);
 });
 
 function restoreEnv(name: string, value: string | undefined) {

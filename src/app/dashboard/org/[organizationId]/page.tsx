@@ -20,6 +20,7 @@ import {
 import styles from "../../../../components/operator/operator.module.css";
 import { getDashboardOrganizationOverviewForAuthUser } from "../../../../server/operator-api/organization-overview";
 import { requireOperatorSession } from "../../../../server/operator-api/supabase-session";
+import { traceServerStep } from "../../../../server/runtime-diagnostics";
 
 export const metadata: Metadata = {
   title: "Organizacja | Poza Nutą",
@@ -37,10 +38,15 @@ export default async function DashboardOrganizationPage({
   params,
 }: OrganizationPageProps) {
   const { organizationId } = await params;
-  const session = await requireOperatorSession();
-  const overview = await getDashboardOrganizationOverviewForAuthUser(
-    session.authUser.id,
-    organizationId,
+  const session = await requireOperatorSession("dashboard.org");
+  const overview = await traceServerStep(
+    "dashboard.org",
+    "getOverview",
+    () =>
+      getDashboardOrganizationOverviewForAuthUser(
+        session.authUser.id,
+        organizationId,
+      ),
   );
 
   if (!overview) {

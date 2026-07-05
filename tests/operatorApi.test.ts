@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { hashPin, verifyPin } from "../src/server/operator-api/crypto.ts";
@@ -76,6 +77,10 @@ test("Supabase Auth users must map to an active local operator", () => {
 
   assert.equal(unauthenticated.allowed, false);
   assert.equal(unauthenticated.allowed ? null : unauthenticated.status, 401);
+  assert.equal(
+    unauthenticated.allowed ? null : unauthenticated.code,
+    "AUTHENTICATION_REQUIRED",
+  );
   assert.equal(unlinked.allowed, false);
   assert.equal(unlinked.allowed ? null : unlinked.status, 403);
   assert.deepEqual(
@@ -106,6 +111,17 @@ test("Supabase Auth users must map to an active local operator", () => {
       },
     },
   );
+});
+
+test("operator API maps infrastructure timeout to controlled 503", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/responses.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /isTransientInfrastructureError/);
+  assert.match(source, /SERVICE_UNAVAILABLE/);
+  assert.match(source, /503/);
 });
 
 test("sign-in page distinguishes guests, authorized operators and denied users", () => {

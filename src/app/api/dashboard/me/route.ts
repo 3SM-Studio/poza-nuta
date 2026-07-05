@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const session = await requireOperatorSession();
+    const session = await requireOperatorSession("dashboard.me");
 
     return operatorJsonResponse({
       operator: session.operator,

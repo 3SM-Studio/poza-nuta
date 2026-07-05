@@ -23,6 +23,29 @@ runtime.
 
 `DATABASE_URL` must never be committed or printed in logs.
 
+## Vercel production runtime
+
+For Vercel serverless production, `DATABASE_URL` should point to the Supabase
+Transaction pooler, not a Direct database connection. Direct connections are
+better suited for migrations and short one-off scripts, while serverless
+runtime needs a small connection footprint.
+
+The runtime Postgres client is configured with:
+
+- a very small pool (`max: 1`),
+- prepared statements disabled (`prepare: false`) for pooler compatibility,
+- connection timeout,
+- idle timeout,
+- statement timeout / idle transaction timeout.
+
+If Supabase Auth or Postgres is unavailable, API routes should return a
+controlled `503 SERVICE_UNAVAILABLE` response instead of waiting for the Vercel
+function timeout.
+
+Do not log `DATABASE_URL` or full connection strings. After changing Vercel
+environment variables, redeploy the project so the serverless runtime receives
+the new configuration.
+
 ## Checking state
 
 Use:
