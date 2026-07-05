@@ -5,10 +5,18 @@ import { getDashboardEntryStatus } from "../src/components/public/api.ts";
 
 test("dashboard entry is visible only for an active dashboard session", async (t) => {
   const originalFetch = globalThis.fetch;
+  const originalVercelUrl = process.env.VERCEL_URL;
+  const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
   t.after(() => {
     globalThis.fetch = originalFetch;
+    restoreEnv("VERCEL_URL", originalVercelUrl);
+    restoreEnv("NEXT_PUBLIC_SITE_URL", originalSiteUrl);
   });
+
+  process.env.VERCEL_URL = "poza-nuta-mrcdscusz-victor-sukhodolsky.vercel.app";
+  process.env.NEXT_PUBLIC_SITE_URL =
+    "https://poza-nuta-mrcdscusz-victor-sukhodolsky.vercel.app";
 
   globalThis.fetch = async (input, init) => {
     assert.equal(input, "/api/dashboard/me");
@@ -42,3 +50,12 @@ test("dashboard entry is visible only for an active dashboard session", async (t
     canEnterDashboard: false,
   });
 });
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
+}

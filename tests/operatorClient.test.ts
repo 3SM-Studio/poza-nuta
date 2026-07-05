@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   dashboardApiPaths,
   formatDuration,
+  getCurrentOperator,
   getDashboardEventAccessLinkRevokePath,
   getDashboardRequestActionPath,
 } from "../src/components/operator/api.ts";
@@ -39,6 +41,63 @@ test("operator UI client uses canonical dashboard API paths", () => {
     getDashboardEventAccessLinkRevokePath(42),
     "/api/dashboard/event/access-links/42/revoke",
   );
+});
+
+test("operator me request stays on a same-origin relative API path", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalVercelUrl = process.env.VERCEL_URL;
+  const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreEnv("VERCEL_URL", originalVercelUrl);
+    restoreEnv("NEXT_PUBLIC_SITE_URL", originalSiteUrl);
+  });
+
+  process.env.VERCEL_URL = "poza-nuta-mrcdscusz-victor-sukhodolsky.vercel.app";
+  process.env.NEXT_PUBLIC_SITE_URL =
+    "https://poza-nuta-mrcdscusz-victor-sukhodolsky.vercel.app";
+
+  globalThis.fetch = async (input, init) => {
+    assert.equal(input, "/api/dashboard/me");
+    assert.equal(init?.credentials, "same-origin");
+
+    return Response.json({
+      operator: {
+        id: 1,
+        name: "Operator",
+        active: true,
+      },
+    });
+  };
+
+  assert.deepEqual(await getCurrentOperator(), {
+    operator: {
+      id: 1,
+      name: "Operator",
+      active: true,
+    },
+  });
+});
+
+test("client API modules do not build own API URLs from deployment origins", () => {
+  const files = [
+    new URL("../src/components/operator/api.ts", import.meta.url),
+    new URL("../src/components/public/api.ts", import.meta.url),
+  ];
+
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+
+    assert.doesNotMatch(
+      source,
+      /VERCEL_URL|NEXT_PUBLIC_SITE_URL|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_BASE_URL|window\.location\.origin/,
+    );
+    assert.doesNotMatch(
+      source,
+      /https?:\/\/[^"`']+\/api\/dashboard\/me/,
+    );
+  }
 });
 
 test("dashboard queue realtime helpers scope messages to an event topic", () => {
@@ -85,3 +144,12 @@ test("dashboard queue realtime helpers scope messages to an event topic", () => 
     false,
   );
 });
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
+}

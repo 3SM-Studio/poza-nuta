@@ -106,7 +106,7 @@ export async function getDashboardEntryStatus() {
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(toSameOriginApiPath(path), {
     ...init,
     cache: "no-store",
     credentials: "same-origin",
@@ -132,4 +132,16 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
   }
 
   return body as T;
+}
+
+function toSameOriginApiPath(path: string) {
+  if (!path.startsWith("/api/")) {
+    throw new PublicClientError(
+      0,
+      "INVALID_API_PATH",
+      "Public API requests must use same-origin /api paths.",
+    );
+  }
+
+  return path;
 }

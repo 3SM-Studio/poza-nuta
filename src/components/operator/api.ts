@@ -277,7 +277,7 @@ export function formatDuration(durationSeconds: number | null) {
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(toSameOriginApiPath(path), {
     ...init,
     credentials: "same-origin",
     cache: "no-store",
@@ -303,4 +303,16 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
   }
 
   return body as T;
+}
+
+function toSameOriginApiPath(path: string) {
+  if (!path.startsWith("/api/")) {
+    throw new OperatorClientError(
+      0,
+      "INVALID_API_PATH",
+      "Dashboard API requests must use same-origin /api paths.",
+    );
+  }
+
+  return path;
 }
