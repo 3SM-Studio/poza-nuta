@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -913,4 +913,46 @@ test("public queue page uses scheduled backoff instead of fixed interval polling
   assert.match(source, /window\.setTimeout/);
   assert.match(source, /getPublicQueuePollDelayMs\(pollingState\)/);
   assert.equal(source.includes("window.setInterval"), false);
+});
+
+test("dashboard routes expose skeleton loading fallbacks", () => {
+  const loadingRoutes = [
+    "src/app/dashboard/loading.tsx",
+    "src/app/dashboard/organizations/loading.tsx",
+    "src/app/dashboard/new/loading.tsx",
+    "src/app/dashboard/account/me/loading.tsx",
+    "src/app/dashboard/account/security/loading.tsx",
+    "src/app/dashboard/org/[organizationId]/loading.tsx",
+    "src/app/dashboard/org/[organizationId]/events/loading.tsx",
+    "src/app/dashboard/org/[organizationId]/team/loading.tsx",
+    "src/app/dashboard/org/[organizationId]/settings/loading.tsx",
+  ];
+  const skeletonSource = readFileSync("src/components/ui/skeleton.tsx", "utf8");
+  const dashboardSkeletonsSource = readFileSync(
+    "src/components/operator/dashboard-skeletons.tsx",
+    "utf8",
+  );
+
+  assert.match(skeletonSource, /data-slot="skeleton"/);
+  assert.match(skeletonSource, /animate-pulse/);
+  assert.match(dashboardSkeletonsSource, /export function DashboardPageSkeleton/);
+  assert.match(dashboardSkeletonsSource, /export function PublicQueueSkeleton/);
+
+  for (const route of loadingRoutes) {
+    assert.equal(existsSync(route), true, `${route} should exist`);
+    assert.match(readFileSync(route, "utf8"), /Skeleton/);
+  }
+});
+
+test("public queue renders skeleton first and keeps stale queue on refresh errors", () => {
+  const source = readFileSync(
+    "src/components/public/public-queue-page.tsx",
+    "utf8",
+  );
+
+  assert.match(source, /PublicQueueSkeleton/);
+  assert.match(source, /showInitialError = !isLoading && error && !queue/);
+  assert.match(source, /showRefreshError = !isLoading && error && queue/);
+  assert.equal(source.includes("!error && queue?.enabled"), false);
+  assert.equal(source.includes("!error && queue && !queue.enabled"), false);
 });

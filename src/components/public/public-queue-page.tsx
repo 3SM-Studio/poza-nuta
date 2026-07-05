@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { PublicQueueSkeleton } from "@/components/operator/dashboard-skeletons";
+
 import {
   getPublicQueue,
   PublicClientError,
@@ -27,6 +29,8 @@ export function PublicQueuePage() {
     createPublicQueuePollingState,
   );
   const shouldPoll = shouldPollPublicQueue(queue, pollingState);
+  const showInitialError = !isLoading && error && !queue;
+  const showRefreshError = !isLoading && error && queue;
 
   useEffect(() => {
     let active = true;
@@ -152,25 +156,27 @@ export function PublicQueuePage() {
           Wróć do zgłoszenia
         </Link>
 
-        {isLoading ? (
-          <div className={styles.statusMessage} role="status">
-            Ładowanie kolejki…
-          </div>
-        ) : null}
+        {isLoading ? <PublicQueueSkeleton /> : null}
 
-        {error ? (
+        {showInitialError ? (
           <div className={styles.errorMessage} role="alert">
             {error}
           </div>
         ) : null}
 
-        {!isLoading && !error && queue && !queue.enabled ? (
+        {showRefreshError ? (
+          <div className={styles.errorMessage} role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        {!isLoading && queue && !queue.enabled ? (
           <div className={styles.queueDisabled}>
             Publiczny podgląd kolejki jest teraz wyłączony.
           </div>
         ) : null}
 
-        {!isLoading && !error && queue?.enabled ? (
+        {!isLoading && queue?.enabled ? (
           queue.items.length > 0 ? (
             <div className={styles.publicQueueList}>
               {queue.items.map((item) => (
