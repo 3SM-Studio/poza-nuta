@@ -41,10 +41,10 @@ export default async function DashboardAccountMePage() {
         <div className={styles.organizationList}>
           <Card>
             <CardHeader>
-              <CardTitle>Użytkownik Auth</CardTitle>
+              <CardTitle>Profil użytkownika</CardTitle>
               <CardDescription>
-                Widok techniczny tylko do odczytu. Tokeny i sekrety nie są
-                wyświetlane.
+                Dane tylko do odczytu. Edycja profilu będzie dostępna w
+                późniejszym etapie.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -54,28 +54,21 @@ export default async function DashboardAccountMePage() {
                   <dd>{session.authUser.email ?? "Brak emaila"}</dd>
                 </div>
                 <div>
-                  <dt>User ID</dt>
+                  <dt>Auth user ID</dt>
                   <dd className={styles.breakValue}>{session.authUser.id}</dd>
                 </div>
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Lokalny operator</CardTitle>
-              <CardDescription>
-                Dostęp do dashboardu wynika z aktywnego operatora w bazie.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className={styles.eventDetails}>
                 <div>
-                  <dt>Nazwa</dt>
+                  <dt>Nazwa operatora</dt>
                   <dd>{session.operator.name}</dd>
                 </div>
                 <div>
-                  <dt>Operator ID</dt>
+                  <dt>Status operatora</dt>
+                  <dd>
+                    <Badge>{session.operator.active ? "Aktywny" : "Nieaktywny"}</Badge>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Lokalny operator ID</dt>
                   <dd>{session.operator.id}</dd>
                 </div>
               </dl>
@@ -86,7 +79,8 @@ export default async function DashboardAccountMePage() {
             <CardHeader>
               <CardTitle>Metody logowania</CardTitle>
               <CardDescription>
-                Google linking nie jest częścią tego etapu.
+                Widok techniczny aktualnych metod Supabase Auth. Tokeny i
+                sekrety nie są wyświetlane.
               </CardDescription>
             </CardHeader>
             <CardContent>

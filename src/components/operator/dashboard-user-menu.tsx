@@ -101,6 +101,9 @@ export function DashboardUserMenu({
           <DropdownMenuItem asChild>
             <Link href="/dashboard/account/me">Moje konto</Link>
           </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/account/security">Bezpieczeństwo</Link>
+          </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isLoggingOut}
             onSelect={() => void handleLogout()}

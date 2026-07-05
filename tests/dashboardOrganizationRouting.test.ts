@@ -484,6 +484,45 @@ test("account routes render account sidebar without organization switcher", () =
   assert.match(shellSource, /\/dashboard\/account\/security/);
 });
 
+test("account profile page renders read-only Polish profile labels", () => {
+  const source = readFileSync(
+    "src/app/dashboard/account/me/page.tsx",
+    "utf8",
+  );
+
+  assert.match(source, /Profil użytkownika/);
+  assert.match(source, /Email/);
+  assert.match(source, /Auth user ID/);
+  assert.match(source, /Nazwa operatora/);
+  assert.match(source, /Status operatora/);
+  assert.match(source, /Aktywny/);
+  assert.match(source, /Edycja profilu będzie dostępna/);
+  assert.match(source, /Metody logowania/);
+  assert.equal(source.includes("DashboardOrganizationSwitcher"), false);
+  assert.equal(source.includes("service_role"), false);
+});
+
+test("account security page renders login methods as read-only placeholders", () => {
+  const source = readFileSync(
+    "src/app/dashboard/account/security/page.tsx",
+    "utf8",
+  );
+
+  assert.match(source, /Logowanie/);
+  assert.match(source, /Metody logowania/);
+  assert.match(source, /Hasło \/ Email/);
+  assert.match(source, /Google · Wkrótce/);
+  assert.match(source, /MFA · Wkrótce/);
+  assert.match(source, /nie\s+uruchamia OAuth/);
+  assert.match(source, /requireOperatorSession/);
+  assert.match(source, /sanitizeAuthIdentities/);
+  assert.equal(source.includes("signInWithOAuth"), false);
+  assert.equal(source.includes("linkIdentity"), false);
+  assert.equal(source.includes("unlinkIdentity"), false);
+  assert.equal(source.includes("auth/callback"), false);
+  assert.equal(source.includes("DashboardOrganizationSwitcher"), false);
+});
+
 test("dashboard shell renders breadcrumbs in the global header", () => {
   const shellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
@@ -578,7 +617,10 @@ test("account is in avatar menu and not a main header nav link", () => {
   );
 
   assert.match(userMenuSource, /href="\/dashboard\/account\/me"/);
+  assert.match(userMenuSource, /href="\/dashboard\/account\/security"/);
   assert.match(userMenuSource, /Moje konto/);
+  assert.match(userMenuSource, /Bezpieczeństwo/);
+  assert.match(userMenuSource, /Wyloguj/);
 });
 
 test("dashboard logo links to dashboard while public logos link home", () => {
