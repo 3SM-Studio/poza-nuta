@@ -339,6 +339,8 @@ test("organization overview renders empty states and no fake dashboard data", ()
   assert.match(source, /overview\.stats\.requestsToday/);
   assert.match(source, /overview\.stats\.pendingRequests/);
   assert.match(source, /overview\.stats\.catalogSongs/);
+  assert.match(source, /Utwory w globalnym katalogu/);
+  assert.equal(source.includes("Global catalog songs"), false);
   assert.match(source, /overview\.recentEvents\.length > 0/);
   assert.match(source, /overview\.topRequestedSongs\.length > 0/);
   assert.match(source, /Brak wydarzeń/);
@@ -362,6 +364,53 @@ test("dashboard shell uses separate simple organization and account layouts", ()
   assert.match(shellSource, /:\s+"simple"/);
   assert.match(shellSource, /pathname\.startsWith\("\/dashboard\/account"\)/);
   assert.match(shellSource, /getSelectedOrganizationId\(pathname\)/);
+});
+
+test("dashboard theme exposes dark shadcn and sidebar tokens", () => {
+  const globalsSource = readFileSync("src/app/globals.css", "utf8");
+  const operatorStyles = readFileSync(
+    "src/components/operator/operator.module.css",
+    "utf8",
+  );
+  const buttonSource = readFileSync("src/components/ui/button.tsx", "utf8");
+  const cardSource = readFileSync("src/components/ui/card.tsx", "utf8");
+
+  for (const token of [
+    "--background",
+    "--foreground",
+    "--card",
+    "--card-foreground",
+    "--popover",
+    "--popover-foreground",
+    "--primary",
+    "--primary-foreground",
+    "--secondary",
+    "--muted",
+    "--muted-foreground",
+    "--accent",
+    "--border",
+    "--input",
+    "--ring",
+    "--chart-1",
+    "--chart-2",
+    "--chart-3",
+    "--chart-4",
+    "--chart-5",
+    "--sidebar",
+    "--sidebar-foreground",
+    "--sidebar-accent",
+    "--sidebar-border",
+  ]) {
+    assert.match(globalsSource, new RegExp(`${token}:`));
+  }
+
+  assert.match(globalsSource, /color-scheme: dark/);
+  assert.match(globalsSource, /oklch\(/);
+  assert.match(operatorStyles, /background: var\(--sidebar\)/);
+  assert.match(operatorStyles, /background: var\(--topbar-bg\)/);
+  assert.match(operatorStyles, /box-shadow: var\(--shadow-accent/);
+  assert.match(buttonSource, /shadow-\[var\(--shadow-accent-soft\)\]/);
+  assert.match(cardSource, /shadow-\[var\(--shadow-card\)\]/);
 });
 
 test("dashboard topbar is global and renders breadcrumbs with organization switcher", () => {
