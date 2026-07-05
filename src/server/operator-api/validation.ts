@@ -1,3 +1,8 @@
+import {
+  isDateTimeLocalInput,
+  parseWarsawDateTimeLocal,
+} from "../../lib/warsaw-time.ts";
+
 export const DEFAULT_OPERATOR_NAME = "Operator";
 export const MAX_OPERATOR_NAME_LENGTH = 120;
 export const MAX_OPERATOR_EMAIL_LENGTH = 254;
@@ -517,9 +522,11 @@ function parseDateTimeInput(
     return null;
   }
 
-  const date = new Date(normalizedValue);
+  const date = isDateTimeLocalInput(normalizedValue)
+    ? parseWarsawDateTimeLocal(normalizedValue)
+    : new Date(normalizedValue);
 
-  if (!Number.isFinite(date.getTime())) {
+  if (!date || !Number.isFinite(date.getTime())) {
     issues.push({ field, message: `${field} must be a valid date.` });
     return null;
   }

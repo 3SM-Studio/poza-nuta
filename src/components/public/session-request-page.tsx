@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
+import {
+  normalizeSessionRequesterName,
+  SESSION_REQUESTER_NAME_MAX_LENGTH,
+  SESSION_REQUESTER_NAME_MIN_LENGTH,
+} from "@/lib/session-request";
 import type { PublicQueueResponse, PublicSong } from "./api";
 import styles from "./public.module.css";
 import {
@@ -15,8 +21,8 @@ import {
   canSearchPublicSongs,
   formatSongSource,
   normalizePublicSearchTerm,
-  PUBLIC_SINGER_NAME_MAX_LENGTH,
 } from "./validation";
+import { usePublicQueueRealtime } from "./use-public-queue-realtime";
 
 const REQUEST_SUCCESS_MESSAGE =
   "Dodano zgłoszenie. Operator musi je zatwierdzić.";
@@ -43,34 +49,43 @@ export function SessionRequestPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [queue, setQueue] = useState<PublicQueueResponse | null>(null);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
+  const [isRefreshingQueue, setIsRefreshingQueue] = useState(false);
+
+  const loadQueue = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const response = await getSessionQueue(code, signal);
+
+        setQueue(response);
+        setQueueMessage(null);
+      } catch (caughtError) {
+        if (signal?.aborted || isAbortError(caughtError)) {
+          return;
+        }
+
+        setQueueMessage(getQueueErrorMessage(caughtError));
+      }
+    },
+    [code],
+  );
+  const liveStatus = usePublicQueueRealtime(
+    event.id,
+    async (_reason, signal) => loadQueue(signal),
+  );
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
 
-    async function loadQueue() {
-      try {
-        const response = await getSessionQueue(code);
-
-        if (active) {
-          setQueue(response);
-          setQueueMessage(null);
-        }
-      } catch {
-        if (active) {
-          setQueue(null);
-          setQueueMessage(
-            "Nie udało się wczytać kolejki dla tej sesji. Możesz nadal wysłać zgłoszenie.",
-          );
-        }
-      }
+    async function initializeQueue() {
+      await loadQueue(controller.signal);
     }
 
-    void loadQueue();
+    void initializeQueue();
 
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, [code]);
+  }, [loadQueue]);
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -132,18 +147,18 @@ export function SessionRequestPage({
       setSearchResults([]);
       setRequesterName("");
       setSubmitMessage(REQUEST_SUCCESS_MESSAGE);
-
-      try {
-        setQueue(await getSessionQueue(code));
-        setQueueMessage(null);
-      } catch {
-        setQueueMessage("Zgłoszenie zapisane, ale nie udało się odświeżyć kolejki.");
-      }
+      await loadQueue();
     } catch (caughtError) {
       setSubmitMessage(getSubmitErrorMessage(caughtError));
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function refreshQueue() {
+    setIsRefreshingQueue(true);
+    await loadQueue();
+    setIsRefreshingQueue(false);
   }
 
   return (
@@ -236,11 +251,13 @@ export function SessionRequestPage({
         <form className={styles.requestForm} onSubmit={handleSubmit}>
           <div className={styles.field}>
             <label htmlFor="session-requester-name">
-              Imię zgłaszającego (opcjonalnie)
+              Imię lub ksywka
             </label>
             <input
               id="session-requester-name"
               type="text"
+              required
+              minLength={SESSION_REQUESTER_NAME_MIN_LENGTH}
               value={requesterName}
               onChange={(event) => {
                 setRequesterName(event.target.value);
@@ -249,12 +266,15 @@ export function SessionRequestPage({
                   requesterName: undefined,
                 }));
               }}
-              maxLength={PUBLIC_SINGER_NAME_MAX_LENGTH}
+              maxLength={SESSION_REQUESTER_NAME_MAX_LENGTH}
               placeholder="Imię lub ksywka"
               disabled={isSubmitting}
             />
+            <span className={styles.inlineMessage}>
+              Podaj imię lub ksywkę, żeby operator wiedział, kogo zaprosić.
+            </span>
             <span className={styles.characterCount}>
-              {requesterName.length}/{PUBLIC_SINGER_NAME_MAX_LENGTH}
+              {requesterName.length}/{SESSION_REQUESTER_NAME_MAX_LENGTH}
             </span>
             {formErrors.requesterName ? (
               <p className={styles.fieldError}>{formErrors.requesterName}</p>
@@ -287,7 +307,22 @@ export function SessionRequestPage({
       </section>
 
       <section className={styles.publicSection}>
-        <h2>Kolejka tej sesji</h2>
+        <div className={styles.sectionHeading}>
+          <div>
+            <h2>Kolejka tej sesji</h2>
+            <span className={styles.inlineMessage} role="status">
+              {formatLiveStatus(liveStatus)}
+            </span>
+          </div>
+          <button
+            className={styles.secondaryButton}
+            type="button"
+            onClick={() => void refreshQueue()}
+            disabled={isRefreshingQueue}
+          >
+            {isRefreshingQueue ? "Odświeżanie…" : "Odśwież"}
+          </button>
+        </div>
         {queueMessage ? (
           <p className={styles.inlineMessage} role="status">
             {queueMessage}
@@ -304,18 +339,24 @@ export function SessionRequestPage({
               >
                 <div>
                   <span className={styles.queueStatus}>
-                    {item.status === "now" ? "Teraz" : "Zaakceptowane"}
+                    {item.status === "now"
+                      ? "Aktualnie śpiewane"
+                      : "Zaakceptowane"}
                   </span>
                   <h2>{item.singerName}</h2>
                   {queue.showSongTitles && item.title ? (
                     <p>
                       {item.title} - {item.artist}
                     </p>
+                  ) : item.status === "now" ? (
+                    <p>Aktualnie śpiewane</p>
                   ) : (
                     <p>Tytuły piosenek są ukryte publicznie.</p>
                   )}
                 </div>
-                <span className={styles.queuePosition}>#{item.position}</span>
+                <span className={styles.queuePosition}>
+                  {item.status === "now" ? "Teraz" : `#${item.position}`}
+                </span>
               </article>
             ))}
           </div>
@@ -342,7 +383,7 @@ function validateSessionRequestForm(input: {
     }
   | { success: false; errors: SessionRequestFormErrors } {
   const errors: SessionRequestFormErrors = {};
-  const requesterName = input.requesterName.trim();
+  const requesterName = normalizeSessionRequesterName(input.requesterName);
 
   if (
     input.songId === null ||
@@ -352,8 +393,11 @@ function validateSessionRequestForm(input: {
     errors.songId = "Wybierz piosenkę.";
   }
 
-  if (requesterName.length > PUBLIC_SINGER_NAME_MAX_LENGTH) {
-    errors.requesterName = `Imię może mieć maksymalnie ${PUBLIC_SINGER_NAME_MAX_LENGTH} znaków.`;
+  if (requesterName.length < SESSION_REQUESTER_NAME_MIN_LENGTH) {
+    errors.requesterName =
+      "Podaj imię lub ksywkę, żeby operator wiedział, kogo zaprosić.";
+  } else if (requesterName.length > SESSION_REQUESTER_NAME_MAX_LENGTH) {
+    errors.requesterName = `Imię lub ksywka może mieć maksymalnie ${SESSION_REQUESTER_NAME_MAX_LENGTH} znaków.`;
   }
 
   if (Object.keys(errors).length > 0) {
@@ -393,4 +437,33 @@ function getSubmitErrorMessage(error: unknown) {
   }
 
   return "Nie udało się dodać zgłoszenia. Spróbuj ponownie.";
+}
+
+function getQueueErrorMessage(error: unknown) {
+  if (error instanceof SessionClientError) {
+    if (error.code === "SESSION_EVENT_CLOSED") {
+      return "Zgłoszenia są już zamknięte.";
+    }
+
+    if (error.code === "SESSION_PUBLIC_REQUESTS_DISABLED") {
+      return "Publiczne zgłoszenia są wyłączone.";
+    }
+  }
+
+  return "Nie udało się wczytać kolejki dla tej sesji. Możesz nadal wysłać zgłoszenie.";
+}
+
+function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
+  switch (status) {
+    case "live":
+      return "Połączenie live";
+    case "unavailable":
+      return "Live niedostępne";
+    default:
+      return "Łączenie live…";
+  }
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }

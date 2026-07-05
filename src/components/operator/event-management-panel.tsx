@@ -142,7 +142,9 @@ export function EventManagementPanel({
             </div>
 
             <div className={styles.dashboardField}>
-              <label htmlFor="event-manage-starts-at">Start wydarzenia</label>
+              <label htmlFor="event-manage-starts-at">
+                Start wydarzenia (czas polski)
+              </label>
               <input
                 id="event-manage-starts-at"
                 name="startsAt"
@@ -156,7 +158,7 @@ export function EventManagementPanel({
 
             <div className={styles.dashboardField}>
               <label htmlFor="event-manage-auto-close-at">
-                Czas zamknięcia
+                Czas zamknięcia (czas polski)
               </label>
               <input
                 id="event-manage-auto-close-at"

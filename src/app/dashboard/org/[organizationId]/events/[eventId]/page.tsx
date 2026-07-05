@@ -30,6 +30,10 @@ import {
   getDashboardOrganizationEventQueuePath,
   getDashboardOrganizationEventsPath,
 } from "@/lib/dashboard-routes";
+import {
+  formatWarsawDateTime,
+  formatWarsawDateTimeLocal,
+} from "@/lib/warsaw-time";
 import { OperatorApiError } from "@/server/operator-api/errors";
 import {
   canManageDashboardOrganizationEvent,
@@ -157,11 +161,11 @@ export default async function OrganizationEventDetailPage({
                   <dd>{requestsOpen ? "Otwarte" : "Zamknięte"}</dd>
                 </div>
                 <div>
-                  <dt>Start</dt>
+                  <dt>Start (czas polski)</dt>
                   <dd>{formatDateTime(result.event.startsAt)}</dd>
                 </div>
                 <div>
-                  <dt>Czas zamknięcia</dt>
+                  <dt>Czas zamknięcia (czas polski)</dt>
                   <dd>{formatDateTime(result.event.autoCloseAt)}</dd>
                 </div>
                 <div>
@@ -378,6 +382,9 @@ async function generateSessionLink(
 ): Promise<EventSessionLinkActionState> {
   "use server";
 
+  void _state;
+  void _formData;
+
   const session = await requireOperatorSession();
 
   try {
@@ -555,18 +562,9 @@ function formatDateTime(date: Date | null) {
     return "Brak terminu";
   }
 
-  return new Intl.DateTimeFormat("pl-PL", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatWarsawDateTime(date);
 }
 
 function formatDateTimeLocalInput(date: Date | null) {
-  if (!date) {
-    return "";
-  }
-
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-
-  return localDate.toISOString().slice(0, 16);
+  return formatWarsawDateTimeLocal(date);
 }

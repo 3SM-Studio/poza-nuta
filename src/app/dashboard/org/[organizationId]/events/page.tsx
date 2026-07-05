@@ -16,6 +16,7 @@ import {
   getDashboardOrganizationEventPath,
   getDashboardOrganizationNewEventPath,
 } from "@/lib/dashboard-routes";
+import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
 import styles from "../../../../../components/operator/operator.module.css";
 import {
@@ -93,11 +94,11 @@ export default async function OrganizationEventsPage({
                       </dd>
                     </div>
                     <div>
-                      <dt>Start</dt>
+                      <dt>Start (czas polski)</dt>
                       <dd>{formatDate(event.startsAt)}</dd>
                     </div>
                     <div>
-                      <dt>Czas zamknięcia</dt>
+                      <dt>Czas zamknięcia (czas polski)</dt>
                       <dd>{formatDate(event.autoCloseAt)}</dd>
                     </div>
                     <div>
@@ -173,8 +174,5 @@ function formatDate(date: Date | null) {
     return "Brak terminu";
   }
 
-  return new Intl.DateTimeFormat("pl-PL", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatWarsawDateTime(date);
 }

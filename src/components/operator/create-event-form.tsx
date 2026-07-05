@@ -71,7 +71,7 @@ export function CreateEventForm({
       </div>
 
       <div className={styles.dashboardField}>
-        <label htmlFor="event-starts-at">Start wydarzenia</label>
+        <label htmlFor="event-starts-at">Start wydarzenia (czas polski)</label>
         <input
           id="event-starts-at"
           name="startsAt"
@@ -83,7 +83,9 @@ export function CreateEventForm({
       </div>
 
       <div className={styles.dashboardField}>
-        <label htmlFor="event-auto-close-at">Czas zamknięcia</label>
+        <label htmlFor="event-auto-close-at">
+          Czas zamknięcia (czas polski)
+        </label>
         <input
           id="event-auto-close-at"
           name="autoCloseAt"

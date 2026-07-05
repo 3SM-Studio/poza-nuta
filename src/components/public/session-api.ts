@@ -60,9 +60,10 @@ export function createSessionRequest(
   });
 }
 
-export function getSessionQueue(code: string) {
+export function getSessionQueue(code: string, signal?: AbortSignal) {
   return requestJson<PublicQueueResponse>(
     `/api/session/${encodeURIComponent(code)}/queue`,
+    { signal },
   );
 }
 

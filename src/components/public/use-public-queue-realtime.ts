@@ -1,11 +1,9 @@
 "use client";
 
 import { useQueueRealtime } from "@/components/realtime/use-queue-realtime";
-import type {
-  QueueRealtimeInvalidateReason,
-} from "@/lib/queue-realtime";
+import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 
-export function useDashboardQueueRealtime(
+export function usePublicQueueRealtime(
   eventId: number | null | undefined,
   onInvalidate: (
     reason: QueueRealtimeInvalidateReason,
@@ -13,7 +11,7 @@ export function useDashboardQueueRealtime(
   ) => void | Promise<void>,
 ) {
   return useQueueRealtime({
-    audience: "dashboard",
+    audience: "public",
     eventId,
     onInvalidate,
   });

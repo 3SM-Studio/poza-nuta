@@ -2,124 +2,69 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { PublicQueueSkeleton } from "@/components/operator/dashboard-skeletons";
+import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 
 import {
   getPublicQueue,
   PublicClientError,
   type PublicQueueResponse,
 } from "./api";
-import {
-  createPublicQueuePollingState,
-  getPublicQueuePollDelayMs,
-  recordPublicQueuePollFailure,
-  recordPublicQueuePollSuccess,
-  shouldPollPublicQueue,
-} from "./public-queue-polling";
 import styles from "./public.module.css";
+import { usePublicQueueRealtime } from "./use-public-queue-realtime";
 
 export function PublicQueuePage() {
   const [queue, setQueue] = useState<PublicQueueResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pollingState, setPollingState] = useState(
-    createPublicQueuePollingState,
+  const loadQueue = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const response = await getPublicQueue(signal);
+
+        setQueue(response);
+        setError(null);
+      } catch (caughtError) {
+        if (signal?.aborted || isAbortError(caughtError)) {
+          return;
+        }
+
+        setError(getQueueErrorMessage(caughtError));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
   );
-  const shouldPoll = shouldPollPublicQueue(queue, pollingState);
+  const liveStatus = usePublicQueueRealtime(
+    queue?.enabled ? queue.eventId : null,
+    async (_reason, signal) => loadQueue(signal),
+  );
   const showInitialError = !isLoading && error && !queue;
   const showRefreshError = !isLoading && error && queue;
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
 
     async function initializeQueue() {
-      try {
-        const response = await getPublicQueue();
-
-        if (active) {
-          setQueue(response);
-          setPollingState(recordPublicQueuePollSuccess());
-        }
-      } catch (caughtError) {
-        if (active) {
-          setPollingState((state) =>
-            recordPublicQueuePollFailure(
-              state,
-              getPublicClientErrorStatus(caughtError),
-            ),
-          );
-          setError(getQueueErrorMessage(caughtError));
-        }
-      } finally {
-        if (active) {
-          setIsLoading(false);
-        }
-      }
+      await loadQueue(controller.signal);
     }
 
     void initializeQueue();
 
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, []);
-
-  useEffect(() => {
-    if (!shouldPoll) {
-      return;
-    }
-
-    let active = true;
-    const timeoutId = window.setTimeout(() => {
-      getPublicQueue()
-        .then((response) => {
-          if (active) {
-            setQueue(response);
-            setPollingState(recordPublicQueuePollSuccess());
-            setError(null);
-          }
-        })
-        .catch((caughtError) => {
-          if (active) {
-            setPollingState((state) =>
-              recordPublicQueuePollFailure(
-                state,
-                getPublicClientErrorStatus(caughtError),
-              ),
-            );
-            setError(getQueueErrorMessage(caughtError));
-          }
-        });
-    }, getPublicQueuePollDelayMs(pollingState));
-
-    return () => {
-      active = false;
-      window.clearTimeout(timeoutId);
-    };
-  }, [pollingState, shouldPoll]);
+  }, [loadQueue]);
 
   async function refreshQueue() {
     setIsRefreshing(true);
     setError(null);
-    setPollingState(createPublicQueuePollingState());
-
-    try {
-      setQueue(await getPublicQueue());
-      setPollingState(recordPublicQueuePollSuccess());
-    } catch (caughtError) {
-      setPollingState((state) =>
-        recordPublicQueuePollFailure(
-          state,
-          getPublicClientErrorStatus(caughtError),
-        ),
-      );
-      setError(getQueueErrorMessage(caughtError));
-    } finally {
-      setIsRefreshing(false);
-    }
+    await loadQueue();
+    setIsRefreshing(false);
   }
 
   return (
@@ -141,6 +86,9 @@ export function PublicQueuePage() {
               />
             </Link>
             <h1>Publiczna kolejka</h1>
+            <span className={styles.inlineMessage} role="status">
+              {formatLiveStatus(liveStatus)}
+            </span>
           </div>
           <button
             className={styles.secondaryButton}
@@ -215,19 +163,29 @@ export function PublicQueuePage() {
   );
 }
 
-function getPublicClientErrorStatus(error: unknown) {
-  return error instanceof PublicClientError ? error.status : null;
-}
-
 function getQueueErrorMessage(error: unknown) {
   if (error instanceof PublicClientError && error.status === 404) {
-    return "Aktualnie nie ma aktywnego wydarzenia. Automatyczne odświeżanie zostało zatrzymane.";
+    return "Aktualnie nie ma aktywnego wydarzenia.";
   }
 
   if (error instanceof PublicClientError && error.status === 503) {
-    return "Serwer jest chwilowo niedostępny. Spróbujemy ponownie za dłuższą chwilę.";
+    return "Serwer jest chwilowo niedostępny. Spróbuj ponownie za chwilę.";
   }
-  return error instanceof PublicClientError && error.status === 404
-    ? "Aktualnie nie ma aktywnego wydarzenia."
-    : "Nie udało się wczytać kolejki. Spróbuj ponownie.";
+
+  return "Nie udało się wczytać kolejki. Spróbuj ponownie.";
+}
+
+function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
+  switch (status) {
+    case "live":
+      return "Połączenie live";
+    case "unavailable":
+      return "Live niedostępne";
+    default:
+      return "Łączenie live…";
+  }
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }

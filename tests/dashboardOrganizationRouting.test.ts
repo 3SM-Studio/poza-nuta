@@ -31,14 +31,6 @@ import {
   resolveDashboardHomeRedirect,
 } from "../src/lib/dashboard-routes.ts";
 import { sanitizeAuthIdentities } from "../src/server/operator-api/account.ts";
-import {
-  createPublicQueuePollingState,
-  getPublicQueuePollDelayMs,
-  PUBLIC_QUEUE_POLL_INTERVAL_MS,
-  recordPublicQueuePollFailure,
-  recordPublicQueuePollSuccess,
-  shouldPollPublicQueue,
-} from "../src/components/public/public-queue-polling.ts";
 
 const exampleOrganizationId = "kgbgnpwpbcaebdytjmbx";
 const otherOrganizationId = "aaaaaaaaaaaaaaaaaaaa";
@@ -1013,7 +1005,7 @@ test("organization event management updates auto_close_at and closes without del
   assert.equal(manageSource.includes("ends_at"), false);
 });
 
-test("organization event queue placeholder route is available", () => {
+test("organization event queue route renders the event-scoped management panel", () => {
   const queuePageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
     "utf8",
@@ -1023,8 +1015,10 @@ test("organization event queue placeholder route is available", () => {
     "utf8",
   );
 
-  assert.match(queuePageSource, /getDashboardOrganizationEventForAuthUser/);
-  assert.match(queuePageSource, /Zarządzanie kolejką zostanie rozbudowane/);
+  assert.match(queuePageSource, /getDashboardOrganizationEventQueueForAuthUser/);
+  assert.match(queuePageSource, /EventQueuePanel/);
+  assert.match(queuePageSource, /Kolejka wydarzenia/);
+  assert.match(queuePageSource, /Powrót do wydarzenia/);
   assert.match(queuePageSource, /getDashboardOrganizationEventPath/);
   assert.match(detailPageSource, /Zarządzaj kolejką/);
   assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
@@ -1060,63 +1054,31 @@ test("account identity sanitizer exposes login methods without tokens", () => {
   assert.equal(JSON.stringify(identities).includes("secret"), false);
 });
 
-test("public queue polling helper keeps safe refetch fallback enabled", () => {
-  assert.equal(PUBLIC_QUEUE_POLL_INTERVAL_MS, 5_000);
-  assert.equal(shouldPollPublicQueue(null), true);
-  assert.equal(
-    shouldPollPublicQueue({
-      eventId: 1,
-      enabled: true,
-      showSongTitles: true,
-      items: [],
-    }),
-    true,
-  );
-  assert.equal(
-    shouldPollPublicQueue({
-      eventId: 1,
-      enabled: false,
-      showSongTitles: true,
-      items: [],
-    }),
-    false,
-  );
-});
-
-test("public queue polling backs off infrastructure failures", () => {
-  const initialState = createPublicQueuePollingState();
-  const failedOnce = recordPublicQueuePollFailure(initialState, 503);
-  const failedTwice = recordPublicQueuePollFailure(failedOnce, 503);
-
-  assert.equal(shouldPollPublicQueue(null, failedOnce), true);
-  assert.equal(getPublicQueuePollDelayMs(initialState, 0), 5_000);
-  assert.equal(getPublicQueuePollDelayMs(failedOnce, 0), 10_000);
-  assert.equal(getPublicQueuePollDelayMs(failedTwice, 0), 20_000);
-  assert.ok(getPublicQueuePollDelayMs(failedOnce, 0) > PUBLIC_QUEUE_POLL_INTERVAL_MS);
-});
-
-test("public queue polling stops after missing active event", () => {
-  const stopped = recordPublicQueuePollFailure(
-    createPublicQueuePollingState(),
-    404,
-  );
-
-  assert.equal(shouldPollPublicQueue(null, stopped), false);
-  assert.deepEqual(recordPublicQueuePollSuccess(), {
-    failureCount: 0,
-    stopped: false,
-  });
-});
-
-test("public queue page uses scheduled backoff instead of fixed interval polling", () => {
-  const source = readFileSync(
+test("public queue uses Supabase Realtime invalidation without data polling", () => {
+  const pageSource = readFileSync(
     "src/components/public/public-queue-page.tsx",
     "utf8",
   );
+  const sessionPageSource = readFileSync(
+    "src/components/public/session-request-page.tsx",
+    "utf8",
+  );
+  const hookSource = readFileSync(
+    "src/components/realtime/use-queue-realtime.ts",
+    "utf8",
+  );
 
-  assert.match(source, /window\.setTimeout/);
-  assert.match(source, /getPublicQueuePollDelayMs\(pollingState\)/);
-  assert.equal(source.includes("window.setInterval"), false);
+  assert.match(pageSource, /usePublicQueueRealtime/);
+  assert.match(sessionPageSource, /usePublicQueueRealtime/);
+  assert.match(hookSource, /\.on\("broadcast"/);
+  assert.match(hookSource, /supabase\.removeChannel\(channel\)/);
+  assert.match(hookSource, /new AbortController\(\)/);
+  assert.equal(pageSource.includes("public-queue-polling"), false);
+  assert.equal(sessionPageSource.includes("public-queue-polling"), false);
+  assert.equal(pageSource.includes("setInterval"), false);
+  assert.equal(pageSource.includes("setTimeout"), false);
+  assert.equal(sessionPageSource.includes("setInterval"), false);
+  assert.equal(sessionPageSource.includes("setTimeout"), false);
 });
 
 test("dashboard routes expose skeleton loading fallbacks", () => {

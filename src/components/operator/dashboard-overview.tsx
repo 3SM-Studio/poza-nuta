@@ -25,6 +25,7 @@ import {
   formatEventTimeRemaining,
   shouldWarnEventClosingSoon,
 } from "../../lib/event-lifecycle";
+import { formatWarsawDateTime } from "../../lib/warsaw-time";
 import {
   closeDashboardEvent,
   extendDashboardEvent,
@@ -220,11 +221,11 @@ export function DashboardOverview() {
             <CardContent>
               <dl className={styles.eventDetails}>
                 <div>
-                  <dt>Start</dt>
+                  <dt>Start (czas polski)</dt>
                   <dd>{formatDateTime(event.startsAt)}</dd>
                 </div>
                 <div>
-                  <dt>Automatyczne zamknięcie</dt>
+                  <dt>Automatyczne zamknięcie (czas polski)</dt>
                   <dd>{formatDateTime(event.autoCloseAt)}</dd>
                 </div>
                 <div>
@@ -338,10 +339,7 @@ function formatDateTime(value: string | null) {
     return "—";
   }
 
-  return new Intl.DateTimeFormat("pl-PL", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatWarsawDateTime(value);
 }
 
 function getClientErrorMessage(error: unknown) {

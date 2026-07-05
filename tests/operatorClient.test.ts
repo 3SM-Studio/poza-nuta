@@ -11,8 +11,10 @@ import {
 } from "../src/components/operator/api.ts";
 import {
   getDashboardQueueRealtimeTopic,
+  getPublicQueueRealtimeTopic,
   isDashboardQueueChangedPayload,
-} from "../src/components/operator/dashboard-queue-realtime.ts";
+  isPublicQueueChangedPayload,
+} from "../src/lib/queue-realtime.ts";
 
 test("formatDuration formats queue durations for the operator UI", () => {
   assert.equal(formatDuration(null), null);
@@ -141,6 +143,26 @@ test("dashboard queue realtime helpers scope messages to an event topic", () => 
       },
       42,
     ),
+    false,
+  );
+});
+
+test("public queue realtime helpers expose invalidation only", () => {
+  assert.equal(getPublicQueueRealtimeTopic(42), "public:event:42:queue");
+  assert.throws(() => getPublicQueueRealtimeTopic(-1));
+  assert.equal(
+    isPublicQueueChangedPayload({
+      type: "queue_changed",
+      changedAt: "2026-07-03T12:00:00.000Z",
+    }),
+    true,
+  );
+  assert.equal(
+    isPublicQueueChangedPayload({
+      type: "queue_changed",
+      eventId: 42,
+      operation: "UPDATE",
+    }),
     false,
   );
 });

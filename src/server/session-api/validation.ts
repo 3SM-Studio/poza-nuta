@@ -1,11 +1,13 @@
 import {
   MAX_NOTE_LENGTH,
-  MAX_SINGER_NAME_LENGTH,
   type ValidationIssue,
   type ValidationResult,
 } from "../public-api/validation.ts";
-
-export const DEFAULT_SESSION_SINGER_NAME = "Gość";
+import {
+  normalizeSessionRequesterName,
+  SESSION_REQUESTER_NAME_MAX_LENGTH,
+  SESSION_REQUESTER_NAME_MIN_LENGTH,
+} from "../../lib/session-request.ts";
 
 export type SessionRequestInput = {
   songId: number;
@@ -27,9 +29,9 @@ export function validateSessionRequestInput(
   const songId = input.songId;
   const singerName =
     typeof input.requesterName === "string"
-      ? input.requesterName.trim()
+      ? normalizeSessionRequesterName(input.requesterName)
       : typeof input.singerName === "string"
-        ? input.singerName.trim()
+        ? normalizeSessionRequesterName(input.singerName)
         : "";
   const note =
     typeof input.note === "string" && input.note.trim().length > 0
@@ -47,10 +49,15 @@ export function validateSessionRequestInput(
     });
   }
 
-  if (singerName.length > MAX_SINGER_NAME_LENGTH) {
+  if (singerName.length < SESSION_REQUESTER_NAME_MIN_LENGTH) {
     issues.push({
       field: "requesterName",
-      message: `requesterName must contain at most ${MAX_SINGER_NAME_LENGTH} characters.`,
+      message: `requesterName must contain at least ${SESSION_REQUESTER_NAME_MIN_LENGTH} characters.`,
+    });
+  } else if (singerName.length > SESSION_REQUESTER_NAME_MAX_LENGTH) {
+    issues.push({
+      field: "requesterName",
+      message: `requesterName must contain at most ${SESSION_REQUESTER_NAME_MAX_LENGTH} characters.`,
     });
   }
 
@@ -78,7 +85,7 @@ export function validateSessionRequestInput(
     success: true,
     data: {
       songId: songId as number,
-      singerName: singerName || DEFAULT_SESSION_SINGER_NAME,
+      singerName,
       note,
     },
   };

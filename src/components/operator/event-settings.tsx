@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
 import {
   closeDashboardEvent,
@@ -211,11 +212,11 @@ export function DashboardEventSettings() {
             <CardContent>
               <dl className={styles.eventDetails}>
                 <div>
-                  <dt>Start</dt>
+                  <dt>Start (czas polski)</dt>
                   <dd>{formatDateTime(event.startsAt)}</dd>
                 </div>
                 <div>
-                  <dt>Automatyczne zamknięcie</dt>
+                  <dt>Automatyczne zamknięcie (czas polski)</dt>
                   <dd>{formatDateTime(event.autoCloseAt)}</dd>
                 </div>
                 {event.closedAt ? (
@@ -400,10 +401,7 @@ function formatDateTime(value: string | null) {
     return "—";
   }
 
-  return new Intl.DateTimeFormat("pl-PL", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatWarsawDateTime(value);
 }
 
 function getClientErrorMessage(error: unknown) {

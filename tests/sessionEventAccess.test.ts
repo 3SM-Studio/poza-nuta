@@ -6,10 +6,7 @@ import {
   getSessionEventAccessStatus,
   isValidSessionCodeFormat,
 } from "../src/lib/session-event-access.ts";
-import {
-  DEFAULT_SESSION_SINGER_NAME,
-  validateSessionRequestInput,
-} from "../src/server/session-api/validation.ts";
+import { validateSessionRequestInput } from "../src/server/session-api/validation.ts";
 
 const activeLink = {
   active: true,
@@ -104,15 +101,45 @@ test("session access allows active event without requiring global active public 
   );
 });
 
-test("session request validation keeps requester name optional", () => {
+test("session request validation requires a requester nickname", () => {
   assert.deepEqual(validateSessionRequestInput({ songId: 42 }), {
-    success: true,
-    data: {
-      songId: 42,
-      singerName: DEFAULT_SESSION_SINGER_NAME,
-      note: null,
-    },
+    success: false,
+    issues: [
+      {
+        field: "requesterName",
+        message: "requesterName must contain at least 2 characters.",
+      },
+    ],
   });
+  assert.deepEqual(
+    validateSessionRequestInput({ songId: 42, requesterName: "   " }),
+    {
+      success: false,
+      issues: [
+        {
+          field: "requesterName",
+          message: "requesterName must contain at least 2 characters.",
+        },
+      ],
+    },
+  );
+});
+
+test("session request validation stores a trimmed requester nickname", () => {
+  assert.deepEqual(
+    validateSessionRequestInput({
+      songId: 42,
+      requesterName: "  Kasia  ",
+    }),
+    {
+      success: true,
+      data: {
+        songId: 42,
+        singerName: "Kasia",
+        note: null,
+      },
+    },
+  );
 });
 
 test("dashboard session link generation is limited to event managers and revokes previous links", () => {

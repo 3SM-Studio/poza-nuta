@@ -16,6 +16,7 @@ import {
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationSettingsPath,
 } from "@/lib/dashboard-routes";
+import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
 import { DashboardRuntimeError } from "../../../../components/operator/dashboard-runtime-error";
 import styles from "../../../../components/operator/operator.module.css";
@@ -156,7 +157,7 @@ export default async function DashboardOrganizationPage({
                     <dd>{overview.activeEvent.venue ?? "Nie ustawiono"}</dd>
                   </div>
                   <div>
-                    <dt>Start</dt>
+                    <dt>Start (czas polski)</dt>
                     <dd>{formatDateTime(overview.activeEvent.startsAt)}</dd>
                   </div>
                   <div>
@@ -319,16 +320,13 @@ function formatEventStatus(status: string) {
 }
 
 function formatDate(value: Date) {
-  return new Intl.DateTimeFormat("pl-PL", {
+  return formatWarsawDateTime(value, {
     dateStyle: "medium",
-  }).format(value);
+  });
 }
 
 function formatDateTime(value: Date) {
-  return new Intl.DateTimeFormat("pl-PL", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(value);
+  return formatWarsawDateTime(value);
 }
 
 function formatNumber(value: number) {

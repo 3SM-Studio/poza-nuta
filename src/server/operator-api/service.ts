@@ -127,6 +127,7 @@ export async function applyOperatorQueueAction(
           eq(songRequests.eventId, event.id),
         ),
       )
+      .for("update")
       .limit(1);
 
     if (!queueRequest) {
@@ -145,9 +146,15 @@ export async function applyOperatorQueueAction(
       );
     }
 
+    const changedAt = new Date();
+    let completedNowRequestCount = 0;
+
     if (action === "start") {
-      const [activeNow] = await transaction
-        .select({ id: songRequests.id })
+      const activeNowRequests = await transaction
+        .select({
+          id: songRequests.id,
+          version: songRequests.version,
+        })
         .from(songRequests)
         .where(
           and(
@@ -155,18 +162,32 @@ export async function applyOperatorQueueAction(
             eq(songRequests.status, "now"),
           ),
         )
-        .limit(1);
+        .orderBy(asc(songRequests.id))
+        .for("update");
 
-      if (activeNow) {
-        throw new OperatorApiError(
-          409,
-          "REQUEST_ALREADY_NOW",
-          "Another request is already marked as now.",
-        );
+      for (const activeNow of activeNowRequests) {
+        await transaction
+          .update(songRequests)
+          .set({
+            status: "done",
+            position: 0,
+            completedAt: changedAt,
+            updatedAt: changedAt,
+            version: sql`${songRequests.version} + 1`,
+          })
+          .where(
+            and(
+              eq(songRequests.id, activeNow.id),
+              eq(songRequests.eventId, event.id),
+              eq(songRequests.status, "now"),
+              eq(songRequests.version, activeNow.version),
+            ),
+          );
       }
+
+      completedNowRequestCount = activeNowRequests.length;
     }
 
-    const changedAt = new Date();
     const targetStatus = getTargetStatus(action);
     let targetPosition = 0;
 
@@ -198,6 +219,7 @@ export async function applyOperatorQueueAction(
         and(
           eq(songRequests.id, queueRequest.id),
           eq(songRequests.eventId, event.id),
+          eq(songRequests.version, queueRequest.version),
         ),
       );
 
@@ -234,6 +256,9 @@ export async function applyOperatorQueueAction(
         nextPosition: updatedRequest.position,
         previousVersion: queueRequest.version,
         nextVersion: updatedRequest.version,
+        ...(action === "start"
+          ? { completedNowRequestCount }
+          : {}),
       },
     });
 

@@ -57,6 +57,13 @@
       "when": 1783261864118,
       "tag": "0007_lonely_midnight",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783270978746,
+      "tag": "0008_public_queue_realtime_broadcast",
+      "breakpoints": true
     }
   ]
 }

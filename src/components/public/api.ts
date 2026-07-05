@@ -91,8 +91,8 @@ export function createPublicRequest(input: {
   });
 }
 
-export function getPublicQueue() {
-  return requestJson<PublicQueueResponse>("/api/public/queue");
+export function getPublicQueue(signal?: AbortSignal) {
+  return requestJson<PublicQueueResponse>("/api/public/queue", { signal });
 }
 
 export async function getDashboardEntryStatus() {

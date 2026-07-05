@@ -425,6 +425,47 @@
   padding: 0;
 }
 
+.eventQueueContent {
+  display: grid;
+  gap: 1rem;
+}
+
+.eventQueueLiveActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.eventQueueCurrent {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.eventQueueCurrent h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.eventQueueCurrent > .requestRow {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.eventQueueFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.eventQueueFilterSelect {
+  width: min(100%, 18rem);
+}
+
 .requestRow {
   display: grid;
   grid-template-columns: minmax(12rem, 1fr) auto;
