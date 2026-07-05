@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/card";
 import {
   getDashboardOrganizationEventsPath,
-  getDashboardOrganizationGeneralSettingsPath,
+  getDashboardOrganizationSettingsPath,
+  getDashboardOrganizationTeamPath,
 } from "@/lib/dashboard-routes";
 import { resolveDashboardOrganizationAccess } from "@/lib/dashboard-organization-access";
 
@@ -28,18 +29,18 @@ export const dynamic = "force-dynamic";
 
 type OrganizationPageProps = {
   params: Promise<{
-    orgHandle: string;
+    organizationId: string;
   }>;
 };
 
 export default async function DashboardOrganizationPage({
   params,
 }: OrganizationPageProps) {
-  const { orgHandle } = await params;
+  const { organizationId } = await params;
   const session = await requireOperatorSession();
   const organization = await getDashboardOrganizationForAuthUser(
     session.authUser.id,
-    orgHandle,
+    organizationId,
   );
   const access = resolveDashboardOrganizationAccess(organization);
 
@@ -53,7 +54,7 @@ export default async function DashboardOrganizationPage({
         <header className={styles.pageHeader}>
           <div>
             <h1>{access.organization.name}</h1>
-            <p className={styles.eventMeta}>/{access.organization.handle}</p>
+            <p className={styles.eventMeta}>ID: {access.organization.publicId}</p>
           </div>
           <Badge variant="secondary">{formatRole(access.organization.role)}</Badge>
         </header>
@@ -70,10 +71,29 @@ export default async function DashboardOrganizationPage({
               <Link
                 className={styles.inlineLink}
                 href={getDashboardOrganizationEventsPath(
-                  access.organization.handle,
+                  access.organization.publicId,
                 )}
               >
                 Zobacz eventy
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Zespół</CardTitle>
+              <CardDescription>
+                Podgląd członków przypisanych do organizacji.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link
+                className={styles.inlineLink}
+                href={getDashboardOrganizationTeamPath(
+                  access.organization.publicId,
+                )}
+              >
+                Zobacz zespół
               </Link>
             </CardContent>
           </Card>
@@ -88,8 +108,8 @@ export default async function DashboardOrganizationPage({
             <CardContent>
               <Link
                 className={styles.inlineLink}
-                href={getDashboardOrganizationGeneralSettingsPath(
-                  access.organization.handle,
+                href={getDashboardOrganizationSettingsPath(
+                  access.organization.publicId,
                 )}
               >
                 Otwórz ustawienia

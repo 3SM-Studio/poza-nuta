@@ -43,6 +43,13 @@
       "when": 1783112091347,
       "tag": "0005_harsh_scrambler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783219661212,
+      "tag": "0006_daily_screwball",
+      "breakpoints": true
     }
   ]
 }

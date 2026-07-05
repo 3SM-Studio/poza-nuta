@@ -22,18 +22,18 @@ export const dynamic = "force-dynamic";
 
 type OrganizationEventsPageProps = {
   params: Promise<{
-    orgHandle: string;
+    organizationId: string;
   }>;
 };
 
 export default async function OrganizationEventsPage({
   params,
 }: OrganizationEventsPageProps) {
-  const { orgHandle } = await params;
+  const { organizationId } = await params;
   const session = await requireOperatorSession();
   const result = await listDashboardOrganizationEventsForAuthUser(
     session.authUser.id,
-    orgHandle,
+    organizationId,
   );
 
   if (!result) {

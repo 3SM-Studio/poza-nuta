@@ -1,4 +1,5 @@
 import { config } from "dotenv";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -7,6 +8,7 @@ import {
   DEFAULT_WORKSPACE_HANDLE,
   DEFAULT_WORKSPACE_NAME,
 } from "../lib/workspace.ts";
+import { generateOrganizationPublicId } from "../lib/organization-public-id.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 import { events, workspaces } from "./schema.ts";
 
@@ -31,6 +33,7 @@ async function seed() {
     const [workspace] = await db
       .insert(workspaces)
       .values({
+        publicId: await generateUniqueWorkspacePublicId(db),
         name: DEFAULT_WORKSPACE_NAME,
         handle: DEFAULT_WORKSPACE_HANDLE,
       })
@@ -70,6 +73,25 @@ async function seed() {
   } finally {
     await client.end({ timeout: 5 });
   }
+}
+
+async function generateUniqueWorkspacePublicId(
+  db: ReturnType<typeof drizzle>,
+) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const publicId = generateOrganizationPublicId();
+    const [existingWorkspace] = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.publicId, publicId))
+      .limit(1);
+
+    if (!existingWorkspace) {
+      return publicId;
+    }
+  }
+
+  throw new Error("Could not generate a unique workspace public ID.");
 }
 
 seed().catch((error: unknown) => {

@@ -46,7 +46,7 @@ export default async function DashboardOrganizationsPage() {
               <Card key={organization.id}>
                 <CardHeader>
                   <CardTitle>{organization.name}</CardTitle>
-                  <CardDescription>/{organization.handle}</CardDescription>
+                  <CardDescription>ID: {organization.publicId}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Badge variant="secondary">{formatRole(organization.role)}</Badge>
@@ -54,7 +54,7 @@ export default async function DashboardOrganizationsPage() {
                 <CardFooter>
                   <Link
                     className={styles.inlineLink}
-                    href={getDashboardOrganizationPath(organization.handle)}
+                    href={getDashboardOrganizationPath(organization.publicId)}
                   >
                     Otwórz organizację
                   </Link>
@@ -73,6 +73,11 @@ export default async function DashboardOrganizationsPage() {
             </CardHeader>
           </Card>
         )}
+        <p className={styles.eventMeta}>
+          <Link className={styles.inlineLink} href="/dashboard/organizations/new">
+            Utwórz nową organizację
+          </Link>
+        </p>
       </section>
     </main>
   );

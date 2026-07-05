@@ -6,8 +6,9 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   getDashboardOrganizationEventsPath,
-  getDashboardOrganizationGeneralSettingsPath,
   getDashboardOrganizationPath,
+  getDashboardOrganizationSettingsPath,
+  getDashboardOrganizationTeamPath,
 } from "@/lib/dashboard-routes";
 
 import styles from "./operator.module.css";
@@ -20,16 +21,23 @@ const dashboardLinks = [
 
 export function DashboardNavigation() {
   const pathname = usePathname();
-  const orgHandle = getSelectedOrganizationHandle(pathname);
-  const organizationLinks = orgHandle
+  const organizationId = getSelectedOrganizationId(pathname);
+  const organizationLinks = organizationId
     ? [
-        { href: getDashboardOrganizationPath(orgHandle), label: "Organizacja" },
         {
-          href: getDashboardOrganizationEventsPath(orgHandle),
+          href: getDashboardOrganizationPath(organizationId),
+          label: "Organizacja",
+        },
+        {
+          href: getDashboardOrganizationEventsPath(organizationId),
           label: "Eventy",
         },
         {
-          href: getDashboardOrganizationGeneralSettingsPath(orgHandle),
+          href: getDashboardOrganizationTeamPath(organizationId),
+          label: "Zespół",
+        },
+        {
+          href: getDashboardOrganizationSettingsPath(organizationId),
           label: "Ustawienia",
         },
       ]
@@ -64,7 +72,7 @@ export function DashboardNavigation() {
   );
 }
 
-function getSelectedOrganizationHandle(pathname: string) {
+function getSelectedOrganizationId(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
 
   if (segments[0] !== "dashboard" || segments[1] !== "org") {

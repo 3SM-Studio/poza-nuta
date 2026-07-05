@@ -18,6 +18,7 @@
     "db:seed": "node --experimental-strip-types src/db/seed.ts",
     "db:seed:operator": "node --experimental-strip-types src/db/seed-operator.ts",
     "db:link:operator-auth": "node --experimental-strip-types src/db/link-operator-auth.ts",
+    "db:link-workspace-member": "node --experimental-strip-types src/db/link-workspace-member.ts",
     "db:studio": "drizzle-kit studio",
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },

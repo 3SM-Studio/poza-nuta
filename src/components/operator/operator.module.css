@@ -175,13 +175,17 @@
 
 .dashboardHeaderInner {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(10rem, auto) minmax(0, 1fr) auto;
   align-items: center;
-  gap: clamp(1rem, 3vw, 2rem);
+  gap: clamp(0.75rem, 2vw, 1.5rem);
   width: min(100%, 92rem);
   min-height: 4.5rem;
   margin: 0 auto;
   padding: 0.75rem clamp(0.9rem, 2vw, 1.5rem);
+}
+
+.dashboardHeaderInner > :last-child {
+  justify-self: end;
 }
 
 .dashboardBrand {
@@ -209,6 +213,19 @@
 
 .dashboardBrand strong {
   font-size: 1rem;
+}
+
+.organizationSwitcherTrigger {
+  min-width: 0;
+  max-width: 16rem;
+  justify-content: space-between;
+}
+
+.organizationSwitcherText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboardNavigation {
@@ -463,6 +480,42 @@
   font-size: 0.88rem;
 }
 
+.memberList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.memberRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem 1rem;
+  border-radius: 0.55rem;
+  background: var(--surface-2);
+  padding: 0.85rem;
+}
+
+.memberRow h2 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.35;
+}
+
+.memberRow p {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.memberBadges {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .overviewShell {
   width: min(100%, 72rem);
   margin: 0 auto;
@@ -498,6 +551,23 @@
 .dashboardField {
   display: grid;
   gap: 0.45rem;
+}
+
+.dashboardField input {
+  min-height: 2.75rem;
+  width: 100%;
+  border: 1px solid var(--input);
+  border-radius: 0.55rem;
+  background: var(--surface-2);
+  color: var(--foreground);
+  font: inherit;
+  padding: 0.65rem 0.75rem;
+}
+
+.dashboardField input:focus {
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 
 .checkboxField {
@@ -544,9 +614,16 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .dashboardNavigation {
+  .organizationSwitcherTrigger {
     grid-column: 1 / -1;
     grid-row: 2;
+    width: 100%;
+    max-width: none;
+  }
+
+  .dashboardNavigation {
+    grid-column: 1 / -1;
+    grid-row: 3;
     overflow-x: auto;
     padding-bottom: 0.1rem;
   }
@@ -571,6 +648,14 @@
 
   .eventDetails {
     grid-template-columns: 1fr;
+  }
+
+  .memberRow {
+    grid-template-columns: 1fr;
+  }
+
+  .memberBadges {
+    justify-content: flex-start;
   }
 
   .counterGrid {

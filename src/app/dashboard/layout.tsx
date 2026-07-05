@@ -6,9 +6,11 @@ import { redirect } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 
 import { DashboardNavigation } from "../../components/operator/dashboard-navigation";
+import { DashboardOrganizationSwitcher } from "../../components/operator/dashboard-organization-switcher";
 import { DashboardUserMenu } from "../../components/operator/dashboard-user-menu";
 import styles from "../../components/operator/operator.module.css";
 import { OperatorApiError } from "../../server/operator-api/errors";
+import { listDashboardOrganizationsForAuthUser } from "../../server/operator-api/organizations";
 import { requireOperatorSession } from "../../server/operator-api/supabase-session";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,16 @@ export default async function DashboardLayout({
   children: ReactNode;
 }>) {
   const session = await getDashboardSession();
+  const organizations = await listDashboardOrganizationsForAuthUser(
+    session.authUser.id,
+  ).then((items) =>
+    items.map((organization) => ({
+      id: organization.id,
+      name: organization.name,
+      organizationId: organization.publicId,
+      role: organization.role,
+    })),
+  );
 
   return (
     <div className={styles.dashboardShell}>
@@ -38,6 +50,8 @@ export default async function DashboardLayout({
             />
             <strong>Dashboard</strong>
           </Link>
+
+          <DashboardOrganizationSwitcher organizations={organizations} />
 
           <DashboardNavigation />
 

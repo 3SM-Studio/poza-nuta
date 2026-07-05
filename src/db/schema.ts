@@ -79,6 +79,7 @@ export const workspaces = pgTable(
   "workspaces",
   {
     id: idColumn(),
+    publicId: text("public_id").notNull(),
     name: text("name").notNull(),
     handle: text("handle").notNull(),
     active: boolean("active").notNull().default(true),
@@ -86,6 +87,7 @@ export const workspaces = pgTable(
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex("workspaces_public_id_idx").on(table.publicId),
     uniqueIndex("workspaces_handle_idx").on(table.handle),
     index("workspaces_active_idx")
       .on(table.active)
@@ -93,6 +95,10 @@ export const workspaces = pgTable(
     check(
       "workspaces_handle_format_check",
       sql`${table.handle} ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'`,
+    ),
+    check(
+      "workspaces_public_id_format_check",
+      sql`${table.publicId} ~ '^[a-z0-9]{20}$'`,
     ),
   ],
 ).enableRLS();
