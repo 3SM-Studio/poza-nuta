@@ -9,6 +9,7 @@ import { getDb } from "../db";
 import {
   isTransientInfrastructureError,
   traceServerStep,
+  traceServerStepWithoutTimeout,
 } from "../runtime-diagnostics";
 import {
   mapSupabaseLoginError,
@@ -22,6 +23,8 @@ import type { LoginInput } from "./validation";
 type SupabaseServerClient = Awaited<
   ReturnType<typeof createSupabaseServerClient>
 >;
+
+const SESSION_DB_STEP_TIMEOUT_MS = 4_000;
 
 export type AuthenticatedOperatorSession = {
   authUser: {
@@ -93,7 +96,7 @@ export async function loginOperator(input: LoginInput) {
 }
 
 export async function requireOperatorSession(routeName = "dashboard.session") {
-  return traceServerStep(routeName, "getSession", () =>
+  return traceServerStepWithoutTimeout(routeName, "getSession", () =>
     getCachedOperatorSession(),
   );
 }
@@ -117,8 +120,11 @@ async function resolveOperatorSession(): Promise<AuthenticatedOperatorSession> {
   } = userResult;
 
   const operator = user
-    ? await traceServerStep(routeName, "findLinkedOperator", () =>
-        findLinkedOperator(user.id),
+    ? await traceServerStep(
+        routeName,
+        "findLinkedOperator",
+        () => findLinkedOperator(user.id),
+        SESSION_DB_STEP_TIMEOUT_MS,
       )
     : null;
   const decision = resolveOperatorAccess(user?.id ?? null, operator);

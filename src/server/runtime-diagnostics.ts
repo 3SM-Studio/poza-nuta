@@ -54,6 +54,25 @@ export async function traceServerStep<T>(
   return withRuntimeDiagnostics(routeName, stepName, action, timeoutMs);
 }
 
+export async function traceServerStepWithoutTimeout<T>(
+  routeName: string,
+  stepName: string,
+  action: () => Promise<T>,
+) {
+  const start = Date.now();
+
+  try {
+    const result = await Promise.resolve().then(action);
+
+    logServerStep(routeName, stepName, start, "success");
+
+    return result;
+  } catch (error) {
+    logServerStep(routeName, stepName, start, "failure", error);
+    throw error;
+  }
+}
+
 export async function withRuntimeDiagnostics<T>(
   routeName: string,
   stepName: string,

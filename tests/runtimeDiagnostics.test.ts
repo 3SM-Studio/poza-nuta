@@ -11,10 +11,12 @@ import {
   isTransientInfrastructureError,
   SERVER_STEP_TIMEOUT_MS,
   ServerStepTimeoutError,
+  traceServerStepWithoutTimeout,
   withRuntimeDiagnostics,
 } from "../src/server/runtime-diagnostics.ts";
 
 test("database client uses serverless-safe Postgres options", () => {
+  assert.equal(DATABASE_MAX_CONNECTIONS, 2);
   assert.equal(DATABASE_MAX_CONNECTIONS <= 2, true);
   assert.equal(databaseClientOptions.max, DATABASE_MAX_CONNECTIONS);
   assert.equal(databaseClientOptions.prepare, false);
@@ -29,6 +31,31 @@ test("database client uses serverless-safe Postgres options", () => {
     databaseClientOptions.connection.idle_in_transaction_session_timeout,
     DATABASE_STATEMENT_TIMEOUT_MS,
   );
+});
+
+test("runtime diagnostics can log an aggregate step without adding a timeout race", async () => {
+  const originalInfo = console.info;
+  const logs: string[] = [];
+
+  console.info = (message?: unknown) => {
+    logs.push(String(message));
+  };
+
+  try {
+    const result = await traceServerStepWithoutTimeout(
+      "dashboard.session",
+      "getSession",
+      async () => "ok",
+    );
+
+    assert.equal(result, "ok");
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /route="dashboard\.session"/);
+    assert.match(logs[0], /step="getSession"/);
+    assert.match(logs[0], /status=success/);
+  } finally {
+    console.info = originalInfo;
+  }
 });
 
 test("runtime diagnostics classify timeout and Postgres statement timeout errors", () => {
