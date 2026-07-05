@@ -29,7 +29,11 @@ import {
 } from "../src/lib/dashboard-routes.ts";
 import { sanitizeAuthIdentities } from "../src/server/operator-api/account.ts";
 import {
+  createPublicQueuePollingState,
+  getPublicQueuePollDelayMs,
   PUBLIC_QUEUE_POLL_INTERVAL_MS,
+  recordPublicQueuePollFailure,
+  recordPublicQueuePollSuccess,
   shouldPollPublicQueue,
 } from "../src/components/public/public-queue-polling.ts";
 
@@ -868,4 +872,40 @@ test("public queue polling helper keeps safe refetch fallback enabled", () => {
     }),
     false,
   );
+});
+
+test("public queue polling backs off infrastructure failures", () => {
+  const initialState = createPublicQueuePollingState();
+  const failedOnce = recordPublicQueuePollFailure(initialState, 503);
+  const failedTwice = recordPublicQueuePollFailure(failedOnce, 503);
+
+  assert.equal(shouldPollPublicQueue(null, failedOnce), true);
+  assert.equal(getPublicQueuePollDelayMs(initialState, 0), 5_000);
+  assert.equal(getPublicQueuePollDelayMs(failedOnce, 0), 10_000);
+  assert.equal(getPublicQueuePollDelayMs(failedTwice, 0), 20_000);
+  assert.ok(getPublicQueuePollDelayMs(failedOnce, 0) > PUBLIC_QUEUE_POLL_INTERVAL_MS);
+});
+
+test("public queue polling stops after missing active event", () => {
+  const stopped = recordPublicQueuePollFailure(
+    createPublicQueuePollingState(),
+    404,
+  );
+
+  assert.equal(shouldPollPublicQueue(null, stopped), false);
+  assert.deepEqual(recordPublicQueuePollSuccess(), {
+    failureCount: 0,
+    stopped: false,
+  });
+});
+
+test("public queue page uses scheduled backoff instead of fixed interval polling", () => {
+  const source = readFileSync(
+    "src/components/public/public-queue-page.tsx",
+    "utf8",
+  );
+
+  assert.match(source, /window\.setTimeout/);
+  assert.match(source, /getPublicQueuePollDelayMs\(pollingState\)/);
+  assert.equal(source.includes("window.setInterval"), false);
 });

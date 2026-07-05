@@ -1,4 +1,4 @@
-export const SERVER_STEP_TIMEOUT_MS = 10_000;
+export const SERVER_STEP_TIMEOUT_MS = 8_000;
 
 const CONNECTION_URL_PATTERN = /\bpostgres(?:ql)?:\/\/[^\s'"]+/gi;
 const ENV_SECRET_PATTERN =
