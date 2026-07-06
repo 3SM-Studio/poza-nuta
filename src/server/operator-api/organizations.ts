@@ -240,6 +240,12 @@ export function canManageDashboardOrganizationEvent(
   return role === "owner" || role === "manager";
 }
 
+export function canShareDashboardOrganizationEvent(
+  role: DashboardOrganizationRole,
+) {
+  return role === "owner" || role === "manager" || role === "operator";
+}
+
 export async function getDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
@@ -313,70 +319,26 @@ export async function generateDashboardOrganizationEventSessionLinkForAuthUser(i
         input.organizationId,
         input.eventId,
       );
-    const now = new Date();
-    const code = generateEventAccessCode();
-    const codeHash = hashEventAccessCode(code);
 
-    const activeLinks = await transaction
-      .select({ id: eventAccessLinks.id })
-      .from(eventAccessLinks)
-      .where(
-        and(
-          eq(eventAccessLinks.eventId, event.id),
-          eq(eventAccessLinks.active, true),
-          isNull(eventAccessLinks.revokedAt),
-        ),
-      )
-      .for("update");
+    return createEventSessionLinkInTransaction(transaction, organization, event);
+  });
+}
 
-    if (activeLinks.length > 0) {
-      await transaction
-        .update(eventAccessLinks)
-        .set({
-          active: false,
-          revokedAt: now,
-        })
-        .where(
-          and(
-            eq(eventAccessLinks.eventId, event.id),
-            eq(eventAccessLinks.active, true),
-            isNull(eventAccessLinks.revokedAt),
-          ),
-        );
-    }
+export async function generateDashboardOrganizationEventShareLinkForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: number;
+}) {
+  return getDb().transaction(async (transaction) => {
+    const { organization, event } =
+      await requireEventSharerOrganizationEventInTransaction(
+        transaction,
+        input.authUserId,
+        input.organizationId,
+        input.eventId,
+      );
 
-    const [link] = await transaction
-      .insert(eventAccessLinks)
-      .values({
-        eventId: event.id,
-        codeHash,
-        label: "Link sesji",
-        createdByOperatorId: organization.operatorId,
-      })
-      .returning(dashboardEventSessionLinkSelection);
-
-    if (!link) {
-      throw new Error("Session link could not be created.");
-    }
-
-    await transaction.insert(operatorAuditLog).values({
-      operatorId: organization.operatorId,
-      eventId: event.id,
-      action: "generate_event_session_link",
-      entityId: String(link.id),
-      payload: {
-        active: link.active,
-        revokedPreviousLinks: activeLinks.length,
-      },
-    });
-
-    return {
-      organization,
-      event,
-      link,
-      code,
-      sessionPath: `/session/${encodeURIComponent(code)}`,
-    };
+    return createEventSessionLinkInTransaction(transaction, organization, event);
   });
 }
 
@@ -916,6 +878,81 @@ type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
 >[0];
 
+type DashboardOrganizationEventActionOrganization = DashboardOrganization & {
+  operatorId: number;
+};
+
+async function createEventSessionLinkInTransaction(
+  transaction: DatabaseTransaction,
+  organization: DashboardOrganizationEventActionOrganization,
+  event: DashboardOrganizationEvent,
+) {
+  const now = new Date();
+  const code = generateEventAccessCode();
+  const codeHash = hashEventAccessCode(code);
+
+  const activeLinks = await transaction
+    .select({ id: eventAccessLinks.id })
+    .from(eventAccessLinks)
+    .where(
+      and(
+        eq(eventAccessLinks.eventId, event.id),
+        eq(eventAccessLinks.active, true),
+        isNull(eventAccessLinks.revokedAt),
+      ),
+    )
+    .for("update");
+
+  if (activeLinks.length > 0) {
+    await transaction
+      .update(eventAccessLinks)
+      .set({
+        active: false,
+        revokedAt: now,
+      })
+      .where(
+        and(
+          eq(eventAccessLinks.eventId, event.id),
+          eq(eventAccessLinks.active, true),
+          isNull(eventAccessLinks.revokedAt),
+        ),
+      );
+  }
+
+  const [link] = await transaction
+    .insert(eventAccessLinks)
+    .values({
+      eventId: event.id,
+      codeHash,
+      label: "Link sesji",
+      createdByOperatorId: organization.operatorId,
+    })
+    .returning(dashboardEventSessionLinkSelection);
+
+  if (!link) {
+    throw new Error("Session link could not be created.");
+  }
+
+  await transaction.insert(operatorAuditLog).values({
+    operatorId: organization.operatorId,
+    eventId: event.id,
+    action: "generate_event_session_link",
+    entityId: String(link.id),
+    payload: {
+      active: link.active,
+      revokedPreviousLinks: activeLinks.length,
+    },
+  });
+
+  return {
+    organization,
+    event,
+    link,
+    code,
+    sessionPath: `/session/${encodeURIComponent(code)}`,
+  };
+}
+
 async function requireOwnerOrganizationInTransaction(
   transaction: DatabaseTransaction,
   authUserId: string,
@@ -1063,6 +1100,79 @@ async function requireEventManagerOrganizationEventInTransaction(
       403,
       "WORKSPACE_EVENT_MANAGE_FORBIDDEN",
       "Only an owner or manager can manage events.",
+    );
+  }
+
+  const [event] = await transaction
+    .select(dashboardEventSelection)
+    .from(events)
+    .where(and(eq(events.workspaceId, organization.id), eq(events.id, eventId)))
+    .for("update")
+    .limit(1);
+
+  if (!event) {
+    throw new OperatorApiError(
+      404,
+      "EVENT_NOT_FOUND",
+      "Event was not found.",
+    );
+  }
+
+  return {
+    organization,
+    event,
+  };
+}
+
+async function requireEventSharerOrganizationEventInTransaction(
+  transaction: DatabaseTransaction,
+  authUserId: string,
+  organizationId: string,
+  eventId: number,
+) {
+  if (!isOrganizationPublicId(organizationId)) {
+    throw new OperatorApiError(
+      404,
+      "WORKSPACE_NOT_FOUND",
+      "Organization was not found.",
+    );
+  }
+
+  const [organization] = await transaction
+    .select({
+      id: workspaces.id,
+      publicId: workspaces.publicId,
+      name: workspaces.name,
+      handle: workspaces.handle,
+      active: workspaces.active,
+      role: workspaceMembers.role,
+      operatorId: operatorUsers.id,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      eq(workspaceMembers.workspaceId, workspaces.id),
+    )
+    .innerJoin(
+      operatorUsers,
+      eq(operatorUsers.id, workspaceMembers.operatorUserId),
+    )
+    .where(
+      and(
+        eq(workspaces.publicId, organizationId),
+        eq(workspaces.active, true),
+        eq(operatorUsers.authUserId, authUserId),
+        eq(operatorUsers.active, true),
+        eq(workspaceMembers.active, true),
+      ),
+    )
+    .limit(1);
+
+  if (!organization || !canShareDashboardOrganizationEvent(organization.role)) {
+    throw new OperatorApiError(
+      403,
+      "WORKSPACE_EVENT_SHARE_FORBIDDEN",
+      "Only an owner, manager, or operator can share events.",
     );
   }
 

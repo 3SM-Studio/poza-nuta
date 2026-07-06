@@ -10,6 +10,10 @@ export function getDashboardNewOrganizationPath() {
   return "/dashboard/new";
 }
 
+export function getDashboardProfileOnboardingPath() {
+  return "/dashboard/onboarding/profile";
+}
+
 export function getDashboardOrganizationPath(organizationId: string) {
   return `/dashboard/org/${encodeURIComponent(organizationId)}`;
 }
@@ -36,6 +40,13 @@ export function getDashboardOrganizationEventQueuePath(
   eventId: number | string,
 ) {
   return `${getDashboardOrganizationEventPath(organizationId, eventId)}/queue`;
+}
+
+export function getDashboardOrganizationEventSharePath(
+  organizationId: string,
+  eventId: number | string,
+) {
+  return `${getDashboardOrganizationEventPath(organizationId, eventId)}/share`;
 }
 
 export function getDashboardOrganizationSettingsPath(organizationId: string) {
