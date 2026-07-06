@@ -17,7 +17,10 @@ import {
   getDashboardEventLifecycleStatus,
   type DashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
-import { getDashboardOrganizationEventPath } from "@/lib/dashboard-routes";
+import {
+  getDashboardOrganizationEventPath,
+  getDashboardOrganizationEventSharePath,
+} from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { getDashboardOrganizationEventQueueForAuthUser } from "@/server/operator-api/event-queue";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
@@ -61,6 +64,10 @@ export default async function OrganizationEventQueuePage({
     result.organization.publicId,
     result.event.id,
   );
+  const sharePath = getDashboardOrganizationEventSharePath(
+    result.organization.publicId,
+    result.event.id,
+  );
   const lifecycleStatus = getDashboardEventLifecycleStatus(
     result.event,
     new Date(),
@@ -81,6 +88,9 @@ export default async function OrganizationEventQueuePage({
             <Badge variant={getStatusBadgeVariant(lifecycleStatus)}>
               {formatLifecycleStatus(lifecycleStatus)}
             </Badge>
+            <Button variant="outline" asChild>
+              <Link href={sharePath}>Udostępnij</Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link href={eventPath}>Powrót do wydarzenia</Link>
             </Button>

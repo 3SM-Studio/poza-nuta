@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   getMissingDashboardSmokeEnv,
+  getOptionalConfiguredE2ESessionCode,
   getOptionalE2EEventId,
   getRequiredE2EEnv,
   readDashboardAuthSetupStatus,
@@ -61,5 +62,26 @@ test.describe("dashboard authenticated smoke", () => {
     await expect(
       page.getByRole("heading", { name: "Aktualnie śpiewane" }),
     ).toBeVisible();
+  });
+
+  test("event share page loads when E2E_EVENT_ID and E2E_SESSION_CODE are set", async ({
+    page,
+  }) => {
+    const eventId = getOptionalE2EEventId();
+    const sessionCode = getOptionalConfiguredE2ESessionCode();
+
+    test.skip(
+      !eventId || !sessionCode,
+      "Dashboard share smoke skipped. Missing env: E2E_EVENT_ID or E2E_SESSION_CODE.",
+    );
+
+    const organizationId = getRequiredE2EEnv("E2E_ORG_PUBLIC_ID");
+
+    await page.goto(`/dashboard/org/${organizationId}/events/${eventId}/share`);
+
+    await expect(
+      page.getByRole("heading", { name: "Udostępnij wydarzenie" }),
+    ).toBeVisible();
+    await expect(page.getByText("Link dla gości")).toBeVisible();
   });
 });

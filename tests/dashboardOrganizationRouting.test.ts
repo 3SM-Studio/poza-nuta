@@ -21,6 +21,7 @@ import {
   getDashboardOrganizationsPath,
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationGeneralSettingsPath,
   getDashboardOrganizationNewEventPath,
@@ -66,6 +67,10 @@ test("organization route helpers encode organizationId values", () => {
   assert.equal(
     getDashboardOrganizationEventQueuePath(exampleOrganizationId, 42),
     `/dashboard/org/${exampleOrganizationId}/events/42/queue`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventSharePath(exampleOrganizationId, 42),
+    `/dashboard/org/${exampleOrganizationId}/events/42/share`,
   );
   assert.equal(
     getDashboardOrganizationSettingsPath(exampleOrganizationId),
@@ -1023,6 +1028,53 @@ test("organization event queue route renders the event-scoped management panel",
   assert.match(queuePageSource, /getDashboardOrganizationEventPath/);
   assert.match(detailPageSource, /Zarządzaj kolejką/);
   assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
+});
+
+test("organization event share route renders session link and QR controls", () => {
+  const sharePagePath =
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx";
+  const sharePageSource = readFileSync(sharePagePath, "utf8");
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const queuePageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
+    "utf8",
+  );
+  const sharePanelSource = readFileSync(
+    "src/components/operator/event-share-panel.tsx",
+    "utf8",
+  );
+  const organizationsSource = readFileSync(
+    "src/server/operator-api/organizations.ts",
+    "utf8",
+  );
+
+  assert.equal(existsSync(sharePagePath), true);
+  assert.equal(
+    getDashboardOrganizationEventSharePath(exampleOrganizationId, 42),
+    `/dashboard/org/${exampleOrganizationId}/events/42/share`,
+  );
+  assert.match(sharePageSource, /Udostępnij wydarzenie/);
+  assert.match(sharePageSource, /getDashboardOrganizationEventSessionLinkForAuthUser/);
+  assert.match(sharePageSource, /canShareDashboardOrganizationEvent/);
+  assert.match(sharePageSource, /generateDashboardOrganizationEventShareLinkForAuthUser/);
+  assert.match(sharePageSource, /notFound\(\)/);
+  assert.match(sharePageSource, /buildSessionUrl\(result\.sessionPath\)/);
+  assert.match(detailPageSource, /getDashboardOrganizationEventSharePath/);
+  assert.match(detailPageSource, /Link i QR/);
+  assert.match(queuePageSource, /getDashboardOrganizationEventSharePath/);
+  assert.match(queuePageSource, /Udostępnij/);
+  assert.match(sharePanelSource, /QRCode\.toCanvas/);
+  assert.match(sharePanelSource, /errorCorrectionLevel: "H"/);
+  assert.match(sharePanelSource, /margin: 4/);
+  assert.match(sharePanelSource, /Pobierz QR/);
+  assert.match(sharePanelSource, /Kod QR pojawi się dopiero po wygenerowaniu linku sesji/);
+  assert.match(organizationsSource, /canShareDashboardOrganizationEvent/);
+  assert.match(organizationsSource, /role === "operator"/);
+  assert.equal(sharePageSource.includes("codeHash"), false);
+  assert.equal(sharePanelSource.includes("codeHash"), false);
 });
 
 test("account identity sanitizer exposes login methods without tokens", () => {

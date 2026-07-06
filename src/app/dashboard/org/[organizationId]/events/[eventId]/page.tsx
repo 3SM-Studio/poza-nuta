@@ -28,6 +28,7 @@ import {
 import {
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
 } from "@/lib/dashboard-routes";
 import {
@@ -111,6 +112,10 @@ export default async function OrganizationEventDetailPage({
     result.organization.publicId,
     result.event.id,
   );
+  const sharePath = getDashboardOrganizationEventSharePath(
+    result.organization.publicId,
+    result.event.id,
+  );
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const actionMessage = getActionMessage(resolvedSearchParams.eventAction);
 
@@ -128,6 +133,9 @@ export default async function OrganizationEventDetailPage({
             </Badge>
             <Button asChild>
               <Link href={queuePath}>Zarządzaj kolejką</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href={sharePath}>Link i QR</Link>
             </Button>
             <Button variant="outline" asChild>
               <Link href={eventsPath}>Wróć do eventów</Link>

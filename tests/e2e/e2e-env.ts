@@ -70,6 +70,16 @@ export function getOptionalE2ESessionCode() {
   );
 }
 
+export function getOptionalConfiguredE2ESessionCode() {
+  const value = process.env.E2E_SESSION_CODE?.trim();
+
+  if (!value) {
+    return null;
+  }
+
+  return value;
+}
+
 export function getRequiredE2EEnv(name: string) {
   const value = process.env[name]?.trim();
 

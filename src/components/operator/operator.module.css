@@ -700,6 +700,26 @@
   gap: 0.65rem;
 }
 
+.shareGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
+  gap: 1rem;
+}
+
+.qrFrame {
+  display: grid;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 1rem;
+}
+
+.qrFrame canvas {
+  display: block;
+  width: min(100%, 22.5rem);
+  height: auto;
+}
+
 .dangerZoneCard {
   border-color: var(--danger-border);
 }
@@ -1007,7 +1027,8 @@
   }
 
   .overviewMetricGrid,
-  .overviewSectionGrid {
+  .overviewSectionGrid,
+  .shareGrid {
     grid-template-columns: 1fr;
   }
 

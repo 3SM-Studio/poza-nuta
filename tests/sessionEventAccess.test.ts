@@ -151,11 +151,51 @@ test("dashboard session link generation is limited to event managers and revokes
     "export async function generateDashboardOrganizationEventSessionLinkForAuthUser",
   );
   const end = source.indexOf(
-    "export async function createDashboardOrganizationEventForAuthUser",
+    "export async function generateDashboardOrganizationEventShareLinkForAuthUser",
   );
   const generateSource = source.slice(start, end);
 
   assert.match(generateSource, /requireEventManagerOrganizationEventInTransaction/);
+  assert.doesNotMatch(generateSource, /requireEventSharerOrganizationEventInTransaction/);
+});
+
+test("dashboard share link generation allows owner manager and operator without reading plaintext from hash", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
+    "utf8",
+  );
+  const start = source.indexOf(
+    "export async function generateDashboardOrganizationEventShareLinkForAuthUser",
+  );
+  const end = source.indexOf(
+    "export async function createDashboardOrganizationEventForAuthUser",
+  );
+  const shareSource = source.slice(start, end);
+  const helperStart = source.indexOf("async function createEventSessionLinkInTransaction");
+  const helperEnd = source.indexOf("async function requireOwnerOrganizationInTransaction");
+  const helperSource = source.slice(helperStart, helperEnd);
+
+  assert.match(source, /canShareDashboardOrganizationEvent/);
+  assert.match(source, /role === "operator"/);
+  assert.match(shareSource, /requireEventSharerOrganizationEventInTransaction/);
+  assert.match(helperSource, /update\(eventAccessLinks\)/);
+  assert.match(helperSource, /active: false/);
+  assert.match(helperSource, /revokedAt: now/);
+  assert.match(helperSource, /insert\(eventAccessLinks\)/);
+  assert.match(helperSource, /hashEventAccessCode\(code\)/);
+  assert.doesNotMatch(helperSource, /codeHash: code/);
+  assert.doesNotMatch(shareSource, /select\(\{[^}]*codeHash/s);
+});
+
+test("dashboard session link creation revokes previous links", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
+    "utf8",
+  );
+  const start = source.indexOf("async function createEventSessionLinkInTransaction");
+  const end = source.indexOf("async function requireOwnerOrganizationInTransaction");
+  const generateSource = source.slice(start, end);
+
   assert.match(generateSource, /update\(eventAccessLinks\)/);
   assert.match(generateSource, /active: false/);
   assert.match(generateSource, /revokedAt: now/);
