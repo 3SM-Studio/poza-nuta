@@ -20,12 +20,14 @@
     "db:link:operator-auth": "node --experimental-strip-types src/db/link-operator-auth.ts",
     "db:link-workspace-member": "node --experimental-strip-types src/db/link-workspace-member.ts",
     "db:studio": "drizzle-kit studio",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "e2e": "playwright test"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.15",

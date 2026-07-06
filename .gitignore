@@ -31,6 +31,9 @@ next-env.d.ts
 .codex-dev-*.log
 .next-dev.*.log
 .agents/
+.auth/
+test-results/
+playwright-report/
 
 # Local archives
 poza-nuta*.zip
