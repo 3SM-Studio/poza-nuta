@@ -8,7 +8,6 @@ import {
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  globalSetup: "./tests/e2e/global-setup.ts",
   timeout: 30_000,
   expect: {
     timeout: 10_000,
@@ -32,6 +31,13 @@ export default defineConfig({
       },
   projects: [
     {
+      name: "dashboard-auth-setup",
+      testMatch: /dashboard-auth\.setup\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+      },
+    },
+    {
       name: "public",
       testMatch: /public\.spec\.ts/,
       use: {
@@ -41,6 +47,7 @@ export default defineConfig({
     {
       name: "dashboard",
       testMatch: /dashboard\.spec\.ts/,
+      dependencies: ["dashboard-auth-setup"],
       use: {
         ...devices["Desktop Chrome"],
         storageState: E2E_AUTH_STATE_PATH,

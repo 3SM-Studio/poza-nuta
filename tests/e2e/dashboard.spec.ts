@@ -4,16 +4,36 @@ import {
   getMissingDashboardSmokeEnv,
   getOptionalE2EEventId,
   getRequiredE2EEnv,
+  readDashboardAuthSetupStatus,
 } from "./e2e-env";
 
 const missingEnv = getMissingDashboardSmokeEnv();
 
-test.skip(
-  missingEnv.length > 0,
-  `Dashboard E2E skipped. Missing env: ${missingEnv.join(", ")}.`,
-);
-
 test.describe("dashboard authenticated smoke", () => {
+  test.beforeEach(() => {
+    if (missingEnv.length > 0) {
+      test.skip(
+        true,
+        `Dashboard E2E skipped. Missing env: ${missingEnv.join(", ")}.`,
+      );
+      return;
+    }
+
+    const authStatus = readDashboardAuthSetupStatus();
+
+    if (!authStatus) {
+      test.skip(
+        true,
+        "Dashboard E2E skipped. Auth state was not prepared by dashboard-auth-setup.",
+      );
+      return;
+    }
+
+    if (authStatus.status !== "success") {
+      test.skip(true, authStatus.message);
+    }
+  });
+
   test("organization events page loads after login", async ({ page }) => {
     const organizationId = getRequiredE2EEnv("E2E_ORG_PUBLIC_ID");
 
