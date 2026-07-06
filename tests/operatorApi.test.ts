@@ -91,6 +91,8 @@ test("Supabase Auth users must map to an active local operator", () => {
     resolveOperatorAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
       id: 7,
       name: "Operator",
+      displayName: null,
+      profileCompletedAt: null,
       active: false,
     }),
     {
@@ -104,6 +106,8 @@ test("Supabase Auth users must map to an active local operator", () => {
     resolveOperatorAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
       id: 7,
       name: "Operator",
+      displayName: null,
+      profileCompletedAt: null,
       active: true,
     }),
     {
@@ -111,6 +115,8 @@ test("Supabase Auth users must map to an active local operator", () => {
       operator: {
         id: 7,
         name: "Operator",
+        displayName: null,
+        profileCompletedAt: null,
         active: true,
       },
     },
@@ -199,6 +205,8 @@ test("sign-in page distinguishes guests, authorized operators and denied users",
     resolveSignInPageAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
       id: 7,
       name: "Operator",
+      displayName: null,
+      profileCompletedAt: null,
       active: false,
     }),
     {
@@ -210,6 +218,8 @@ test("sign-in page distinguishes guests, authorized operators and denied users",
     resolveSignInPageAccess("62e01318-1043-48a1-93de-d3f0469545c6", {
       id: 7,
       name: "Operator",
+      displayName: null,
+      profileCompletedAt: null,
       active: true,
     }),
     {
@@ -217,6 +227,8 @@ test("sign-in page distinguishes guests, authorized operators and denied users",
       operator: {
         id: 7,
         name: "Operator",
+        displayName: null,
+        profileCompletedAt: null,
         active: true,
       },
     },

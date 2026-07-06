@@ -1,6 +1,8 @@
 export type LinkedOperatorRecord = {
   id: number;
   name: string;
+  displayName: string | null;
+  profileCompletedAt: Date | null;
   active: boolean;
 };
 

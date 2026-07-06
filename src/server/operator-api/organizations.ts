@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq, isNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
   eventAccessLinks,
@@ -731,7 +731,7 @@ export async function listDashboardOrganizationMembersForAuthUser(
     .select({
       id: workspaceMembers.id,
       operatorUserId: operatorUsers.id,
-      operatorName: operatorUsers.name,
+      operatorName: sql<string>`coalesce(${operatorUsers.displayName}, ${operatorUsers.name})`,
       authUserId: operatorUsers.authUserId,
       role: workspaceMembers.role,
       active: workspaceMembers.active,

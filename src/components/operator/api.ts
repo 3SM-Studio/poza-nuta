@@ -18,6 +18,8 @@ export type SongSource = "ising" | "karafun" | "manual";
 export type OperatorIdentity = {
   id: number;
   name: string;
+  displayName: string | null;
+  profileCompletedAt: string | null;
   active: true;
 };
 
@@ -120,7 +122,6 @@ type OperatorSignupInput = {
   email: string;
   password: string;
   confirmPassword: string;
-  displayName: string;
 };
 
 type OperatorSignupResponse = {
