@@ -64,6 +64,13 @@
       "when": 1783270978746,
       "tag": "0008_public_queue_realtime_broadcast",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783359877379,
+      "tag": "0009_operator_profile_fields",
+      "breakpoints": true
     }
   ]
 }

@@ -204,6 +204,8 @@ export const operatorUsers = pgTable(
   {
     id: idColumn(),
     name: text("name").notNull(),
+    displayName: text("display_name"),
+    profileCompletedAt: timestampColumn("profile_completed_at"),
     authUserId: uuid("auth_user_id").references(() => authUsers.id, {
       onDelete: "set null",
     }),

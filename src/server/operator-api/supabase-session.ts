@@ -19,7 +19,7 @@ import {
   type LinkedOperatorRecord,
 } from "./auth-policy";
 import { OperatorApiError } from "./errors";
-import type { LoginInput, SignupInput } from "./validation";
+import type { LoginInput, OperatorProfileInput, SignupInput } from "./validation";
 
 type SupabaseServerClient = Awaited<
   ReturnType<typeof createSupabaseServerClient>
@@ -27,6 +27,7 @@ type SupabaseServerClient = Awaited<
 
 const SESSION_DB_STEP_TIMEOUT_MS = 4_000;
 const SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER = "supabase-auth-managed";
+const SIGNUP_OPERATOR_NAME_PLACEHOLDER = "Nowy uzytkownik";
 
 export type AuthenticatedOperatorSession = {
   authUser: {
@@ -36,6 +37,8 @@ export type AuthenticatedOperatorSession = {
   operator: {
     id: number;
     name: string;
+    displayName: string | null;
+    profileCompletedAt: Date | null;
     active: true;
   };
   supabase: SupabaseServerClient;
@@ -113,10 +116,6 @@ export async function signupOperator(input: {
         password: input.data.password,
         options: {
           emailRedirectTo: input.emailRedirectTo,
-          data: {
-            display_name: input.data.displayName,
-            name: input.data.displayName,
-          },
         },
       }),
   );
@@ -146,7 +145,6 @@ export async function signupOperator(input: {
     () =>
       ensureSignupOperatorForAuthUser({
         authUserId,
-        displayName: input.data.displayName,
       }),
   );
 
@@ -272,6 +270,8 @@ async function findLinkedOperator(
     .select({
       id: operatorUsers.id,
       name: operatorUsers.name,
+      displayName: operatorUsers.displayName,
+      profileCompletedAt: operatorUsers.profileCompletedAt,
       active: operatorUsers.active,
     })
     .from(operatorUsers)
@@ -283,13 +283,14 @@ async function findLinkedOperator(
 
 async function ensureSignupOperatorForAuthUser(input: {
   authUserId: string;
-  displayName: string;
 }): Promise<LinkedOperatorRecord & { active: true }> {
   return getDb().transaction(async (transaction) => {
     const [existingOperator] = await transaction
       .select({
         id: operatorUsers.id,
         name: operatorUsers.name,
+        displayName: operatorUsers.displayName,
+        profileCompletedAt: operatorUsers.profileCompletedAt,
         active: operatorUsers.active,
       })
       .from(operatorUsers)
@@ -311,12 +312,17 @@ async function ensureSignupOperatorForAuthUser(input: {
       };
     }
 
-    const name = await generateUniqueOperatorName(transaction, input.displayName);
+    const name = await generateUniqueOperatorName(
+      transaction,
+      SIGNUP_OPERATOR_NAME_PLACEHOLDER,
+    );
     const [operator] = await transaction
       .insert(operatorUsers)
       .values({
         name,
         authUserId: input.authUserId,
+        displayName: null,
+        profileCompletedAt: null,
         // Passwords are managed exclusively by Supabase Auth.
         passwordHash: SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER,
         active: true,
@@ -324,6 +330,8 @@ async function ensureSignupOperatorForAuthUser(input: {
       .returning({
         id: operatorUsers.id,
         name: operatorUsers.name,
+        displayName: operatorUsers.displayName,
+        profileCompletedAt: operatorUsers.profileCompletedAt,
         active: operatorUsers.active,
       });
 
@@ -336,6 +344,61 @@ async function ensureSignupOperatorForAuthUser(input: {
       active: true,
     };
   });
+}
+
+export async function updateOperatorProfileForAuthUser(input: {
+  authUserId: string;
+  profile: OperatorProfileInput;
+}) {
+  const [operator] = await getDb()
+    .update(operatorUsers)
+    .set({
+      displayName: input.profile.displayName,
+      profileCompletedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(operatorUsers.authUserId, input.authUserId))
+    .returning({
+      id: operatorUsers.id,
+      name: operatorUsers.name,
+      displayName: operatorUsers.displayName,
+      profileCompletedAt: operatorUsers.profileCompletedAt,
+      active: operatorUsers.active,
+    });
+
+  if (!operator) {
+    throw new OperatorApiError(
+      404,
+      "OPERATOR_NOT_FOUND",
+      "Operator profile was not found.",
+    );
+  }
+
+  if (!operator.active) {
+    throw new OperatorApiError(
+      403,
+      "OPERATOR_INACTIVE",
+      "This operator account is inactive.",
+    );
+  }
+
+  return {
+    ...operator,
+    active: true as const,
+  };
+}
+
+export function getOperatorDisplayName(operator: {
+  name: string;
+  displayName: string | null;
+}) {
+  return operator.displayName ?? operator.name;
+}
+
+export function isOperatorProfileCompleted(operator: {
+  profileCompletedAt: Date | null;
+}) {
+  return operator.profileCompletedAt !== null;
 }
 
 type DatabaseTransaction = Parameters<

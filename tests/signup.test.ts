@@ -11,30 +11,32 @@ import {
   isStrongSignupPassword,
 } from "../src/lib/signup-password.ts";
 import { mapSupabaseSignupError } from "../src/server/operator-api/auth-policy.ts";
-import { validateSignupInput } from "../src/server/operator-api/validation.ts";
+import {
+  validateOperatorProfileInput,
+  validateSignupInput,
+} from "../src/server/operator-api/validation.ts";
 
 const strongPassword = "Secret123!";
 
-test("/sign-up route, signup API and auth callback exist", () => {
+test("/sign-up route, signup API, auth callback and profile onboarding exist", () => {
   assert.equal(existsSync("src/app/sign-up/page.tsx"), true);
   assert.equal(existsSync("src/app/api/dashboard/signup/route.ts"), true);
   assert.equal(existsSync("src/app/auth/callback/route.ts"), true);
+  assert.equal(existsSync("src/app/dashboard/onboarding/profile/page.tsx"), true);
 });
 
-test("validateSignupInput accepts valid signup data and trims public fields", () => {
+test("validateSignupInput accepts valid signup data without profile fields", () => {
   assert.deepEqual(
     validateSignupInput({
       email: "  NEW@EXAMPLE.COM  ",
       password: strongPassword,
       confirmPassword: strongPassword,
-      displayName: "  Nowy Operator  ",
     }),
     {
       success: true,
       data: {
         email: "new@example.com",
         password: strongPassword,
-        displayName: "Nowy Operator",
       },
     },
   );
@@ -45,13 +47,11 @@ test("validateSignupInput rejects missing email and invalid email", () => {
     email: "",
     password: strongPassword,
     confirmPassword: strongPassword,
-    displayName: "Operator",
   });
   const invalidEmail = validateSignupInput({
     email: "not-an-email",
     password: strongPassword,
     confirmPassword: strongPassword,
-    displayName: "Operator",
   });
 
   assert.equal(missingEmail.success, false);
@@ -71,7 +71,6 @@ test("validateSignupInput rejects weak password and password mismatch", () => {
     email: "new@example.com",
     password: "weakpass",
     confirmPassword: "different",
-    displayName: "Operator",
   });
 
   assert.equal(result.success, false);
@@ -99,20 +98,26 @@ test("signup password requirements cover length, case, number and special charac
   );
 });
 
-test("validateSignupInput requires a display name within product limits", () => {
-  const missingName = validateSignupInput({
+test("validateSignupInput ignores displayName and profile validation is separate", () => {
+  const signup = validateSignupInput({
     email: "new@example.com",
     password: strongPassword,
     confirmPassword: strongPassword,
     displayName: " ",
   });
-  const shortName = validateSignupInput({
-    email: "new@example.com",
-    password: strongPassword,
-    confirmPassword: strongPassword,
-    displayName: "A",
+  const missingName = validateOperatorProfileInput({ displayName: " " });
+  const shortName = validateOperatorProfileInput({ displayName: "A" });
+  const validName = validateOperatorProfileInput({
+    displayName: "  Jan Kowalski  ",
   });
 
+  assert.deepEqual(signup, {
+    success: true,
+    data: {
+      email: "new@example.com",
+      password: strongPassword,
+    },
+  });
   assert.equal(missingName.success, false);
   assert.deepEqual(
     missingName.success ? [] : missingName.issues.map((issue) => issue.field),
@@ -123,6 +128,10 @@ test("validateSignupInput requires a display name within product limits", () => 
     shortName.success ? [] : shortName.issues.map((issue) => issue.field),
     ["displayName"],
   );
+  assert.deepEqual(validName, {
+    success: true,
+    data: { displayName: "Jan Kowalski" },
+  });
 });
 
 test("Supabase signup errors are mapped without exposing secrets", () => {
@@ -143,7 +152,7 @@ test("Supabase signup errors are mapped without exposing secrets", () => {
   });
 });
 
-test("signup backend calls Supabase signUp with callback redirect and display name metadata", () => {
+test("signup backend calls Supabase signUp with callback redirect and no profile metadata", () => {
   const routeSource = readFileSync(
     "src/app/api/dashboard/signup/route.ts",
     "utf8",
@@ -157,8 +166,9 @@ test("signup backend calls Supabase signUp with callback redirect and display na
   assert.match(routeSource, /emailRedirectTo: buildAuthCallbackRedirectTo/);
   assert.match(sessionSource, /supabase\.auth\.signUp\(/);
   assert.match(sessionSource, /emailRedirectTo: input\.emailRedirectTo/);
-  assert.match(sessionSource, /data: \{\s*display_name: input\.data\.displayName/);
-  assert.match(sessionSource, /name: input\.data\.displayName/);
+  assert.equal(sessionSource.includes("input.data.displayName"), false);
+  assert.equal(/display_name:\s*input\.data/.test(sessionSource), false);
+  assert.equal(/name:\s*input\.data/.test(sessionSource), false);
   assert.match(sessionSource, /data\.user\.identities/);
   assert.match(sessionSource, /SIGNUP_FAILED/);
   assert.equal(sessionSource.includes("service_role"), false);
@@ -192,22 +202,64 @@ test("auth callback exchanges code and redirects invalid links to sign-in", () =
   assert.match(source, /invalid_link/);
 });
 
-test("signup creates local operator but does not create workspace membership", () => {
+test("signup creates local operator with empty profile and without workspace membership", () => {
   const source = readFileSync(
     "src/server/operator-api/supabase-session.ts",
     "utf8",
   );
   const ensureStart = source.indexOf("async function ensureSignupOperatorForAuthUser");
-  const ensureEnd = source.indexOf("type DatabaseTransaction");
+  const ensureEnd = source.indexOf("export async function updateOperatorProfileForAuthUser");
   const ensureSource = source.slice(ensureStart, ensureEnd);
 
   assert.match(ensureSource, /\.insert\(operatorUsers\)/);
   assert.match(ensureSource, /authUserId: input\.authUserId/);
+  assert.match(ensureSource, /displayName: null/);
+  assert.match(ensureSource, /profileCompletedAt: null/);
+  assert.match(ensureSource, /SIGNUP_OPERATOR_NAME_PLACEHOLDER/);
   assert.match(ensureSource, /SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER/);
   assert.equal(ensureSource.includes("workspaceMembers"), false);
 });
 
-test("signup page handles email confirmation and session redirect states", () => {
+test("operator profile fields are nullable and onboarding writes completion timestamp", () => {
+  const schemaSource = readFileSync("src/db/schema.ts", "utf8");
+  const migrationSource = readFileSync(
+    "drizzle/0009_operator_profile_fields.sql",
+    "utf8",
+  );
+  const pageSource = readFileSync(
+    "src/app/dashboard/onboarding/profile/page.tsx",
+    "utf8",
+  );
+  const formSource = readFileSync(
+    "src/components/operator/operator-profile-onboarding-form.tsx",
+    "utf8",
+  );
+  const sessionSource = readFileSync(
+    "src/server/operator-api/supabase-session.ts",
+    "utf8",
+  );
+
+  assert.match(schemaSource, /displayName: text\("display_name"\)/);
+  assert.match(
+    schemaSource,
+    /profileCompletedAt: timestampColumn\("profile_completed_at"\)/,
+  );
+  assert.match(migrationSource, /ADD COLUMN "display_name" text/);
+  assert.match(
+    migrationSource,
+    /ADD COLUMN "profile_completed_at" timestamp with time zone/,
+  );
+  assert.match(sessionSource, /update\(operatorUsers\)/);
+  assert.match(sessionSource, /displayName: input\.profile\.displayName/);
+  assert.match(sessionSource, /profileCompletedAt: new Date\(\)/);
+  assert.match(pageSource, /validateOperatorProfileInput/);
+  assert.match(pageSource, /updateOperatorProfileForAuthUser/);
+  assert.match(pageSource, /getDashboardNewOrganizationPath\(\)/);
+  assert.match(formSource, /name="displayName"/);
+  assert.match(formSource, /Imię i nazwisko/);
+});
+
+test("signup page handles email confirmation and does not ask for profile data", () => {
   const pageSource = readFileSync("src/app/sign-up/page.tsx", "utf8");
   const formSource = readFileSync(
     "src/components/operator/signup-form.tsx",
@@ -225,6 +277,9 @@ test("signup page handles email confirmation and session redirect states", () =>
   assert.match(formSource, /router\.replace\("\/dashboard"\)/);
   assert.match(formSource, /Masz już konto\?/);
   assert.match(formSource, /href="\/sign-in"/);
+  assert.equal(formSource.includes("signup-display-name"), false);
+  assert.equal(formSource.includes('name="displayName"'), false);
+  assert.equal(/Imię lub ksywka|display name/i.test(formSource), false);
   assert.equal(/GitHub|SSO|OAuth/.test(formSource), false);
 });
 
@@ -238,14 +293,42 @@ test("sign-in page links to sign-up and handles auth callback errors", () => {
   assert.equal(/supabase\.com\/dashboard|GitHub|SSO/.test(source), false);
 });
 
-test("new signed-up operator without organizations follows dashboard onboarding", () => {
+test("new signed-up operator without profile follows profile onboarding first", () => {
   const dashboardRoutesSource = readFileSync(
     "src/lib/dashboard-routes.ts",
     "utf8",
   );
   const dashboardPageSource = readFileSync("src/app/dashboard/page.tsx", "utf8");
+  const newOrganizationPageSource = readFileSync(
+    "src/app/dashboard/new/page.tsx",
+    "utf8",
+  );
 
+  assert.match(dashboardRoutesSource, /return "\/dashboard\/onboarding\/profile"/);
   assert.match(dashboardRoutesSource, /return "\/dashboard\/new"/);
+  assert.match(dashboardPageSource, /isOperatorProfileCompleted/);
+  assert.match(dashboardPageSource, /getDashboardProfileOnboardingPath\(\)/);
+  assert.match(dashboardPageSource, /organizations\.length === 0/);
   assert.match(dashboardPageSource, /listDashboardOrganizationsForAuthUser/);
   assert.match(dashboardPageSource, /resolveDashboardHomeRedirect/);
+  assert.match(newOrganizationPageSource, /isOperatorProfileCompleted/);
+  assert.match(newOrganizationPageSource, /getDashboardProfileOnboardingPath\(\)/);
+  assert.match(newOrganizationPageSource, /createDashboardOrganizationForOperator/);
+});
+
+test("existing users with organizations are not blocked by missing profile timestamp", () => {
+  const dashboardPageSource = readFileSync("src/app/dashboard/page.tsx", "utf8");
+  const onboardingPageSource = readFileSync(
+    "src/app/dashboard/onboarding/profile/page.tsx",
+    "utf8",
+  );
+
+  assert.match(
+    dashboardPageSource,
+    /!isOperatorProfileCompleted\(session\.operator\)[\s\S]*organizations\.length === 0/,
+  );
+  assert.match(
+    onboardingPageSource,
+    /isOperatorProfileCompleted\(session\.operator\) \|\| organizations\.length > 0/,
+  );
 });

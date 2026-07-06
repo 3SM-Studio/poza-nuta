@@ -12,7 +12,8 @@ test.describe("public smoke", () => {
     await expect(page.getByLabel("Email")).toBeVisible();
     await expect(page.getByLabel("Hasło", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Potwierdź hasło")).toBeVisible();
-    await expect(page.getByLabel("Imię lub ksywka")).toBeVisible();
+    await expect(page.getByLabel("Imię lub ksywka")).toHaveCount(0);
+    await expect(page.getByLabel("Imię i nazwisko")).toHaveCount(0);
     await expect(page.getByLabel("Wymagania hasła")).toContainText(
       "Minimum 8 znaków",
     );
@@ -47,12 +48,10 @@ test.describe("public smoke", () => {
     await page.getByRole("button", { name: "Załóż konto" }).click();
 
     await expect(page.getByText("Podaj email.")).toBeVisible();
-    await expect(page.getByText("Podaj imię lub ksywkę.")).toBeVisible();
     await expect(page.getByText("Podaj hasło.")).toBeVisible();
     await expect(page.getByText("Potwierdź hasło.")).toBeVisible();
 
     await page.getByLabel("Email").fill("nie-email");
-    await page.getByLabel("Imię lub ksywka").fill("Tester");
     await page.getByLabel("Hasło", { exact: true }).fill("weakpass");
     await page.getByLabel("Potwierdź hasło").fill("Secret123!");
     await page.getByRole("button", { name: "Załóż konto" }).click();

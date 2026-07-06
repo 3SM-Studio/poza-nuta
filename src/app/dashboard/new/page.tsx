@@ -15,6 +15,7 @@ import {
 import {
   getDashboardOrganizationPath,
   getDashboardOrganizationsPath,
+  getDashboardProfileOnboardingPath,
 } from "@/lib/dashboard-routes";
 
 import styles from "../../../components/operator/operator.module.css";
@@ -22,7 +23,10 @@ import {
   createDashboardOrganizationForOperator,
   listDashboardOrganizationsForAuthUser,
 } from "../../../server/operator-api/organizations";
-import { requireOperatorSession } from "../../../server/operator-api/supabase-session";
+import {
+  isOperatorProfileCompleted,
+  requireOperatorSession,
+} from "../../../server/operator-api/supabase-session";
 
 export const metadata: Metadata = {
   title: "Nowa organizacja | Poza Nutą",
@@ -35,6 +39,14 @@ export default async function NewDashboardOrganizationPage() {
   const organizations = await listDashboardOrganizationsForAuthUser(
     session.authUser.id,
   );
+
+  if (
+    !isOperatorProfileCompleted(session.operator) &&
+    organizations.length === 0
+  ) {
+    redirect(getDashboardProfileOnboardingPath());
+  }
+
   const cancelPath =
     organizations.length > 0 ? getDashboardOrganizationsPath() : "/dashboard";
 
@@ -112,6 +124,17 @@ async function createOrganization(formData: FormData) {
   "use server";
 
   const session = await requireOperatorSession();
+  const organizations = await listDashboardOrganizationsForAuthUser(
+    session.authUser.id,
+  );
+
+  if (
+    !isOperatorProfileCompleted(session.operator) &&
+    organizations.length === 0
+  ) {
+    redirect(getDashboardProfileOnboardingPath());
+  }
+
   const organization = await createDashboardOrganizationForOperator({
     name: String(formData.get("name") ?? ""),
     operatorId: session.operator.id,

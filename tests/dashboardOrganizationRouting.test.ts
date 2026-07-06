@@ -170,7 +170,7 @@ test("dashboard new is canonical create organization route", () => {
   assert.match(actionSource, /revalidatePath\(getDashboardOrganizationsPath\(\)\)/);
   assert.ok(
     actionSource.indexOf('revalidatePath("/dashboard", "layout")') <
-      actionSource.indexOf("redirect("),
+      actionSource.indexOf("redirect(getDashboardOrganizationPath"),
   );
   assert.match(actionSource, /formData\.get\("name"\)/);
   assert.equal(actionSource.includes('formData.get("type")'), false);
@@ -509,7 +509,8 @@ test("account profile page renders read-only Polish profile labels", () => {
   assert.match(source, /Profil użytkownika/);
   assert.match(source, /Email/);
   assert.match(source, /Auth user ID/);
-  assert.match(source, /Nazwa operatora/);
+  assert.match(source, /ImiÄ™ i nazwisko|Imię i nazwisko/);
+  assert.match(source, /Techniczna nazwa operatora/);
   assert.match(source, /Status operatora/);
   assert.match(source, /Aktywny/);
   assert.match(source, /Edycja profilu będzie dostępna/);

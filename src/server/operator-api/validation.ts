@@ -10,8 +10,8 @@ export const MAX_OPERATOR_EMAIL_LENGTH = 254;
 export const MIN_OPERATOR_PASSWORD_LENGTH = 6;
 export const MIN_SIGNUP_PASSWORD_LENGTH = 8;
 export const MAX_OPERATOR_PASSWORD_LENGTH = 1_024;
-export const MIN_SIGNUP_DISPLAY_NAME_LENGTH = 2;
-export const MAX_SIGNUP_DISPLAY_NAME_LENGTH = 80;
+export const MIN_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH = 2;
+export const MAX_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH = 80;
 export const MAX_EVENT_NAME_LENGTH = 120;
 export const MAX_EVENT_VENUE_LENGTH = 120;
 export const MAX_EVENT_FACEBOOK_URL_LENGTH = 2_048;
@@ -26,6 +26,9 @@ export type LoginInput = {
 export type SignupInput = {
   email: string;
   password: string;
+};
+
+export type OperatorProfileInput = {
   displayName: string;
 };
 
@@ -310,8 +313,6 @@ export function validateSignupInput(
   const password = typeof input.password === "string" ? input.password : "";
   const confirmPassword =
     typeof input.confirmPassword === "string" ? input.confirmPassword : "";
-  const displayName =
-    typeof input.displayName === "string" ? input.displayName.trim() : "";
 
   if (typeof input.email !== "string" || email.length === 0) {
     issues.push({ field: "email", message: "email is required." });
@@ -357,17 +358,38 @@ export function validateSignupInput(
     });
   }
 
+  if (issues.length > 0) {
+    return { success: false, issues };
+  }
+
+  return {
+    success: true,
+    data: { email, password },
+  };
+}
+
+export function validateOperatorProfileInput(
+  input: unknown,
+): ValidationResult<OperatorProfileInput> {
+  if (!isRecord(input)) {
+    return invalidBodyResult();
+  }
+
+  const issues: ValidationIssue[] = [];
+  const displayName =
+    typeof input.displayName === "string" ? input.displayName.trim() : "";
+
   if (typeof input.displayName !== "string" || displayName.length === 0) {
     issues.push({ field: "displayName", message: "displayName is required." });
-  } else if (displayName.length < MIN_SIGNUP_DISPLAY_NAME_LENGTH) {
+  } else if (displayName.length < MIN_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH) {
     issues.push({
       field: "displayName",
-      message: `displayName must contain at least ${MIN_SIGNUP_DISPLAY_NAME_LENGTH} characters.`,
+      message: `displayName must contain at least ${MIN_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH} characters.`,
     });
-  } else if (displayName.length > MAX_SIGNUP_DISPLAY_NAME_LENGTH) {
+  } else if (displayName.length > MAX_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH) {
     issues.push({
       field: "displayName",
-      message: `displayName must contain at most ${MAX_SIGNUP_DISPLAY_NAME_LENGTH} characters.`,
+      message: `displayName must contain at most ${MAX_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH} characters.`,
     });
   }
 
@@ -377,7 +399,7 @@ export function validateSignupInput(
 
   return {
     success: true,
-    data: { email, password, displayName },
+    data: { displayName },
   };
 }
 

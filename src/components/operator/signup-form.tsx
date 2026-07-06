@@ -12,7 +12,7 @@ import { OperatorClientError, signupOperator } from "./api";
 import styles from "./operator.module.css";
 
 type FieldErrors = Partial<
-  Record<"email" | "password" | "confirmPassword" | "displayName", string>
+  Record<"email" | "password" | "confirmPassword", string>
 >;
 
 export function OperatorSignupForm() {
@@ -20,7 +20,6 @@ export function OperatorSignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -36,7 +35,6 @@ export function OperatorSignupForm() {
       email,
       password,
       confirmPassword,
-      displayName,
     });
 
     if (Object.keys(nextFieldErrors).length > 0) {
@@ -52,7 +50,6 @@ export function OperatorSignupForm() {
         email,
         password,
         confirmPassword,
-        displayName,
       });
 
       setPassword("");
@@ -102,23 +99,6 @@ export function OperatorSignupForm() {
           autoFocus
         />
         <FieldError message={fieldErrors.email} />
-      </div>
-
-      <div className={styles.field}>
-        <label htmlFor="signup-display-name">Imię lub ksywka</label>
-        <input
-          id="signup-display-name"
-          name="displayName"
-          type="text"
-          autoComplete="name"
-          value={displayName}
-          onChange={(event) => setDisplayName(event.target.value)}
-          disabled={isSubmitting}
-          minLength={2}
-          maxLength={80}
-          required
-        />
-        <FieldError message={fieldErrors.displayName} />
       </div>
 
       <div className={styles.field}>
@@ -200,24 +180,14 @@ function validateSignupForm(input: {
   email: string;
   password: string;
   confirmPassword: string;
-  displayName: string;
 }): FieldErrors {
   const errors: FieldErrors = {};
   const email = input.email.trim();
-  const displayName = input.displayName.trim();
 
   if (!email) {
     errors.email = "Podaj email.";
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     errors.email = "Podaj poprawny email.";
-  }
-
-  if (!displayName) {
-    errors.displayName = "Podaj imię lub ksywkę.";
-  } else if (displayName.length < 2) {
-    errors.displayName = "Imię lub ksywka musi mieć co najmniej 2 znaki.";
-  } else if (displayName.length > 80) {
-    errors.displayName = "Imię lub ksywka może mieć maksymalnie 80 znaków.";
   }
 
   if (!input.password) {

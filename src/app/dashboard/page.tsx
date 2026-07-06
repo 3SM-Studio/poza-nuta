@@ -3,11 +3,17 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { LAST_SELECTED_ORGANIZATION_COOKIE } from "@/lib/dashboard-last-selected-organization";
-import { resolveDashboardHomeRedirect } from "@/lib/dashboard-routes";
+import {
+  getDashboardProfileOnboardingPath,
+  resolveDashboardHomeRedirect,
+} from "@/lib/dashboard-routes";
 
 import { DashboardRuntimeError } from "../../components/operator/dashboard-runtime-error";
 import { listDashboardOrganizationsForAuthUser } from "../../server/operator-api/organizations";
-import { requireOperatorSession } from "../../server/operator-api/supabase-session";
+import {
+  isOperatorProfileCompleted,
+  requireOperatorSession,
+} from "../../server/operator-api/supabase-session";
 import {
   isTransientInfrastructureError,
   traceServerStep,
@@ -21,12 +27,13 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  let session: Awaited<ReturnType<typeof requireOperatorSession>>;
   let organizations: Awaited<
     ReturnType<typeof listDashboardOrganizationsForAuthUser>
   >;
 
   try {
-    const session = await requireOperatorSession("dashboard.home");
+    session = await requireOperatorSession("dashboard.home");
     organizations = await traceServerStep(
       "dashboard.home",
       "listOrganizations",
@@ -38,6 +45,13 @@ export default async function DashboardPage() {
     }
 
     throw error;
+  }
+
+  if (
+    !isOperatorProfileCompleted(session.operator) &&
+    organizations.length === 0
+  ) {
+    redirect(getDashboardProfileOnboardingPath());
   }
 
   const cookieStore = await cookies();
