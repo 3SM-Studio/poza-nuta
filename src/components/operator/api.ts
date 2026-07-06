@@ -116,6 +116,18 @@ type OperatorLoginInput = {
   password: string;
 };
 
+type OperatorSignupInput = {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  displayName: string;
+};
+
+type OperatorSignupResponse = {
+  status: "signed_in" | "check_email";
+  operator: OperatorIdentity;
+};
+
 type ApiErrorBody = {
   error?: {
     code?: string;
@@ -125,6 +137,7 @@ type ApiErrorBody = {
 
 export const dashboardApiPaths = {
   login: "/api/dashboard/login",
+  signup: "/api/dashboard/signup",
   logout: "/api/dashboard/logout",
   me: "/api/dashboard/me",
   queue: "/api/dashboard/queue",
@@ -153,6 +166,13 @@ export class OperatorClientError extends Error {
 
 export function loginOperator(input: OperatorLoginInput) {
   return requestJson<OperatorMeResponse>(dashboardApiPaths.login, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function signupOperator(input: OperatorSignupInput) {
+  return requestJson<OperatorSignupResponse>(dashboardApiPaths.signup, {
     method: "POST",
     body: JSON.stringify(input),
   });

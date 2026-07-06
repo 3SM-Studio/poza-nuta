@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { operatorAuditLog, operatorUsers } from "../../db/schema";
 import { createClient as createSupabaseServerClient } from "../../lib/supabase/server";
@@ -13,18 +13,20 @@ import {
 } from "../runtime-diagnostics";
 import {
   mapSupabaseLoginError,
+  mapSupabaseSignupError,
   resolveOperatorAccess,
   resolveSignInPageAccess,
   type LinkedOperatorRecord,
 } from "./auth-policy";
 import { OperatorApiError } from "./errors";
-import type { LoginInput } from "./validation";
+import type { LoginInput, SignupInput } from "./validation";
 
 type SupabaseServerClient = Awaited<
   ReturnType<typeof createSupabaseServerClient>
 >;
 
 const SESSION_DB_STEP_TIMEOUT_MS = 4_000;
+const SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER = "supabase-auth-managed";
 
 export type AuthenticatedOperatorSession = {
   authUser: {
@@ -95,6 +97,63 @@ export async function requireOperatorSession(routeName = "dashboard.session") {
   return traceServerStepWithoutTimeout(routeName, "getSession", () =>
     getCachedOperatorSession(),
   );
+}
+
+export async function signupOperator(input: {
+  data: SignupInput;
+  emailRedirectTo: string;
+}) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await traceServerStep(
+    "dashboard.signup",
+    "signUp",
+    () =>
+      supabase.auth.signUp({
+        email: input.data.email,
+        password: input.data.password,
+        options: {
+          emailRedirectTo: input.emailRedirectTo,
+          data: {
+            display_name: input.data.displayName,
+            name: input.data.displayName,
+          },
+        },
+      }),
+  );
+
+  if (error || !data.user) {
+    const mappedError = mapSupabaseSignupError(error ?? {});
+
+    throw new OperatorApiError(
+      mappedError.status,
+      mappedError.code,
+      mappedError.message,
+    );
+  }
+
+  if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw new OperatorApiError(
+      400,
+      "SIGNUP_FAILED",
+      "The account could not be created.",
+    );
+  }
+
+  const authUserId = data.user.id;
+  const operator = await traceServerStep(
+    "dashboard.signup",
+    "ensureLocalOperator",
+    () =>
+      ensureSignupOperatorForAuthUser({
+        authUserId,
+        displayName: input.data.displayName,
+      }),
+  );
+
+  return {
+    status: data.session ? ("signed_in" as const) : ("check_email" as const),
+    operator,
+  };
 }
 
 const getCachedOperatorSession = cache(
@@ -220,6 +279,90 @@ async function findLinkedOperator(
     .limit(1);
 
   return operator ?? null;
+}
+
+async function ensureSignupOperatorForAuthUser(input: {
+  authUserId: string;
+  displayName: string;
+}): Promise<LinkedOperatorRecord & { active: true }> {
+  return getDb().transaction(async (transaction) => {
+    const [existingOperator] = await transaction
+      .select({
+        id: operatorUsers.id,
+        name: operatorUsers.name,
+        active: operatorUsers.active,
+      })
+      .from(operatorUsers)
+      .where(eq(operatorUsers.authUserId, input.authUserId))
+      .limit(1);
+
+    if (existingOperator) {
+      if (!existingOperator.active) {
+        throw new OperatorApiError(
+          403,
+          "OPERATOR_INACTIVE",
+          "This operator account is inactive.",
+        );
+      }
+
+      return {
+        ...existingOperator,
+        active: true,
+      };
+    }
+
+    const name = await generateUniqueOperatorName(transaction, input.displayName);
+    const [operator] = await transaction
+      .insert(operatorUsers)
+      .values({
+        name,
+        authUserId: input.authUserId,
+        // Passwords are managed exclusively by Supabase Auth.
+        passwordHash: SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER,
+        active: true,
+      })
+      .returning({
+        id: operatorUsers.id,
+        name: operatorUsers.name,
+        active: operatorUsers.active,
+      });
+
+    if (!operator) {
+      throw new Error("Local operator account could not be created.");
+    }
+
+    return {
+      ...operator,
+      active: true,
+    };
+  });
+}
+
+type DatabaseTransaction = Parameters<
+  Parameters<ReturnType<typeof getDb>["transaction"]>[0]
+>[0];
+
+async function generateUniqueOperatorName(
+  transaction: DatabaseTransaction,
+  displayName: string,
+) {
+  const normalizedDisplayName = displayName.trim();
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const suffix = attempt === 0 ? "" : ` ${attempt + 1}`;
+    const candidate = `${normalizedDisplayName}${suffix}`.slice(0, 120);
+    const [existingOperator] = await transaction
+      .select({ id: operatorUsers.id })
+      .from(operatorUsers)
+      .where(sql`lower(${operatorUsers.name}) = ${candidate.toLowerCase()}`)
+      .limit(1);
+
+    if (!existingOperator) {
+      return candidate;
+    }
+  }
+
+  throw new Error("Could not generate a unique operator name.");
 }
 
 function throwIfInfrastructureAuthError(error: unknown) {

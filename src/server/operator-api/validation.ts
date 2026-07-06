@@ -7,7 +7,10 @@ export const DEFAULT_OPERATOR_NAME = "Operator";
 export const MAX_OPERATOR_NAME_LENGTH = 120;
 export const MAX_OPERATOR_EMAIL_LENGTH = 254;
 export const MIN_OPERATOR_PASSWORD_LENGTH = 6;
+export const MIN_SIGNUP_PASSWORD_LENGTH = 8;
 export const MAX_OPERATOR_PASSWORD_LENGTH = 1_024;
+export const MIN_SIGNUP_DISPLAY_NAME_LENGTH = 2;
+export const MAX_SIGNUP_DISPLAY_NAME_LENGTH = 80;
 export const MAX_EVENT_NAME_LENGTH = 120;
 export const MAX_EVENT_VENUE_LENGTH = 120;
 export const MAX_EVENT_FACEBOOK_URL_LENGTH = 2_048;
@@ -17,6 +20,12 @@ export const DEFAULT_DASHBOARD_EVENT_DURATION_HOURS = 6;
 export type LoginInput = {
   email: string;
   password: string;
+};
+
+export type SignupInput = {
+  email: string;
+  password: string;
+  displayName: string;
 };
 
 export type EventSettingsInput = {
@@ -281,6 +290,87 @@ export function validateStartEventInput(
       name: eventFields.name,
       venue: eventFields.venue,
     },
+  };
+}
+
+export function validateSignupInput(
+  input: unknown,
+): ValidationResult<SignupInput> {
+  if (!isRecord(input)) {
+    return {
+      success: false,
+      issues: [{ field: "body", message: "Body must be a JSON object." }],
+    };
+  }
+
+  const issues: ValidationIssue[] = [];
+  const email =
+    typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const password = typeof input.password === "string" ? input.password : "";
+  const confirmPassword =
+    typeof input.confirmPassword === "string" ? input.confirmPassword : "";
+  const displayName =
+    typeof input.displayName === "string" ? input.displayName.trim() : "";
+
+  if (typeof input.email !== "string" || email.length === 0) {
+    issues.push({ field: "email", message: "email is required." });
+  } else if (email.length > MAX_OPERATOR_EMAIL_LENGTH) {
+    issues.push({
+      field: "email",
+      message: `email must contain at most ${MAX_OPERATOR_EMAIL_LENGTH} characters.`,
+    });
+  } else if (!isValidEmail(email)) {
+    issues.push({ field: "email", message: "email must be valid." });
+  }
+
+  if (typeof input.password !== "string" || password.length === 0) {
+    issues.push({ field: "password", message: "password is required." });
+  } else if (
+    password.length < MIN_SIGNUP_PASSWORD_LENGTH ||
+    password.length > MAX_OPERATOR_PASSWORD_LENGTH
+  ) {
+    issues.push({
+      field: "password",
+      message: `password must contain between ${MIN_SIGNUP_PASSWORD_LENGTH} and ${MAX_OPERATOR_PASSWORD_LENGTH} characters.`,
+    });
+  }
+
+  if (
+    typeof input.confirmPassword !== "string" ||
+    confirmPassword.length === 0
+  ) {
+    issues.push({
+      field: "confirmPassword",
+      message: "confirmPassword is required.",
+    });
+  } else if (password !== confirmPassword) {
+    issues.push({
+      field: "confirmPassword",
+      message: "confirmPassword must match password.",
+    });
+  }
+
+  if (typeof input.displayName !== "string" || displayName.length === 0) {
+    issues.push({ field: "displayName", message: "displayName is required." });
+  } else if (displayName.length < MIN_SIGNUP_DISPLAY_NAME_LENGTH) {
+    issues.push({
+      field: "displayName",
+      message: `displayName must contain at least ${MIN_SIGNUP_DISPLAY_NAME_LENGTH} characters.`,
+    });
+  } else if (displayName.length > MAX_SIGNUP_DISPLAY_NAME_LENGTH) {
+    issues.push({
+      field: "displayName",
+      message: `displayName must contain at most ${MAX_SIGNUP_DISPLAY_NAME_LENGTH} characters.`,
+    });
+  }
+
+  if (issues.length > 0) {
+    return { success: false, issues };
+  }
+
+  return {
+    success: true,
+    data: { email, password, displayName },
   };
 }
 

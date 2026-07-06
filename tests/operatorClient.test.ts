@@ -26,6 +26,7 @@ test("formatDuration formats queue durations for the operator UI", () => {
 test("operator UI client uses canonical dashboard API paths", () => {
   assert.deepEqual(dashboardApiPaths, {
     login: "/api/dashboard/login",
+    signup: "/api/dashboard/signup",
     logout: "/api/dashboard/logout",
     me: "/api/dashboard/me",
     queue: "/api/dashboard/queue",

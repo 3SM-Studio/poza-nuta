@@ -104,11 +104,47 @@
   padding: 0.75rem 0.85rem;
 }
 
+.formSuccess {
+  margin: 0;
+  border: 1px solid var(--accent-soft-border);
+  border-radius: 0.6rem;
+  background: var(--accent-soft);
+  color: var(--foreground);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  padding: 0.75rem 0.85rem;
+}
+
 .fieldError {
   margin: 0;
   color: var(--destructive);
   font-size: 0.82rem;
   line-height: 1.4;
+}
+
+.authSwitch {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.authSwitch a {
+  color: var(--primary);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.authSwitch a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.authSwitch a:focus-visible {
+  border-radius: 0.35rem;
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 
 .button {

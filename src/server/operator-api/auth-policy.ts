@@ -109,6 +109,12 @@ export type LoginAuthErrorDecision = {
   message: string;
 };
 
+export type SignupAuthErrorDecision = {
+  status: 400 | 429 | 503;
+  code: "SIGNUP_FAILED" | "AUTH_RATE_LIMITED" | "AUTH_SERVICE_ERROR";
+  message: string;
+};
+
 export function mapSupabaseLoginError(
   error: SupabaseAuthErrorLike,
 ): LoginAuthErrorDecision {
@@ -141,5 +147,35 @@ export function mapSupabaseLoginError(
     status: 503,
     code: "AUTH_SERVICE_ERROR",
     message: "Authentication is temporarily unavailable.",
+  };
+}
+
+export function mapSupabaseSignupError(
+  error: SupabaseAuthErrorLike,
+): SignupAuthErrorDecision {
+  if (
+    error.code === "over_request_rate_limit" ||
+    error.code === "over_email_send_rate_limit" ||
+    error.status === 429
+  ) {
+    return {
+      status: 429,
+      code: "AUTH_RATE_LIMITED",
+      message: "Too many signup attempts. Try again later.",
+    };
+  }
+
+  if (typeof error.status === "number" && error.status >= 500) {
+    return {
+      status: 503,
+      code: "AUTH_SERVICE_ERROR",
+      message: "Authentication is temporarily unavailable.",
+    };
+  }
+
+  return {
+    status: 400,
+    code: "SIGNUP_FAILED",
+    message: "The account could not be created.",
   };
 }
