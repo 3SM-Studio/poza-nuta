@@ -9,6 +9,14 @@ import {
   getDashboardEventQueueFilterStatuses,
   getDashboardEventQueueTargetStatus,
 } from "../src/lib/dashboard-event-queue.ts";
+import {
+  applyOptimisticDashboardEventQueueAction,
+  getDashboardEventQueueActionOperationKey,
+  isDashboardEventQueueRequestPending,
+  reconcileDashboardEventQueueItem,
+  restoreDashboardEventQueueItems,
+  type DashboardEventQueueOptimisticItem,
+} from "../src/lib/dashboard-event-queue-optimistic.ts";
 import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "../src/server/public-api/queue-policy.ts";
 import {
   validateDashboardEventQueueActionInput,
@@ -70,6 +78,97 @@ test("event queue actions preserve the existing request status model", () => {
   assert.equal(getDashboardEventQueueTargetStatus("reject"), "rejected");
   assert.equal(getDashboardEventQueueTargetStatus("done"), "done");
   assert.equal(getDashboardEventQueueTargetStatus("restore"), "pending");
+});
+
+test("event queue pending keys are scoped per request and action", () => {
+  const pendingOperations = new Set([
+    getDashboardEventQueueActionOperationKey(10, "approve"),
+  ]);
+
+  assert.equal(
+    getDashboardEventQueueActionOperationKey(10, "approve"),
+    "10:approve",
+  );
+  assert.equal(isDashboardEventQueueRequestPending(pendingOperations, 10), true);
+  assert.equal(isDashboardEventQueueRequestPending(pendingOperations, 11), false);
+});
+
+test("optimistic accept moves a pending request into the approved queue", () => {
+  const items = [
+    makeQueueItem({ id: 1, status: "approved", position: 1 }),
+    makeQueueItem({ id: 2, status: "pending", position: 0 }),
+  ];
+
+  const nextItems = applyOptimisticDashboardEventQueueAction(
+    items,
+    2,
+    "approve",
+    "2026-07-06T18:00:00.000Z",
+  );
+  const acceptedRequest = nextItems.find((item) => item.id === 2);
+
+  assert.equal(acceptedRequest?.status, "approved");
+  assert.equal(acceptedRequest?.position, 2);
+  assert.equal(acceptedRequest?.version, 2);
+});
+
+test("optimistic now marks the previous current request as done", () => {
+  const items = [
+    makeQueueItem({ id: 1, status: "now", position: 0 }),
+    makeQueueItem({ id: 2, status: "approved", position: 1 }),
+  ];
+
+  const nextItems = applyOptimisticDashboardEventQueueAction(
+    items,
+    2,
+    "start",
+    "2026-07-06T18:00:00.000Z",
+  );
+
+  assert.equal(nextItems.find((item) => item.id === 2)?.status, "now");
+  assert.equal(nextItems.find((item) => item.id === 1)?.status, "done");
+  assert.equal(
+    nextItems.filter((item) => item.status === "now").length,
+    1,
+  );
+});
+
+test("optimistic rollback restores changed request state after an error", () => {
+  const items = [makeQueueItem({ id: 1, status: "pending", position: 0 })];
+  const optimisticItems = applyOptimisticDashboardEventQueueAction(
+    items,
+    1,
+    "reject",
+    "2026-07-06T18:00:00.000Z",
+  );
+
+  const restoredItems = restoreDashboardEventQueueItems(optimisticItems, items);
+
+  assert.equal(restoredItems[0]?.status, "pending");
+  assert.equal(restoredItems[0]?.version, 1);
+});
+
+test("backend or realtime reconcile overwrites optimistic request state", () => {
+  const items = [makeQueueItem({ id: 1, status: "pending", position: 0 })];
+  const optimisticItems = applyOptimisticDashboardEventQueueAction(
+    items,
+    1,
+    "approve",
+    "2026-07-06T18:00:00.000Z",
+  );
+  const reconciledItems = reconcileDashboardEventQueueItem(
+    optimisticItems,
+    makeQueueItem({
+      id: 1,
+      status: "rejected",
+      position: 0,
+      version: 10,
+      updatedAt: "2026-07-06T18:01:00.000Z",
+    }),
+  );
+
+  assert.equal(reconciledItems[0]?.status, "rejected");
+  assert.equal(reconciledItems[0]?.version, 10);
 });
 
 test("event queue filters map to existing statuses", () => {
@@ -289,10 +388,58 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
 
   assert.match(panelSource, /onClick=\{\(\) => void refreshQueue\(\)\}/);
   assert.match(panelSource, /useDashboardQueueRealtime/);
+  assert.match(panelSource, /pendingOperations/);
+  assert.match(panelSource, /getDashboardEventQueueActionOperationKey/);
+  assert.match(panelSource, /applyOptimisticDashboardEventQueueAction/);
+  assert.match(panelSource, /restoreDashboardEventQueueItems/);
+  assert.match(panelSource, /reconcileDashboardEventQueueItem/);
   assert.match(
     panelSource,
     /getDashboardEventQueue\(\s*organizationId,\s*eventId,\s*signal/s,
   );
+  assert.doesNotMatch(panelSource, /const isBusy = pendingOperation !== null/);
+  assert.doesNotMatch(panelSource, /disabled=\{pendingOperation !== null\}/);
   assert.doesNotMatch(panelSource, /setInterval|setTimeout|useEffect/);
   assert.match(panelSource, /Nie ma jeszcze zgłoszeń z linku sesji/);
 });
+
+test("event queue panel does not refetch the whole queue after each mutation", () => {
+  const panelSource = readFileSync(
+    new URL(
+      "../src/components/operator/event-queue-panel.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const actionStart = panelSource.indexOf("async function handleAction");
+  const moveStart = panelSource.indexOf("async function handleMove");
+  const pendingStart = panelSource.indexOf("function markOperationPending");
+  const actionSource = panelSource.slice(actionStart, moveStart);
+  const moveSource = panelSource.slice(moveStart, pendingStart);
+
+  assert.doesNotMatch(
+    actionSource,
+    /getDashboardEventQueue\(organizationId,\s*eventId\)/,
+  );
+  assert.doesNotMatch(
+    moveSource,
+    /getDashboardEventQueue\(organizationId,\s*eventId\)/,
+  );
+  assert.doesNotMatch(actionSource, /router\.refresh\(\)/);
+  assert.doesNotMatch(moveSource, /router\.refresh\(\)/);
+});
+
+function makeQueueItem(
+  overrides: Partial<DashboardEventQueueOptimisticItem> & { id: number },
+): DashboardEventQueueOptimisticItem {
+  return {
+    id: overrides.id,
+    status: overrides.status ?? "pending",
+    position: overrides.position ?? 0,
+    version: overrides.version ?? 1,
+    createdAt: overrides.createdAt ?? "2026-07-06T17:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-07-06T17:00:00.000Z",
+    startedAt: overrides.startedAt ?? null,
+    completedAt: overrides.completedAt ?? null,
+  };
+}

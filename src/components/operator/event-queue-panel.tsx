@@ -45,6 +45,16 @@ import {
   type DashboardEventQueueMoveDirection,
   type DashboardEventQueueRequestStatus,
 } from "@/lib/dashboard-event-queue";
+import {
+  applyOptimisticDashboardEventQueueAction,
+  applyOptimisticDashboardEventQueueMove,
+  getDashboardEventQueueActionOperationKey,
+  getDashboardEventQueueChangedRequestIds,
+  getDashboardEventQueueMoveOperationKey,
+  isDashboardEventQueueRequestPending,
+  reconcileDashboardEventQueueItem,
+  restoreDashboardEventQueueItems,
+} from "@/lib/dashboard-event-queue-optimistic";
 import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
@@ -108,7 +118,11 @@ export function EventQueuePanel({
   const [items, setItems] = useState(initialItems);
   const [activeFilter, setActiveFilter] =
     useState<DashboardEventQueueFilter>("all");
-  const [pendingOperation, setPendingOperation] = useState<string | null>(null);
+  const [pendingOperations, setPendingOperations] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const filteredItems = useMemo(() => {
@@ -135,6 +149,8 @@ export function EventQueuePanel({
   );
   const refreshFromRealtime = useCallback(
     async (_reason: unknown, signal: AbortSignal) => {
+      setIsSyncing(true);
+
       try {
         const response = await getDashboardEventQueue(
           organizationId,
@@ -143,6 +159,7 @@ export function EventQueuePanel({
         );
 
         setItems(response.items);
+        setMessage("Kolejka zaktualizowana.");
         setError(null);
       } catch (caughtError) {
         if (signal.aborted || isAbortError(caughtError)) {
@@ -159,6 +176,8 @@ export function EventQueuePanel({
         }
 
         setError(getClientErrorMessage(caughtError));
+      } finally {
+        setIsSyncing(false);
       }
     },
     [eventId, organizationId, router],
@@ -169,20 +188,20 @@ export function EventQueuePanel({
   );
 
   async function refreshQueue() {
-    setPendingOperation("refresh");
+    setIsRefreshing(true);
     setError(null);
 
     try {
       const response = await getDashboardEventQueue(organizationId, eventId);
 
       setItems(response.items);
-      setMessage("Kolejka została odświeżona.");
+      setMessage("Kolejka zaktualizowana.");
     } catch (caughtError) {
       if (!handleAuthenticationError(caughtError)) {
         setError(getClientErrorMessage(caughtError));
       }
     } finally {
-      setPendingOperation(null);
+      setIsRefreshing(false);
     }
   }
 
@@ -190,29 +209,50 @@ export function EventQueuePanel({
     requestId: number,
     action: DashboardEventQueueAction,
   ) {
-    const operationKey = `${requestId}:${action}`;
+    const operationKey = getDashboardEventQueueActionOperationKey(
+      requestId,
+      action,
+    );
+    const previousItems = items;
+    const optimisticItems = applyOptimisticDashboardEventQueueAction(
+      previousItems,
+      requestId,
+      action,
+    );
+    const changedRequestIds = getDashboardEventQueueChangedRequestIds(
+      previousItems,
+      optimisticItems,
+    );
+    const rollbackItems = previousItems.filter((item) =>
+      changedRequestIds.includes(item.id),
+    );
 
-    setPendingOperation(operationKey);
+    markOperationPending(operationKey);
+    setItems(optimisticItems);
     setMessage(null);
     setError(null);
 
     try {
-      await runDashboardEventQueueAction(
+      const result = await runDashboardEventQueueAction(
         organizationId,
         eventId,
         requestId,
         action,
       );
-      const response = await getDashboardEventQueue(organizationId, eventId);
 
-      setItems(response.items);
-      setMessage(actionSuccessMessages[action]);
+      setItems((currentItems) =>
+        reconcileDashboardEventQueueItem(currentItems, result.request),
+      );
+      setMessage(`Zmieniono status. ${actionSuccessMessages[action]}`);
     } catch (caughtError) {
       if (!handleAuthenticationError(caughtError)) {
+        setItems((currentItems) =>
+          restoreDashboardEventQueueItems(currentItems, rollbackItems),
+        );
         setError(getClientErrorMessage(caughtError));
       }
     } finally {
-      setPendingOperation(null);
+      clearOperationPending(operationKey);
     }
   }
 
@@ -220,9 +260,26 @@ export function EventQueuePanel({
     requestId: number,
     direction: DashboardEventQueueMoveDirection,
   ) {
-    const operationKey = `${requestId}:move:${direction}`;
+    const operationKey = getDashboardEventQueueMoveOperationKey(
+      requestId,
+      direction,
+    );
+    const previousItems = items;
+    const optimisticItems = applyOptimisticDashboardEventQueueMove(
+      previousItems,
+      requestId,
+      direction,
+    );
+    const changedRequestIds = getDashboardEventQueueChangedRequestIds(
+      previousItems,
+      optimisticItems,
+    );
+    const rollbackItems = previousItems.filter((item) =>
+      changedRequestIds.includes(item.id),
+    );
 
-    setPendingOperation(operationKey);
+    markOperationPending(operationKey);
+    setItems(optimisticItems);
     setMessage(null);
     setError(null);
 
@@ -233,21 +290,43 @@ export function EventQueuePanel({
         requestId,
         direction,
       );
-      const response = await getDashboardEventQueue(organizationId, eventId);
 
-      setItems(response.items);
+      setItems((currentItems) =>
+        reconcileDashboardEventQueueItem(currentItems, result.request),
+      );
       setMessage(
-        result && typeof result === "object" && "moved" in result && !result.moved
+        !result.moved
           ? "Zgłoszenie jest już na skraju kolejki."
           : "Kolejność zgłoszeń została zmieniona.",
       );
     } catch (caughtError) {
       if (!handleAuthenticationError(caughtError)) {
+        setItems((currentItems) =>
+          restoreDashboardEventQueueItems(currentItems, rollbackItems),
+        );
         setError(getClientErrorMessage(caughtError));
       }
     } finally {
-      setPendingOperation(null);
+      clearOperationPending(operationKey);
     }
+  }
+
+  function markOperationPending(operationKey: string) {
+    setPendingOperations((currentOperations) => {
+      const nextOperations = new Set(currentOperations);
+
+      nextOperations.add(operationKey);
+      return nextOperations;
+    });
+  }
+
+  function clearOperationPending(operationKey: string) {
+    setPendingOperations((currentOperations) => {
+      const nextOperations = new Set(currentOperations);
+
+      nextOperations.delete(operationKey);
+      return nextOperations;
+    });
   }
 
   function handleAuthenticationError(caughtError: unknown) {
@@ -275,14 +354,17 @@ export function EventQueuePanel({
             <Badge variant={liveStatus === "live" ? "default" : "secondary"}>
               {formatLiveStatus(liveStatus)}
             </Badge>
+            {isSyncing ? (
+              <Badge variant="secondary">Synchronizuję...</Badge>
+            ) : null}
             <Button
               variant="outline"
               type="button"
               onClick={() => void refreshQueue()}
-              disabled={pendingOperation !== null}
+              disabled={isRefreshing}
             >
               <RefreshCw aria-hidden="true" data-icon="inline-start" />
-              {pendingOperation === "refresh" ? "Odświeżanie..." : "Odśwież"}
+              {isRefreshing ? "Synchronizuję..." : "Odśwież"}
             </Button>
           </div>
         </CardAction>
@@ -307,7 +389,7 @@ export function EventQueuePanel({
 
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
+            <AlertTitle>Nie udało się zapisać zmiany</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
@@ -325,7 +407,7 @@ export function EventQueuePanel({
               canManage={canManage}
               canMoveUp={false}
               canMoveDown={false}
-              pendingOperation={pendingOperation}
+              pendingOperations={pendingOperations}
               onAction={handleAction}
               onMove={handleMove}
             />
@@ -378,7 +460,7 @@ export function EventQueuePanel({
                     approvedIndex >= 0 &&
                     approvedIndex < approvedItems.length - 1
                   }
-                  pendingOperation={pendingOperation}
+                  pendingOperations={pendingOperations}
                   onAction={handleAction}
                   onMove={handleMove}
                 />
@@ -402,7 +484,7 @@ type EventQueueRequestRowProps = {
   canManage: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
-  pendingOperation: string | null;
+  pendingOperations: ReadonlySet<string>;
   onAction: (
     requestId: number,
     action: DashboardEventQueueAction,
@@ -418,13 +500,16 @@ function EventQueueRequestRow({
   canManage,
   canMoveUp,
   canMoveDown,
-  pendingOperation,
+  pendingOperations,
   onAction,
   onMove,
 }: EventQueueRequestRowProps) {
   const actions = getAvailableActions(item.status);
   const duration = formatDuration(item.song.durationSeconds);
-  const isBusy = pendingOperation !== null;
+  const isRequestPending = isDashboardEventQueueRequestPending(
+    pendingOperations,
+    item.id,
+  );
 
   return (
     <article className={styles.requestRow}>
@@ -464,7 +549,7 @@ function EventQueueRequestRow({
                 title="Przesuń w górę"
                 aria-label="Przesuń zgłoszenie w górę"
                 onClick={() => void onMove(item.id, "up")}
-                disabled={isBusy || !canMoveUp}
+                disabled={isRequestPending || !canMoveUp}
               >
                 <ArrowUp aria-hidden="true" data-icon="inline-start" />
               </Button>
@@ -475,7 +560,7 @@ function EventQueueRequestRow({
                 title="Przesuń w dół"
                 aria-label="Przesuń zgłoszenie w dół"
                 onClick={() => void onMove(item.id, "down")}
-                disabled={isBusy || !canMoveDown}
+                disabled={isRequestPending || !canMoveDown}
               >
                 <ArrowDown aria-hidden="true" data-icon="inline-start" />
               </Button>
@@ -483,7 +568,11 @@ function EventQueueRequestRow({
           ) : null}
 
           {actions.map((action) => {
-            const operationKey = `${item.id}:${action}`;
+            const operationKey = getDashboardEventQueueActionOperationKey(
+              item.id,
+              action,
+            );
+            const isCurrentActionPending = pendingOperations.has(operationKey);
 
             return (
               <Button
@@ -492,10 +581,10 @@ function EventQueueRequestRow({
                 variant={action === "reject" ? "destructive" : "default"}
                 type="button"
                 onClick={() => void onAction(item.id, action)}
-                disabled={isBusy}
+                disabled={isRequestPending}
               >
                 {getActionIcon(action)}
-                {pendingOperation === operationKey
+                {isCurrentActionPending
                   ? "Zapisywanie..."
                   : actionLabels[action]}
               </Button>
@@ -557,7 +646,7 @@ function formatDateTime(value: string) {
 
 function getClientErrorMessage(error: unknown) {
   if (!(error instanceof OperatorClientError)) {
-    return "Nie udało się wykonać operacji. Spróbuj ponownie.";
+    return "Nie udało się zapisać zmiany. Spróbuj ponownie.";
   }
 
   switch (error.code) {
@@ -579,14 +668,14 @@ function getClientErrorMessage(error: unknown) {
     case "INVALID_JSON":
       return "Nie udało się poprawnie odczytać operacji.";
     default:
-      return "Nie udało się wykonać operacji. Spróbuj ponownie.";
+      return "Nie udało się zapisać zmiany. Spróbuj ponownie.";
   }
 }
 
 function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
   switch (status) {
     case "live":
-      return "Połączenie live";
+      return "Live połączone";
     case "unavailable":
       return "Live niedostępne";
     default:

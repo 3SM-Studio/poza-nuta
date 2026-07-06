@@ -13,7 +13,7 @@ export function PublicRequestPage() {
         <header className={styles.publicHeader}>
           <Link
             className={styles.brand}
-            href="/session/od_kzXO48n4zyRr63wkJm-9_cOkSY11Y"
+            href="/"
             aria-label="Przejdź na stronę główną"
           >
             <Image

@@ -49,6 +49,23 @@ export type DashboardEventQueueResponse = {
   items: DashboardEventQueueItemDto[];
 };
 
+export type DashboardEventQueueActionResponse = {
+  event: {
+    id: number;
+    name: string;
+  };
+  request: DashboardEventQueueItemDto;
+};
+
+export type DashboardEventQueueMoveResponse = {
+  moved: boolean;
+  event: {
+    id: number;
+    name: string;
+  };
+  request: DashboardEventQueueItemDto;
+};
+
 type ApiErrorBody = {
   error?: {
     code?: string;
@@ -73,7 +90,7 @@ export function runDashboardEventQueueAction(
   requestId: number,
   action: DashboardEventQueueAction,
 ) {
-  return requestJson(
+  return requestJson<DashboardEventQueueActionResponse>(
     getDashboardEventQueueActionApiPath(
       organizationId,
       eventId,
@@ -92,7 +109,7 @@ export function moveDashboardEventQueueRequest(
   requestId: number,
   direction: DashboardEventQueueMoveDirection,
 ) {
-  return requestJson(
+  return requestJson<DashboardEventQueueMoveResponse>(
     getDashboardEventQueueMoveApiPath(
       organizationId,
       eventId,
