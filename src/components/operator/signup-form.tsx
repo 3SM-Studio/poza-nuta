@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import {
+  getSignupPasswordRequirementStates,
+  isStrongSignupPassword,
+} from "../../lib/signup-password";
 import { OperatorClientError, signupOperator } from "./api";
 import styles from "./operator.module.css";
 
@@ -19,13 +23,14 @@ export function OperatorSignupForm() {
   const [displayName, setDisplayName] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const passwordRequirements = getSignupPasswordRequirementStates(password);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    setSuccess(null);
+    setSuccess(false);
 
     const nextFieldErrors = validateSignupForm({
       email,
@@ -59,14 +64,26 @@ export function OperatorSignupForm() {
         return;
       }
 
-      setSuccess(
-        "Sprawdź email, aby potwierdzić konto. Konto zostało utworzone. Możesz się zalogować.",
-      );
+      setSuccess(true);
     } catch (caughtError) {
       setError(getSignupErrorMessage(caughtError));
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (success) {
+    return (
+      <section className={styles.signupConfirmation} role="status">
+        <h2>Sprawdź email</h2>
+        <p>
+          Konto zostało utworzone. Sprawdź skrzynkę i potwierdź adres email.
+        </p>
+        <Link className={`${styles.button} ${styles.primaryButton}`} href="/sign-in">
+          Przejdź do logowania
+        </Link>
+      </section>
+    );
   }
 
   return (
@@ -118,6 +135,16 @@ export function OperatorSignupForm() {
           required
         />
         <FieldError message={fieldErrors.password} />
+        <ul
+          className={styles.passwordRequirements}
+          aria-label="Wymagania hasła"
+        >
+          {passwordRequirements.map((requirement) => (
+            <li key={requirement.id} data-met={requirement.met}>
+              {requirement.label}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className={styles.field}>
@@ -142,18 +169,12 @@ export function OperatorSignupForm() {
         </p>
       ) : null}
 
-      {success ? (
-        <p className={styles.formSuccess} role="status">
-          {success}
-        </p>
-      ) : null}
-
       <button
         className={`${styles.button} ${styles.primaryButton} ${styles.loginButton}`}
         type="submit"
         disabled={isSubmitting}
       >
-        {isSubmitting ? "Tworzenie konta…" : "Załóż konto"}
+        {isSubmitting ? "Tworzenie konta..." : "Załóż konto"}
       </button>
 
       <p className={styles.authSwitch}>
@@ -201,8 +222,8 @@ function validateSignupForm(input: {
 
   if (!input.password) {
     errors.password = "Podaj hasło.";
-  } else if (input.password.length < 8) {
-    errors.password = "Hasło musi mieć co najmniej 8 znaków.";
+  } else if (!isStrongSignupPassword(input.password)) {
+    errors.password = "Hasło nie spełnia wszystkich wymagań.";
   }
 
   if (!input.confirmPassword) {

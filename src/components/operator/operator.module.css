@@ -122,6 +122,47 @@
   line-height: 1.4;
 }
 
+.passwordRequirements {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.1rem 0 0;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  list-style: none;
+}
+
+.passwordRequirements li::before {
+  content: "-";
+  margin-right: 0.35rem;
+}
+
+.passwordRequirements li[data-met="true"] {
+  color: var(--foreground);
+}
+
+.passwordRequirements li[data-met="true"]::before {
+  content: "+";
+}
+
+.signupConfirmation {
+  display: grid;
+  gap: 1rem;
+}
+
+.signupConfirmation h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.signupConfirmation p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
 .authSwitch {
   margin: 0.2rem 0 0;
   color: var(--text-secondary);

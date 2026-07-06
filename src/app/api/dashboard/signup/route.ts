@@ -6,6 +6,7 @@ import {
   operatorJsonResponse,
   operatorValidationErrorResponse,
 } from "../../../../server/operator-api/responses";
+import { buildAuthCallbackRedirectTo } from "../../../../lib/auth-redirects";
 import { signupOperator } from "../../../../server/operator-api/supabase-session";
 import { validateSignupInput } from "../../../../server/operator-api/validation";
 
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
   try {
     const signup = await signupOperator({
       data: validation.data,
-      emailRedirectTo: new URL("/dashboard", request.url).toString(),
+      emailRedirectTo: buildAuthCallbackRedirectTo(new URL(request.url).origin),
     });
 
     return operatorJsonResponse({

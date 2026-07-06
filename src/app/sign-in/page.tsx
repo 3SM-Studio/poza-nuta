@@ -14,8 +14,14 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function SignInPage() {
+type SignInPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function SignInPage({ searchParams }: SignInPageProps) {
   const access = await getSignInPageAccess();
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const authError = getAuthErrorMessage(resolvedSearchParams.auth_error);
 
   if (access.state === "authorized") {
     redirect("/dashboard");
@@ -45,13 +51,28 @@ export default async function SignInPage() {
             <p className={styles.loginIntro}>
               Zaloguj się, aby zarządzać kolejką aktywnego wydarzenia.
             </p>
+            {authError ? (
+              <p className={styles.formError} role="alert">
+                {authError}
+              </p>
+            ) : null}
             <OperatorLoginForm />
             <p className={styles.authSwitch}>
-              Nie masz konta? <Link href="/sign-up">Załóż konto</Link>
+              Nie masz konta? <Link href="/sign-up">Zarejestruj się</Link>
             </p>
           </>
         )}
       </section>
     </main>
   );
+}
+
+function getAuthErrorMessage(value: string | string[] | undefined) {
+  const code = Array.isArray(value) ? value[0] : value;
+
+  if (code === "invalid_link") {
+    return "Link email wygasł albo jest nieprawidłowy. Spróbuj zalogować się ponownie.";
+  }
+
+  return null;
 }

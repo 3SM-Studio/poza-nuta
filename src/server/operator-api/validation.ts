@@ -2,6 +2,7 @@ import {
   isDateTimeLocalInput,
   parseWarsawDateTimeLocal,
 } from "../../lib/warsaw-time.ts";
+import { isStrongSignupPassword } from "../../lib/signup-password.ts";
 
 export const DEFAULT_OPERATOR_NAME = "Operator";
 export const MAX_OPERATOR_NAME_LENGTH = 120;
@@ -332,6 +333,12 @@ export function validateSignupInput(
     issues.push({
       field: "password",
       message: `password must contain between ${MIN_SIGNUP_PASSWORD_LENGTH} and ${MAX_OPERATOR_PASSWORD_LENGTH} characters.`,
+    });
+  } else if (!isStrongSignupPassword(password)) {
+    issues.push({
+      field: "password",
+      message:
+        "password must include uppercase, lowercase, number and special character.",
     });
   }
 

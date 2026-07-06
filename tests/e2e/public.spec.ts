@@ -13,6 +13,11 @@ test.describe("public smoke", () => {
     await expect(page.getByLabel("Hasło", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Potwierdź hasło")).toBeVisible();
     await expect(page.getByLabel("Imię lub ksywka")).toBeVisible();
+    await expect(page.getByLabel("Wymagania hasła")).toContainText(
+      "Minimum 8 znaków",
+    );
+    await expect(page.getByText("GitHub")).toHaveCount(0);
+    await expect(page.getByText("SSO")).toHaveCount(0);
   });
 
   test("sign-up page links to sign-in", async ({ page }) => {
@@ -25,7 +30,17 @@ test.describe("public smoke", () => {
     ).toBeVisible();
   });
 
-  test("sign-up page validates empty and invalid fields without mutation", async ({
+  test("sign-in page links to sign-up", async ({ page }) => {
+    await page.goto("/sign-in");
+    await page.getByRole("link", { name: "Zarejestruj się" }).click();
+
+    await expect(page).toHaveURL(/\/sign-up$/);
+    await expect(
+      page.getByRole("heading", { name: "Załóż konto" }),
+    ).toBeVisible();
+  });
+
+  test("sign-up page validates empty, weak and mismatched fields without mutation", async ({
     page,
   }) => {
     await page.goto("/sign-up");
@@ -38,12 +53,18 @@ test.describe("public smoke", () => {
 
     await page.getByLabel("Email").fill("nie-email");
     await page.getByLabel("Imię lub ksywka").fill("Tester");
-    await page.getByLabel("Hasło", { exact: true }).fill("secret123");
-    await page.getByLabel("Potwierdź hasło").fill("secret124");
+    await page.getByLabel("Hasło", { exact: true }).fill("weakpass");
+    await page.getByLabel("Potwierdź hasło").fill("Secret123!");
     await page.getByRole("button", { name: "Załóż konto" }).click();
 
     await expect(page.getByText("Podaj poprawny email.")).toBeVisible();
+    await expect(
+      page.getByText("Hasło nie spełnia wszystkich wymagań."),
+    ).toBeVisible();
     await expect(page.getByText("Hasła muszą być takie same.")).toBeVisible();
+    await expect(page.getByLabel("Wymagania hasła")).toContainText(
+      "Wielka litera",
+    );
   });
 
   test("public queue loads without dashboard auth", async ({ page }) => {
@@ -61,8 +82,6 @@ test.describe("public smoke", () => {
     await page.goto(`/session/${encodeURIComponent(code)}`);
 
     await expect(page.locator("main")).toBeVisible();
-    await expect(
-      page.locator("main"),
-    ).toContainText(/Link sesji|Wybierz piosenkę/);
+    await expect(page.locator("main")).toContainText(/Link sesji|Wybierz piosenkę/);
   });
 });
