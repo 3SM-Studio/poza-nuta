@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getSafeDashboardAuthNextPath } from "../../../lib/auth-redirects";
+import { resolveAuthCallbackRedirect } from "../../../lib/auth-callback";
 import { createClient as createSupabaseServerClient } from "../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -8,27 +8,22 @@ export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
-  const next = getSafeDashboardAuthNextPath(requestUrl.searchParams.get("next"));
 
-  if (!code) {
-    return redirectToSignIn(requestUrl, "invalid_link");
+  if (!requestUrl.searchParams.get("code")) {
+    const redirect = await resolveAuthCallbackRedirect({
+      requestUrl,
+      exchangeCodeForSession: async () => ({}),
+    });
+
+    return NextResponse.redirect(redirect.location);
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const redirect = await resolveAuthCallbackRedirect({
+    requestUrl,
+    exchangeCodeForSession: (code) =>
+      supabase.auth.exchangeCodeForSession(code),
+  });
 
-  if (error) {
-    return redirectToSignIn(requestUrl, "invalid_link");
-  }
-
-  return NextResponse.redirect(new URL(next, requestUrl.origin));
-}
-
-function redirectToSignIn(requestUrl: URL, reason: "invalid_link") {
-  const signInUrl = new URL("/sign-in", requestUrl.origin);
-
-  signInUrl.searchParams.set("auth_error", reason);
-
-  return NextResponse.redirect(signInUrl);
+  return NextResponse.redirect(redirect.location);
 }

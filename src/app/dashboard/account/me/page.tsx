@@ -11,7 +11,10 @@ import {
 
 import styles from "../../../../components/operator/operator.module.css";
 import { sanitizeAuthIdentities } from "../../../../server/operator-api/account";
-import { requireOperatorSession } from "../../../../server/operator-api/supabase-session";
+import {
+  getOperatorDisplayName,
+  requireOperatorSession,
+} from "../../../../server/operator-api/supabase-session";
 
 export const metadata: Metadata = {
   title: "Moje konto | Poza Nutą",
@@ -58,7 +61,11 @@ export default async function DashboardAccountMePage() {
                   <dd className={styles.breakValue}>{session.authUser.id}</dd>
                 </div>
                 <div>
-                  <dt>Nazwa operatora</dt>
+                  <dt>Imię i nazwisko</dt>
+                  <dd>{getOperatorDisplayName(session.operator)}</dd>
+                </div>
+                <div>
+                  <dt>Techniczna nazwa operatora</dt>
                   <dd>{session.operator.name}</dd>
                 </div>
                 <div>
