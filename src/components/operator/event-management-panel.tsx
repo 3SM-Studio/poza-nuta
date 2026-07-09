@@ -33,6 +33,9 @@ export type EventManagementAction = (
 export type EventManagementInitialValues = {
   title: string;
   venue: string;
+  city: string;
+  slug: string;
+  visibility: "private" | "public";
   startsAtInputValue: string;
   autoCloseAtInputValue: string;
   facebookUrl: string;
@@ -142,6 +145,19 @@ export function EventManagementPanel({
             </div>
 
             <div className={styles.dashboardField}>
+              <label htmlFor="event-manage-city">Miasto</label>
+              <input
+                id="event-manage-city"
+                name="city"
+                type="text"
+                maxLength={120}
+                defaultValue={initialValues.city}
+                aria-invalid={hasIssue(detailsState, "city") || undefined}
+              />
+              <FieldIssue state={detailsState} field="city" />
+            </div>
+
+            <div className={styles.dashboardField}>
               <label htmlFor="event-manage-starts-at">
                 Start wydarzenia (czas polski)
               </label>
@@ -185,6 +201,41 @@ export function EventManagementPanel({
                 aria-invalid={hasIssue(detailsState, "facebookUrl") || undefined}
               />
               <FieldIssue state={detailsState} field="facebookUrl" />
+            </div>
+
+            <div className={styles.formSection}>
+              <h2>Katalog publiczny</h2>
+              <div className={styles.dashboardField}>
+                <label htmlFor="event-manage-slug">Slug publiczny</label>
+                <input
+                  id="event-manage-slug"
+                  name="slug"
+                  type="text"
+                  inputMode="url"
+                  maxLength={80}
+                  defaultValue={initialValues.slug}
+                  aria-invalid={hasIssue(detailsState, "slug") || undefined}
+                />
+                <p className={styles.eventMeta}>
+                  Zostaw puste, aby wygenerować slug z nazwy przy publikacji.
+                </p>
+                <FieldIssue state={detailsState} field="slug" />
+              </div>
+
+              <label className={styles.checkboxField}>
+                <input
+                  name="visibility"
+                  type="checkbox"
+                  value="public"
+                  defaultChecked={initialValues.visibility === "public"}
+                />
+                <span>Opublikuj w katalogu wydarzeń</span>
+              </label>
+              <p className={styles.eventMeta}>
+                Publiczne wydarzenie wymaga sluga i daty publikacji. Wyłączenie
+                publikacji nie usuwa historii pierwszej publikacji.
+              </p>
+              <FieldIssue state={detailsState} field="visibility" />
             </div>
 
             <div className={styles.formSection}>

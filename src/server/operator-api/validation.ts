@@ -3,6 +3,7 @@ import {
   parseWarsawDateTimeLocal,
 } from "../../lib/warsaw-time.ts";
 import { isStrongSignupPassword } from "../../lib/signup-password.ts";
+import { formatEventSlug, isValidEventSlug } from "../../lib/event-slug.ts";
 
 export const DEFAULT_OPERATOR_NAME = "Operator";
 export const MAX_OPERATOR_NAME_LENGTH = 120;
@@ -14,6 +15,7 @@ export const MIN_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH = 2;
 export const MAX_OPERATOR_PROFILE_DISPLAY_NAME_LENGTH = 80;
 export const MAX_EVENT_NAME_LENGTH = 120;
 export const MAX_EVENT_VENUE_LENGTH = 120;
+export const MAX_EVENT_CITY_LENGTH = 120;
 export const MAX_EVENT_FACEBOOK_URL_LENGTH = 2_048;
 export const MAX_EVENT_ACCESS_LINK_LABEL_LENGTH = 120;
 export const DEFAULT_DASHBOARD_EVENT_DURATION_HOURS = 6;
@@ -47,6 +49,9 @@ export type StartEventInput = {
 export type CreateDashboardEventInput = {
   title: string;
   venue: string | null;
+  city: string | null;
+  slug: string | null;
+  visibility: "private" | "public";
   startsAt: Date;
   autoCloseAt: Date;
   facebookUrl: string | null;
@@ -58,6 +63,9 @@ export type CreateDashboardEventInput = {
 export type UpdateDashboardEventDetailsInput = {
   title: string;
   venue: string | null;
+  city: string | null;
+  slug: string | null;
+  visibility: "private" | "public";
   startsAt: Date;
   autoCloseAt: Date;
   facebookUrl: string | null;
@@ -437,6 +445,10 @@ function validateDashboardEventDetailsInput(
   const title = typeof input.title === "string" ? input.title.trim() : "";
   const venue =
     typeof input.venue === "string" ? input.venue.trim() || null : null;
+  const city =
+    typeof input.city === "string" ? input.city.trim() || null : null;
+  const slug = parseOptionalEventSlugInput(input.slug, issues);
+  const visibility = parseEventVisibilityInput(input.visibility, issues);
   const startsAt = parseDateTimeInput(input.startsAt, "startsAt", issues);
   const requestedAutoCloseAt = parseOptionalDateTimeInput(
     input.autoCloseAt,
@@ -474,6 +486,22 @@ function validateDashboardEventDetailsInput(
     });
   }
 
+  if (
+    input.city !== undefined &&
+    input.city !== null &&
+    typeof input.city !== "string"
+  ) {
+    issues.push({
+      field: "city",
+      message: "city must be a string or null.",
+    });
+  } else if (city && city.length > MAX_EVENT_CITY_LENGTH) {
+    issues.push({
+      field: "city",
+      message: `city must contain at most ${MAX_EVENT_CITY_LENGTH} characters.`,
+    });
+  }
+
   if (!startsAt) {
     issues.push({ field: "startsAt", message: "startsAt is required." });
   }
@@ -501,6 +529,9 @@ function validateDashboardEventDetailsInput(
     data: {
       title,
       venue,
+      city,
+      slug,
+      visibility,
       startsAt,
       autoCloseAt,
       facebookUrl,
@@ -509,6 +540,57 @@ function validateDashboardEventDetailsInput(
       isActivePublicEvent: parseBooleanInput(input.isActivePublicEvent, false),
     },
   };
+}
+
+function parseOptionalEventSlugInput(
+  value: unknown,
+  issues: ValidationIssue[],
+) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push({ field: "slug", message: "slug must be a string or null." });
+    return null;
+  }
+
+  const slug = formatEventSlug(value);
+
+  if (!slug) {
+    return null;
+  }
+
+  if (!isValidEventSlug(slug)) {
+    issues.push({
+      field: "slug",
+      message:
+        "slug must contain 3-80 lowercase letters, numbers, or single hyphens.",
+    });
+    return null;
+  }
+
+  return slug;
+}
+
+function parseEventVisibilityInput(
+  value: unknown,
+  issues: ValidationIssue[],
+) {
+  if (value === undefined || value === null || value === "") {
+    return "private";
+  }
+
+  if (value === "private" || value === "public") {
+    return value;
+  }
+
+  issues.push({
+    field: "visibility",
+    message: "visibility must be private or public.",
+  });
+
+  return "private";
 }
 
 export function validateUpdateDashboardEventAutoCloseAtInput(

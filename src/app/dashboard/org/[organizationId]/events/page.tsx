@@ -109,6 +109,10 @@ export default async function OrganizationEventsPage({
                       <dt>Publiczny event</dt>
                       <dd>{event.isActivePublicEvent ? "Tak" : "Nie"}</dd>
                     </div>
+                    <div>
+                      <dt>Katalog wydarzeń</dt>
+                      <dd>{event.visibility === "public" ? "Opublikowany" : "Prywatny"}</dd>
+                    </div>
                   </dl>
                 </CardContent>
                 <CardFooter>
