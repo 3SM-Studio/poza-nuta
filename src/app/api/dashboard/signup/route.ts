@@ -6,7 +6,11 @@ import {
   operatorJsonResponse,
   operatorValidationErrorResponse,
 } from "../../../../server/operator-api/responses";
-import { buildAuthCallbackRedirectTo } from "../../../../lib/auth-redirects";
+import {
+  AuthRedirectConfigurationError,
+  buildAuthCallbackRedirectTo,
+  getAuthRedirectOrigin,
+} from "../../../../lib/auth-redirects";
 import { signupOperator } from "../../../../server/operator-api/supabase-session";
 import { validateSignupInput } from "../../../../server/operator-api/validation";
 
@@ -29,9 +33,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const requestOrigin = new URL(request.url).origin;
     const signup = await signupOperator({
       data: validation.data,
-      emailRedirectTo: buildAuthCallbackRedirectTo(new URL(request.url).origin),
+      emailRedirectTo: buildAuthCallbackRedirectTo(
+        getAuthRedirectOrigin(requestOrigin),
+      ),
     });
 
     return operatorJsonResponse({
@@ -39,6 +46,18 @@ export async function POST(request: NextRequest) {
       operator: signup.operator,
     });
   } catch (error) {
+    if (error instanceof AuthRedirectConfigurationError) {
+      return operatorJsonResponse(
+        {
+          error: {
+            code: "AUTH_CONFIGURATION_ERROR",
+            message: "Authentication redirect configuration is invalid.",
+          },
+        },
+        503,
+      );
+    }
+
     return operatorApiErrorResponse(error);
   }
 }

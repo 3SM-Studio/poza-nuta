@@ -3,9 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  AuthRedirectConfigurationError,
   buildAuthCallbackRedirectTo,
+  getAuthRedirectOrigin,
   getSafeDashboardAuthNextPath,
 } from "../src/lib/auth-redirects.ts";
+import { resolveAuthCallbackRedirect } from "../src/lib/auth-callback.ts";
 import {
   getSignupPasswordRequirementStates,
   isStrongSignupPassword,
@@ -163,6 +166,7 @@ test("signup backend calls Supabase signUp with callback redirect and no profile
   );
 
   assert.match(routeSource, /buildAuthCallbackRedirectTo/);
+  assert.match(routeSource, /getAuthRedirectOrigin/);
   assert.match(routeSource, /emailRedirectTo: buildAuthCallbackRedirectTo/);
   assert.match(sessionSource, /supabase\.auth\.signUp\(/);
   assert.match(sessionSource, /emailRedirectTo: input\.emailRedirectTo/);
@@ -179,27 +183,206 @@ test("auth callback redirect validates next and rejects open redirects", () => {
     buildAuthCallbackRedirectTo("https://app.example.test"),
     "https://app.example.test/auth/callback?next=%2Fdashboard",
   );
-  assert.equal(getSafeDashboardAuthNextPath("/dashboard"), "/dashboard");
-  assert.equal(
-    getSafeDashboardAuthNextPath("/dashboard/new"),
-    "/dashboard/new",
-  );
-  assert.equal(
-    getSafeDashboardAuthNextPath("https://evil.example/dashboard"),
-    "/dashboard",
-  );
-  assert.equal(getSafeDashboardAuthNextPath("//evil.example"), "/dashboard");
-  assert.equal(getSafeDashboardAuthNextPath("/queue"), "/dashboard");
+
+  const cases: Array<{
+    name: string;
+    input: string;
+    expected: string;
+  }> = [
+    {
+      name: "protocol-relative URL",
+      input: "//evil.example",
+      expected: "/dashboard",
+    },
+    {
+      name: "backslash host confusion",
+      input: "/\\evil.example",
+      expected: "/dashboard",
+    },
+    {
+      name: "encoded protocol slashes",
+      input: "https:%2F%2Fevil.example",
+      expected: "/dashboard",
+    },
+    {
+      name: "encoded protocol-relative path",
+      input: "%2F%2Fevil.example",
+      expected: "/dashboard",
+    },
+    {
+      name: "javascript URL",
+      input: "javascript:alert(1)",
+      expected: "/dashboard",
+    },
+    {
+      name: "empty value",
+      input: "",
+      expected: "/dashboard",
+    },
+    {
+      name: "path without leading slash",
+      input: "dashboard",
+      expected: "/dashboard",
+    },
+    {
+      name: "dashboard root",
+      input: "/dashboard",
+      expected: "/dashboard",
+    },
+    {
+      name: "dashboard queue with query",
+      input: "/dashboard/queue?event=123",
+      expected: "/dashboard/queue?event=123",
+    },
+  ];
+
+  for (const { name, input, expected } of cases) {
+    assert.equal(getSafeDashboardAuthNextPath(input), expected, name);
+  }
 });
 
-test("auth callback exchanges code and redirects invalid links to sign-in", () => {
+test("auth callback exchanges a valid code and redirects to dashboard", async () => {
+  let exchangedCode: string | null = null;
+
+  const redirect = await resolveAuthCallbackRedirect({
+    requestUrl: new URL("https://app.example.test/auth/callback?code=valid-code"),
+    exchangeCodeForSession: async (code) => {
+      exchangedCode = code;
+
+      return {};
+    },
+  });
+
+  assert.equal(exchangedCode, "valid-code");
+  assert.deepEqual(redirect, {
+    status: "success",
+    location: "https://app.example.test/dashboard",
+  });
+});
+
+test("auth callback redirects missing code to sign-in without exchange", async () => {
+  let exchangeCalled = false;
+
+  const redirect = await resolveAuthCallbackRedirect({
+    requestUrl: new URL("https://app.example.test/auth/callback"),
+    exchangeCodeForSession: async () => {
+      exchangeCalled = true;
+
+      return {};
+    },
+  });
+
+  assert.equal(exchangeCalled, false);
+  assert.deepEqual(redirect, {
+    status: "invalid_link",
+    location: "https://app.example.test/sign-in?auth_error=invalid_link",
+  });
+});
+
+test("auth callback redirects exchange errors to sign-in", async () => {
+  const redirect = await resolveAuthCallbackRedirect({
+    requestUrl: new URL("https://app.example.test/auth/callback?code=expired"),
+    exchangeCodeForSession: async () => ({
+      error: new Error("expired"),
+    }),
+  });
+
+  assert.deepEqual(redirect, {
+    status: "invalid_link",
+    location: "https://app.example.test/sign-in?auth_error=invalid_link",
+  });
+});
+
+test("auth callback accepts safe local next paths", async () => {
+  const redirect = await resolveAuthCallbackRedirect({
+    requestUrl: new URL(
+      "https://app.example.test/auth/callback?code=valid-code&next=%2Fdashboard%2Fnew",
+    ),
+    exchangeCodeForSession: async () => ({}),
+  });
+
+  assert.deepEqual(redirect, {
+    status: "success",
+    location: "https://app.example.test/dashboard/new",
+  });
+});
+
+test("auth callback rejects open redirect attempts in next", async () => {
+  const redirect = await resolveAuthCallbackRedirect({
+    requestUrl: new URL(
+      "https://app.example.test/auth/callback?code=valid-code&next=https%3A%2F%2Fevil.example",
+    ),
+    exchangeCodeForSession: async () => ({}),
+  });
+
+  assert.deepEqual(redirect, {
+    status: "success",
+    location: "https://app.example.test/dashboard",
+  });
+});
+
+test("signup emailRedirectTo uses the configured server-only app origin", (t) => {
+  const originalSiteUrl = process.env.SITE_URL;
+
+  t.after(() => {
+    restoreEnv("SITE_URL", originalSiteUrl);
+  });
+
+  process.env.SITE_URL = "https://poza-nuta.vercel.app/some/path";
+
+  assert.equal(
+    buildAuthCallbackRedirectTo(getAuthRedirectOrigin("http://localhost:3000")),
+    "https://poza-nuta.vercel.app/auth/callback?next=%2Fdashboard",
+  );
+});
+
+test("signup emailRedirectTo falls back to request origin when SITE_URL is missing or empty", (t) => {
+  const originalSiteUrl = process.env.SITE_URL;
+
+  t.after(() => {
+    restoreEnv("SITE_URL", originalSiteUrl);
+  });
+
+  delete process.env.SITE_URL;
+
+  assert.equal(
+    buildAuthCallbackRedirectTo(getAuthRedirectOrigin("http://localhost:3000")),
+    "http://localhost:3000/auth/callback?next=%2Fdashboard",
+  );
+
+  process.env.SITE_URL = "   ";
+
+  assert.equal(
+    buildAuthCallbackRedirectTo(getAuthRedirectOrigin("http://localhost:3000")),
+    "http://localhost:3000/auth/callback?next=%2Fdashboard",
+  );
+});
+
+test("signup emailRedirectTo rejects invalid configured SITE_URL without exposing it", (t) => {
+  const originalSiteUrl = process.env.SITE_URL;
+
+  t.after(() => {
+    restoreEnv("SITE_URL", originalSiteUrl);
+  });
+
+  process.env.SITE_URL = "not-a-url";
+
+  assert.throws(
+    () => getAuthRedirectOrigin("http://localhost:3000"),
+    (error) =>
+      error instanceof AuthRedirectConfigurationError &&
+      error.message === "Authentication redirect configuration is invalid." &&
+      !error.message.includes("not-a-url"),
+  );
+});
+
+test("auth callback route is wired to server-side code exchange", () => {
   const source = readFileSync("src/app/auth/callback/route.ts", "utf8");
 
   assert.match(source, /exchangeCodeForSession\(code\)/);
-  assert.match(source, /getSafeDashboardAuthNextPath/);
-  assert.match(source, /NextResponse\.redirect\(new URL\(next, requestUrl\.origin\)\)/);
-  assert.match(source, /auth_error/);
-  assert.match(source, /invalid_link/);
+  assert.match(source, /resolveAuthCallbackRedirect/);
+  assert.match(source, /createSupabaseServerClient/);
+  assert.match(source, /NextResponse\.redirect\(redirect\.location\)/);
 });
 
 test("signup creates local operator with empty profile and without workspace membership", () => {
@@ -332,3 +515,12 @@ test("existing users with organizations are not blocked by missing profile times
     /isOperatorProfileCompleted\(session\.operator\) \|\| organizations\.length > 0/,
   );
 });
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
+}

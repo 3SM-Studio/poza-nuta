@@ -49,16 +49,16 @@ test("operator UI client uses canonical dashboard API paths", () => {
 test("operator me request stays on a same-origin relative API path", async (t) => {
   const originalFetch = globalThis.fetch;
   const originalVercelUrl = process.env.VERCEL_URL;
-  const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  const originalSiteUrl = process.env.SITE_URL;
 
   t.after(() => {
     globalThis.fetch = originalFetch;
     restoreEnv("VERCEL_URL", originalVercelUrl);
-    restoreEnv("NEXT_PUBLIC_SITE_URL", originalSiteUrl);
+    restoreEnv("SITE_URL", originalSiteUrl);
   });
 
   process.env.VERCEL_URL = "poza-nuta-mrcdscusz-victor-sukhodolsky.vercel.app";
-  process.env.NEXT_PUBLIC_SITE_URL =
+  process.env.SITE_URL =
     "https://poza-nuta-mrcdscusz-victor-sukhodolsky.vercel.app";
 
   globalThis.fetch = async (input, init) => {
@@ -94,7 +94,7 @@ test("client API modules do not build own API URLs from deployment origins", () 
 
     assert.doesNotMatch(
       source,
-      /VERCEL_URL|NEXT_PUBLIC_SITE_URL|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_BASE_URL|window\.location\.origin/,
+      /VERCEL_URL|SITE_URL|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_BASE_URL|window\.location\.origin/,
     );
     assert.doesNotMatch(
       source,
