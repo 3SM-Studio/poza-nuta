@@ -1,35 +1,28 @@
-[mcp_servers.shadcn]
-command = "npx"
-args = ["shadcn@latest", "mcp"]
-startup_timeout_sec = 30
-default_tools_approval_mode = "prompt"
-
-[mcp_servers.context7]
-command = "npx"
-args = ["-y", "@upstash/context7-mcp"]
-startup_timeout_sec = 30
+# Project-scoped Codex MCP configuration for Poza Nutą.
+# This file must not contain API keys, tokens or credentials.
 
 [mcp_servers.next-devtools]
-command = "npx"
-args = [
-    "-y",
-    "next-devtools-mcp@latest",
-]
-startup_timeout_sec = 30
-
-[mcp_servers.playwright]
-command = "npx"
-args = ["@playwright/mcp@latest"]
-startup_timeout_sec = 30
-
-[mcp_servers.supabase]
-url = "https://mcp.supabase.com/mcp?read_only=true&features=database,docs"
+command = "cmd.exe"
+args = ["/d", "/s", "/c", "npx.cmd", "-y", "next-devtools-mcp@latest"]
+startup_timeout_sec = 120
+tool_timeout_sec = 120
 default_tools_approval_mode = "prompt"
 
-[mcp_servers.vercel]
-url = "https://mcp.vercel.com"
-default_tools_approval_mode = "prompt"
+[mcp_servers.supabase-dev]
+url = "https://mcp.supabase.com/mcp?project_ref=qwmimnhdnzqfckswxjww&features=database,docs,debugging,development"
+startup_timeout_sec = 120
+tool_timeout_sec = 120
+default_tools_approval_mode = "auto"
 
-[mcp_servers.cloudflare-api]
-url = "https://mcp.cloudflare.com/mcp"
+[mcp_servers.supabase-dev.tools.apply_migration]
+approval_mode = "prompt"
+
+[mcp_servers.supabase-dev.tools.execute_sql]
+approval_mode = "prompt"
+
+[mcp_servers.shadcn]
+command = "cmd.exe"
+args = ["/d", "/s", "/c", "npx.cmd", "-y", "shadcn@latest", "mcp"]
+startup_timeout_sec = 120
+tool_timeout_sec = 60
 default_tools_approval_mode = "prompt"
