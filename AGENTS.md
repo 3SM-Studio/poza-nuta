@@ -1,328 +1,326 @@
-# Poza Nuta — Codex Instructions
+# Poza Nutą - Codex Instructions
 
-## Currently implemented product
+## Purpose
 
-Poza Nuta is a karaoke queue application for local events.
+Poza Nutą is a karaoke queue application for local events.
 
-Public users can:
-- search songs,
-- submit song requests,
-- view the public queue when enabled.
+The currently implemented product supports:
+- public song search,
+- public song requests,
+- an optional public queue,
+- dashboard sign-in with Supabase Auth,
+- active-event management,
+- operator queue management.
 
-Dashboard users can:
-- sign in with Supabase Auth,
-- manage the active event,
-- manage the queue.
-
-## Target product
-
-Planned capabilities, not necessarily implemented yet:
+Planned capabilities are product direction, not claims about the current implementation:
 - event listings and shareable event/session routes,
 - QR-based participant sessions and nicknames,
 - co-singers and participant history,
-- manage participants,
-- manage catalog imports,
-- manage members/owners.
+- participant management,
+- catalog imports,
+- organization members and owners.
+
+## Sources of truth
+
+- Treat the current codebase as the source of truth for implemented behavior.
+- Treat `src/app` as the source of truth for implemented routes.
+- Treat `src/db`, Drizzle schema files, and committed migrations as the source of truth for database structure.
+- Do not present roadmap items as already implemented.
+- Do not recreate removed legacy `apps/api` or `apps/web` code.
+- Legacy `/operator/*` routes exist only for compatibility. Do not add new operator routes.
 
 ## Architecture
 
-- Next.js App Router.
-- Active application routes live in `src/app`.
-- Shared UI, server logic, database code, and helpers live in
-  `src/components`, `src/server`, `src/db`, and `src/lib`.
-- Next.js proxy lives in `src/proxy.ts`.
-- Vercel-compatible runtime.
-- Supabase Postgres.
-- Drizzle ORM for server-side database access.
-- Supabase Auth only for dashboard identity/session.
-- Business operations must go through server-side API routes.
-- Do not use browser Supabase client for direct business table access.
-- Public users do not use Supabase Auth.
-- Target participant sessions should use HttpOnly cookies and hashed tokens in the database.
+- Use Next.js App Router.
+- Application routes live in `src/app`.
+- Shared UI lives in `src/components`.
+- Business logic lives in `src/server`.
+- Database schema and access live in `src/db`.
+- Shared helpers live in `src/lib`.
+- Next.js proxy logic lives in `src/proxy.ts`.
+- Keep route handlers thin: validate input, require authorization, call a server-side service, map errors, return typed responses.
+- Keep business logic out of React components and route handlers.
+- Use Drizzle for server-side business-table access.
+- Supabase Auth provides identity and session handling only.
+- Local application records decide business permissions.
+- Browser code must not read business tables directly through Supabase.
+- Business operations must go through server-side APIs or server actions with equivalent authorization.
+- Supabase Realtime is an invalidation signal, not the business data API.
+- The target runtime must remain compatible with Vercel.
 
-## Currently implemented routes
+## Auth and authorization
 
-Public:
-- `/` — public song search and request form.
-- `/queue` — public queue.
-
-Dashboard:
-- `/sign-in`
-- `/dashboard`
-- `/dashboard/queue`
-- `/dashboard/settings`
-
-API:
-- `/api/health`
-- `/api/public/event`
-- `/api/public/songs/search`
-- `/api/public/requests`
-- `/api/public/queue`
-- `/api/dashboard/login`
-- `/api/dashboard/logout`
-- `/api/dashboard/me`
-- `/api/dashboard/event`
-- `/api/dashboard/event/start`
-- `/api/dashboard/event/extend`
-- `/api/dashboard/event/close`
-- `/api/dashboard/queue`
-- `/api/dashboard/requests/[requestId]/{approve,reject,start,done,skip}`
-
-Legacy compatibility:
-- `/operator/login`
-- `/operator/queue`
-- `/api/operator/*`
-- Do not add new operator routes.
-
-## Target routes
-
-These are product direction, not claims about current implementation:
-
-Public:
-- `/events/[slug]`
-- `/session/[code]`
-
-Dashboard:
-- `/setup`
-- `/dashboard/events`
-- `/dashboard/participants`
-- `/dashboard/imports`
-- `/dashboard/members`
-
-API:
-- `/api/session/*`
-
-## Security rules
-
-- Never expose service_role or secret keys in browser code.
-- Never put secrets in NEXT_PUBLIC variables.
-- Do not modify `.env`.
-- `.env.example` may contain placeholders only.
-- Do not use localStorage/sessionStorage for auth/session tokens.
-- Dashboard access requires Supabase Auth session plus an active local dashboard user.
-- Google login alone does not grant dashboard access.
-- Access is granted by local user/role records.
+- Dashboard access requires a valid Supabase Auth session and an active local application user.
+- Google sign-in alone does not grant dashboard access.
+- `auth.users` proves identity.
+- `operator_users` stores the local application profile.
+- `workspace_members` stores organization membership and roles.
+- `platform_members` stores platform-wide support, admin, or owner access.
+- Never trust client-supplied roles, organization IDs, or permissions.
+- Enforce authorization server-side for every protected read and mutation.
 - Never allow deleting, deactivating, or demoting the last active owner.
-- Public request APIs must not trust song title/artist from the client.
+- Do not store authentication or participant-session tokens in `localStorage` or `sessionStorage`.
+- Target participant sessions should use HttpOnly cookies and hashed database tokens.
+
+## Supabase Auth callback rules
+
+- Email confirmation must return through the application `/auth/callback` route.
+- Production and localhost callback URLs must be allowed explicitly in Supabase Auth Redirect URLs.
+- Custom email templates must preserve `RedirectTo` or use `ConfirmationURL`.
+- Do not construct confirmation links from `SiteURL` alone when a callback redirect is required.
+- Auth redirect changes require a fresh signup and confirmation smoke test.
+- Never expose authorization codes, access tokens, refresh tokens, cookies, or session contents in logs.
+
+## Security
+
+- Never expose `service_role`, secret keys, database passwords, tokens, or private credentials in browser code.
+- Never place secrets in `NEXT_PUBLIC_*` variables.
+- Never print, commit, paste, or log secrets.
+- Do not modify local environment files without explicit approval.
+- `.env.example` may contain placeholders only.
+- Validate all untrusted input.
+- Public request APIs must not trust song title or artist supplied by the client.
+- Protect public endpoints with an appropriate rate-limiting plan.
+- Prevent role escalation and cross-organization access.
+- Use safe public error messages.
+- Avoid logging personal data or complete request payloads.
+- Important mutations should have an audit trail where appropriate.
+- Destructive actions require explicit user intent and server-side authorization.
 
 ## Event rules
 
-- Only one public active event can exist.
+- Preserve the currently enforced single-public-active-event invariant.
+- Do not change its scope or semantics without an explicit domain decision and migration plan.
 - Events default to 8 hours.
-- Events can be extended by 1h or 2h.
-- Manual close closes the event but does not mutate existing request statuses.
-- Lazy auto-close is server-side.
+- Events can be extended by 1 or 2 hours.
+- Manual close closes the event without rewriting existing request statuses.
+- Lazy automatic closing must run server-side.
 - `/dashboard` is an overview, not a redirect.
 
-## QR/session rules
+## QR and participant-session rules
 
 - QR codes point to `/session/[code]`.
-- QR codes are access links, not event IDs.
-- Old/revoked codes must not redirect to the new code.
-- A code can be rotated.
-- A non-revoked inactive code can be restored.
-- A revoked code cannot be restored.
-
-## Participant rules
-
-- Participants have lightweight cookie sessions.
-- Nickname is required.
-- First name/last name are not required for MVP.
-- Operator must be able to see whether a singer is first-time in the current event.
-- First-time means no previous `now` or `done` request as singer in the same event.
-- Co-singers should be chosen from known participants first.
+- A QR code is an access link, not an event ID.
+- Old or revoked codes must not redirect to a replacement code.
+- A code may be rotated.
+- A non-revoked inactive code may be restored.
+- A revoked code may not be restored.
+- Participant nickname is required.
+- First and last name are not required for MVP.
+- Operators must be able to identify whether a singer is appearing for the first time in the current event.
+- First-time means no earlier request with status `now` or `done` for that singer in the same event.
+- Prefer known participants when selecting co-singers.
 - Manual co-singer entry is fallback only.
-- Manual singers have no reliable history.
+- Manual singers do not have reliable history.
 
-## Import rules
+## Queue and Realtime
 
-- Never truncate or delete `songs` during import.
-- Failed import must not break the current catalog.
-- Imports must be upsert-based.
-- KaraFun and iSing imports must be jobs with visible status/counters/errors.
+- Business data comes from the application API and Drizzle.
+- Browser clients must not read `song_requests` directly.
+- Realtime messages should only trigger refetch or invalidation.
+- Realtime payloads must be minimal and must not contain singer personal data, cookies, tokens, or full request payloads.
+- Preferred topic format: `dashboard:event:{eventId}:queue`.
+- Refetching on subscribe, reconnect, or window focus is allowed.
+- Interval polling is not the target queue mechanism.
+- Do not introduce polling as a permanent replacement for Realtime without an explicit decision.
+
+## Catalog imports
+
+- Never truncate or delete `songs` during an import.
+- Failed imports must not break the current catalog.
+- Imports must use upsert behavior.
+- KaraFun and iSing imports must run as jobs with visible status, counters, and errors.
 - Do not run long imports inside a blocking browser request.
+- External calls need timeouts, retries, and idempotency where relevant.
+
+## Database and migrations
+
+- Do not change the schema without a committed Drizzle migration.
+- Prefer migrations over ad-hoc database changes.
+- For existing tables, use a safe expand/backfill/verify/constrain sequence when adding required data.
+- Validate existing data before adding foreign keys, unique constraints, or `NOT NULL`.
+- Multi-step business mutations require transactions.
+- Review trigger and function payloads for secrets and oversized data.
+- Do not run production migrations without explicit approval.
+- Do not run destructive SQL, delete, truncate, reset, or irreversible migration operations without explicit approval.
+- Every migration must include verification and rollback or forward-fix notes.
+
+## Frontend and UI
+
+- Respect Server Component and Client Component boundaries.
+- Do not rely on UI-only authorization.
+- Handle loading, error, empty, and success states.
+- Forms need validation and clear user feedback.
+- Use accessible labels and keyboard behavior.
+- Preserve mobile and responsive behavior.
+- Avoid hydration mismatches.
+- Keep component changes focused.
+- Do not mix a redesign with unrelated backend work.
+- Code-owned UI components live in `src/components/ui`.
+- Shared class merging lives in `src/lib/utils.ts`.
+- Use `AlertDialog` or an equivalent confirmation flow for destructive actions.
+- Do not use `window.confirm` for product UI.
+- Do not add shadcn blocks, dashboards, sidebars, charts, demo pages, or example applications without explicit approval.
+
+## Testing
+
+Use the smallest useful verification loop during development, then run the full project checks before handing off a meaningful change.
+
+Targeted verification may include:
+- relevant unit or integration tests,
+- API contract tests,
+- migration verification,
+- browser smoke tests,
+- runtime checks through Next DevTools.
+
+Before completing a meaningful code change, run:
+- `pnpm test`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm build`
+- `git diff --check`
+
+Additional requirements:
+- Auth, RBAC, migration, and security changes require negative-path tests.
+- Auth redirect changes require a fresh signup confirmation smoke test.
+- Destructive UI tests should verify open and cancel first.
+- Never expose credentials, cookies, tokens, or storage contents in test output.
+- Do not claim a change works if required verification was not completed.
+- Report commands that failed, were skipped, or could not be run.
 
 ## Work rules
 
-- One feature = one commit.
-- Do not mix unrelated refactors with feature work.
-- Do not recreate removed legacy `apps/api` or `apps/web` code.
-- Do not touch `data` unless explicitly requested.
-- Do not change schema without Drizzle migration.
-- Do not run destructive database operations.
+- Keep changes focused and cohesive.
+- Do not mix unrelated refactors with the requested task.
+- Do not modify `data` unless explicitly requested.
+- Do not modify local environment files without explicit approval.
 - Do not commit automatically.
-- After changes, run:
-  - `pnpm test`
-  - `pnpm typecheck`
-  - `pnpm lint`
-  - `pnpm build`
-  - `git diff --check`
+- Do not push, merge, deploy, modify remote services, or change production settings without explicit approval.
+- Before editing, inspect the relevant code, tests, schema, and current Git state.
+- Prefer small, reviewable changes over broad rewrites.
+- Preserve strict TypeScript typing.
+- Do not weaken types, validation, authorization, or tests to make checks pass.
+- Do not hide failures with broad catches, ignored errors, skipped tests, or unsafe casts.
+- Explain assumptions when current behavior is unclear.
 
 ## Stop conditions
 
-Stop and ask/report if:
+Stop and report before continuing when:
 - a migration fails,
-- auth/session behavior cannot be smoke tested,
+- auth or session behavior cannot be smoke tested,
 - `pnpm build` fails,
-- browser smoke test hangs because of tooling,
-- a task would require changing unrelated modules,
-- a destructive import/delete/truncate seems necessary.
+- a browser smoke test hangs because of tooling,
+- the task requires unrelated module changes,
+- a destructive import, delete, truncate, reset, or irreversible operation appears necessary,
+- production configuration or credentials would need to change,
+- the requested behavior conflicts with an existing domain invariant,
+- the correct organization, environment, or Supabase project cannot be verified.
 
-## MCP / Tool usage policy
+## Skills
 
-Codex may use available MCP servers, but must keep scope narrow and report which MCPs were used.
+Use the relevant project skill from `.agents/skills` when the task matches it.
 
-### Use Next DevTools MCP when:
-- debugging Next.js App Router routing,
-- checking route detection,
-- diagnosing Proxy behavior,
-- investigating build/dev-server issues,
-- verifying `src/app` route structure.
+Project-specific skills take precedence over generic vendor guidance for Poza Nutą decisions:
+- architecture review,
+- backend and API production rules,
+- database migration review,
+- frontend and Next.js rules,
+- operations and observability,
+- Realtime queue rules,
+- security review,
+- shadcn and Radix UI rules,
+- Supabase Auth and RBAC,
+- testing strategy.
 
-### Use Playwright or Chrome DevTools when:
-- performing browser smoke tests,
-- verifying UI behavior,
-- checking redirects,
-- testing dashboard flows,
-- testing dialogs, menus, and forms.
+Generic vendor skills may supplement project rules but must not override them.
+
+## MCP and tool policy
+
+Keep tool scope narrow. Report external services and MCP tools used.
+
+### Next DevTools
+
+Use for:
+- Next.js App Router runtime behavior,
+- route detection,
+- proxy behavior,
+- development-server and build issues,
+- runtime errors and route structure.
+
+Do not treat a successful build as proof that runtime behavior is correct.
+
+### Supabase
+
+- Use only the project-scoped `supabase-dev` MCP for this repository.
+- Verify the project URL or project reference before the first database-related action in a session.
+- Read-only inspection is allowed.
+- `execute_sql` and `apply_migration` require explicit approval.
+- Prefer committed Drizzle migrations over ad-hoc SQL.
+- Never connect to or mutate production Supabase unless explicitly authorized.
+- Never expose secrets returned by project or environment tools.
+
+### shadcn
+
+Use for:
+- checking component documentation,
+- searching the registry,
+- adding approved foundation components,
+- verifying project configuration.
+
+Do not add blocks, sidebars, dashboards, charts, demo pages, or generated example applications without explicit approval.
+
+### Context7
+
+Use when current library documentation is needed, especially for:
+- Next.js,
+- React,
+- Supabase,
+- Drizzle,
+- Zod,
+- React Hook Form,
+- Radix UI,
+- shadcn.
+
+Prefer official and primary documentation.
+
+### Browser and Playwright
+
+Use available browser tooling or the existing Playwright test suite for:
+- browser smoke tests,
+- redirects,
+- dashboard flows,
+- dialogs, menus, and forms.
 
 Rules:
-- Do not perform destructive UI actions unless explicitly approved.
-- For close/delete/archive actions, test cancel flow first.
-- Never click final destructive confirmation unless explicitly instructed.
+- Do not perform destructive UI actions without explicit approval.
+- Test the cancel path before a final destructive confirmation.
+- Do not expose credentials, cookies, tokens, or local storage contents.
 
-### Use shadcn MCP when:
-- adding shadcn/ui foundation,
-- adding specific shadcn components,
-- checking shadcn registry/docs.
+### GitHub
 
-Allowed by default:
-- button
-- card
-- badge
-- alert
-- dropdown-menu
-- dialog
-- alert-dialog
-- separator
-- avatar
-- input
-- label
-- textarea
-- select
+Use only when explicitly asked to inspect or modify remote repository state.
 
-Not allowed without explicit approval:
-- dashboard blocks
-- sidebar blocks
-- charts
-- data-table demos
-- calendar
-- dark mode
-- demo pages
-- generated example apps
+Do not push, merge, close issues, edit pull requests, or modify remote state without explicit approval.
 
-Foundation rules:
-- Code-owned UI components live in `src/components/ui`.
-- Shared class merging uses `src/lib/utils.ts`.
-- Adding the foundation does not authorize migrating dashboard or public UI.
-- Keep `components.json` aliases aligned with the `src` structure.
+### Vercel
 
-### Use Supabase MCP only for:
-- read-only schema inspection,
-- Supabase docs lookup,
-- verifying table/column existence.
+Use only when explicitly asked to inspect deployments, logs, domains, environment variables, or project settings.
 
-Rules:
-- Do not mutate Supabase data through MCP.
-- Do not run destructive SQL.
-- Do not expose secrets.
-- Application business logic must remain server-side through Drizzle/API.
+Do not deploy or change project settings, domains, or environment variables without explicit approval.
 
-### Use Context7 when:
-- checking current official docs for libraries/frameworks,
-- verifying API usage for Next.js, Supabase, Drizzle, shadcn, Vercel.
+### Cloudflare
 
-Prefer official docs over blog posts.
+Use only when explicitly asked to inspect DNS, domains, caching, Workers, or Cloudflare configuration.
 
-### Use GitHub MCP only when:
-- explicitly asked to inspect GitHub issues, PRs, commits, or remote repo state.
+Do not modify DNS, routes, Workers, SSL, caching, or security settings without explicit approval.
 
-Do not push, merge, close issues, or modify remote state without explicit approval.
+## Completion report
 
-### Use Vercel MCP only when:
-- explicitly asked to inspect deployments, env vars, domains, logs, or project settings.
-
-Do not deploy or change env/project settings without explicit approval.
-
-### Use Cloudflare MCP only when:
-- explicitly asked to inspect DNS, domains, caching, or Cloudflare config.
-
-Do not modify DNS, routes, workers, SSL, or security settings without explicit approval.
-
-### Use Sentry MCP only when:
-- explicitly asked to inspect production errors/performance.
-
-Do not create/delete projects, alerts, or change settings without explicit approval.
-
-### Use node_repl only when:
-- quick local JavaScript/TypeScript inspection is useful,
-- parsing config,
-- checking small runtime behavior.
-
-Do not use node_repl as a replacement for `pnpm test`, `pnpm typecheck`, `pnpm lint`, or `pnpm build`.
-
-### Reporting requirement
-
-At the end of each task, Codex must report:
-- which MCPs were used,
-- why they were used,
-- whether any authenticated/external service was accessed,
-- whether any mutation was performed,
-- whether browser automation clicked any destructive action.
-
-## Project roadmap and planning protocol
-
-The strategic roadmap lives in:
-
-- `docs/project-roadmap.md`
-
-This document is not an immutable contract. It describes the current intended direction of the product and the preferred implementation order.
-
-For any task touching:
-- event lifecycle,
-- dashboard routing,
-- queue/realtime,
-- access links,
-- QR/session flow,
-- auth/account management,
-- roles/RBAC,
-- venues,
-- operator shifts/payments,
-- production/deployment architecture,
-
-Codex must first read `docs/project-roadmap.md`.
-
-### Planning rule
-
-For non-trivial changes, Codex must not immediately implement.
-
-Codex must first report:
-1. the understood goal,
-2. relevant roadmap section,
-3. proposed implementation plan,
-4. risks,
-5. alternatives,
-6. whether the plan deviates from the roadmap,
-7. whether approval is required before implementation.
-
-### Deviation rule
-
-If Codex believes the roadmap is wrong, outdated, or suboptimal, it must say so explicitly and propose a better plan.
-
-Codex must not silently ignore the roadmap.
-
-### Execution rule
-
-Small fixes may be implemented directly if they are clearly scoped and do not change architecture, schema, auth, routing, or product direction.
-
-Large changes require an explicit implementation plan before code changes.
+At the end of a task, report:
+- what changed,
+- files changed,
+- tests and checks run,
+- skipped or failed verification,
+- migrations or external-service actions,
+- MCPs and external tools used,
+- remaining risks or follow-up work.
