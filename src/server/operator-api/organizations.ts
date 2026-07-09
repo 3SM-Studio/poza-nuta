@@ -26,6 +26,12 @@ import {
   canManageDashboardEventLifecycle,
 } from "../../lib/dashboard-event-lifecycle";
 import {
+  buildEventSlugCandidate,
+  buildEventSlugCollisionCandidate,
+  isValidEventSlug,
+} from "../../lib/event-slug";
+import { isEventSlugUniqueViolation } from "../../lib/event-slug-db-error";
+import {
   generateEventAccessCode,
   hashEventAccessCode,
 } from "./crypto";
@@ -55,10 +61,14 @@ export type DashboardOrganization = {
 export type DashboardOrganizationEvent = {
   id: number;
   name: string;
+  slug: string | null;
   venue: string | null;
+  city: string | null;
   startsAt: Date;
   facebookUrl: string | null;
   status: "draft" | "active" | "closed";
+  visibility: "private" | "public";
+  publishedAt: Date | null;
   isActivePublicEvent: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
@@ -109,10 +119,14 @@ const workspaceSelection = {
 const dashboardEventSelection = {
   id: events.id,
   name: events.name,
+  slug: events.slug,
   venue: events.venue,
+  city: events.city,
   startsAt: events.startsAt,
   facebookUrl: events.facebookUrl,
   status: events.status,
+  visibility: events.visibility,
+  publishedAt: events.publishedAt,
   isActivePublicEvent: events.isActivePublicEvent,
   publicQueueEnabled: events.publicQueueEnabled,
   publicShowSongTitles: events.publicShowSongTitles,
@@ -360,12 +374,13 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       nextIsActivePublicEvent: input.event.isActivePublicEvent,
     });
 
-    const [event] = await transaction
+    const [createdEvent] = await transaction
       .insert(events)
       .values({
         workspaceId: organization.id,
         name: input.event.title,
         venue: input.event.venue,
+        city: input.event.city,
         startsAt: input.event.startsAt,
         autoCloseAt: input.event.autoCloseAt,
         facebookUrl: input.event.facebookUrl,
@@ -377,8 +392,35 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       })
       .returning(dashboardEventSelection);
 
-    if (!event) {
+    if (!createdEvent) {
       throw new Error("Event could not be created.");
+    }
+
+    const catalogFields = await resolveDashboardEventCatalogFieldsInTransaction(
+      transaction,
+      createdEvent,
+      input.event,
+      now,
+    );
+
+    const [event] = await mapEventSlugUniqueViolation(async () =>
+      transaction
+        .update(events)
+        .set({
+          ...catalogFields,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(events.workspaceId, organization.id),
+            eq(events.id, createdEvent.id),
+          ),
+        )
+        .returning(dashboardEventSelection),
+    );
+
+    if (!event) {
+      throw new Error("Event catalog metadata could not be created.");
     }
 
     await transaction.insert(operatorAuditLog).values({
@@ -392,6 +434,8 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
         publicQueueEnabled: input.event.publicQueueEnabled,
         publicShowSongTitles: input.event.publicShowSongTitles,
         isActivePublicEvent: input.event.isActivePublicEvent,
+        visibility: event.visibility,
+        slug: event.slug,
         facebookUrlProvided: Boolean(input.event.facebookUrl),
       },
     });
@@ -496,22 +540,37 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
       eventId: event.id,
     });
 
-    const [updatedEvent] = await transaction
-      .update(events)
-      .set({
-        name: input.event.title,
-        venue: input.event.venue,
-        startsAt: input.event.startsAt,
-        autoCloseAt: input.event.autoCloseAt,
-        facebookUrl: input.event.facebookUrl,
-        status: input.event.isActivePublicEvent ? "active" : event.status,
-        isActivePublicEvent: input.event.isActivePublicEvent,
-        publicQueueEnabled: input.event.publicQueueEnabled,
-        publicShowSongTitles: input.event.publicShowSongTitles,
-        updatedAt: now,
-      })
-      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
-      .returning(dashboardEventSelection);
+    const catalogFields = await resolveDashboardEventCatalogFieldsInTransaction(
+      transaction,
+      event,
+      input.event,
+      now,
+    );
+
+    const [updatedEvent] = await mapEventSlugUniqueViolation(async () =>
+      transaction
+        .update(events)
+        .set({
+          name: input.event.title,
+          venue: input.event.venue,
+          city: input.event.city,
+          slug: catalogFields.slug,
+          visibility: catalogFields.visibility,
+          publishedAt: catalogFields.publishedAt,
+          startsAt: input.event.startsAt,
+          autoCloseAt: input.event.autoCloseAt,
+          facebookUrl: input.event.facebookUrl,
+          status: input.event.isActivePublicEvent ? "active" : event.status,
+          isActivePublicEvent: input.event.isActivePublicEvent,
+          publicQueueEnabled: input.event.publicQueueEnabled,
+          publicShowSongTitles: input.event.publicShowSongTitles,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(events.workspaceId, organization.id), eq(events.id, event.id)),
+        )
+        .returning(dashboardEventSelection),
+    );
 
     if (!updatedEvent) {
       throw new OperatorApiError(
@@ -533,6 +592,8 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
           publicQueueEnabled: event.publicQueueEnabled,
           publicShowSongTitles: event.publicShowSongTitles,
           isActivePublicEvent: event.isActivePublicEvent,
+          visibility: event.visibility,
+          slug: event.slug,
           facebookUrlProvided: Boolean(event.facebookUrl),
         },
         next: {
@@ -541,6 +602,8 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
           publicQueueEnabled: input.event.publicQueueEnabled,
           publicShowSongTitles: input.event.publicShowSongTitles,
           isActivePublicEvent: input.event.isActivePublicEvent,
+          visibility: updatedEvent.visibility,
+          slug: updatedEvent.slug,
           facebookUrlProvided: Boolean(input.event.facebookUrl),
         },
       },
@@ -881,6 +944,116 @@ type DatabaseTransaction = Parameters<
 type DashboardOrganizationEventActionOrganization = DashboardOrganization & {
   operatorId: number;
 };
+
+type DashboardEventCatalogInput = Pick<
+  CreateDashboardEventInput | UpdateDashboardEventDetailsInput,
+  "city" | "slug" | "title" | "visibility"
+>;
+
+async function resolveDashboardEventCatalogFieldsInTransaction(
+  transaction: DatabaseTransaction,
+  event: DashboardOrganizationEvent,
+  input: DashboardEventCatalogInput,
+  now: Date,
+) {
+  const baseSlug = buildEventSlugCandidate({
+    requestedSlug: input.slug,
+    name: input.title,
+  });
+  const slug = baseSlug
+    ? await resolveUniqueEventSlugInTransaction(transaction, event.id, baseSlug)
+    : null;
+
+  if (input.visibility === "public") {
+    if (!slug || !isValidEventSlug(slug)) {
+      throw new OperatorApiError(
+        400,
+        "EVENT_PUBLICATION_SLUG_REQUIRED",
+        "A public event requires a valid slug.",
+      );
+    }
+
+    return {
+      city: input.city,
+      slug,
+      visibility: "public" as const,
+      publishedAt: event.publishedAt ?? now,
+    };
+  }
+
+  return {
+    city: input.city,
+    slug,
+    visibility: "private" as const,
+    publishedAt: event.publishedAt,
+  };
+}
+
+async function resolveUniqueEventSlugInTransaction(
+  transaction: DatabaseTransaction,
+  eventId: number,
+  baseSlug: string,
+) {
+  if (!isValidEventSlug(baseSlug)) {
+    throw new OperatorApiError(
+      400,
+      "EVENT_SLUG_INVALID",
+      "Event slug is invalid.",
+    );
+  }
+
+  if (!(await eventSlugExistsInTransaction(transaction, eventId, baseSlug))) {
+    return baseSlug;
+  }
+
+  const collisionSlug = buildEventSlugCollisionCandidate({
+    baseSlug,
+    eventId,
+  });
+
+  if (
+    !isValidEventSlug(collisionSlug) ||
+    (await eventSlugExistsInTransaction(transaction, eventId, collisionSlug))
+  ) {
+    throw new OperatorApiError(
+      409,
+      "EVENT_SLUG_ALREADY_EXISTS",
+      "Event slug is already used by another event.",
+    );
+  }
+
+  return collisionSlug;
+}
+
+async function eventSlugExistsInTransaction(
+  transaction: DatabaseTransaction,
+  eventId: number,
+  slug: string,
+) {
+  const [eventWithSlug] = await transaction
+    .select({ id: events.id })
+    .from(events)
+    .where(and(eq(events.slug, slug), ne(events.id, eventId)))
+    .limit(1);
+
+  return Boolean(eventWithSlug);
+}
+
+async function mapEventSlugUniqueViolation<T>(action: () => Promise<T>) {
+  try {
+    return await action();
+  } catch (error) {
+    if (isEventSlugUniqueViolation(error)) {
+      throw new OperatorApiError(
+        409,
+        "EVENT_SLUG_ALREADY_EXISTS",
+        "Event slug is already used by another event.",
+      );
+    }
+
+    throw error;
+  }
+}
 
 async function createEventSessionLinkInTransaction(
   transaction: DatabaseTransaction,

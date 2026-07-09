@@ -16,6 +16,7 @@ import {
 import { authUsers } from "drizzle-orm/supabase";
 
 export const eventStatusValues = ["draft", "active", "closed"] as const;
+export const eventVisibilityValues = ["private", "public"] as const;
 export const songSourceValues = ["ising", "karafun", "manual"] as const;
 export const requestStatusValues = [
   "pending",
@@ -46,6 +47,10 @@ export const platformMemberRoleValues = [
 ] as const;
 
 export const eventStatusEnum = pgEnum("event_status", eventStatusValues);
+export const eventVisibilityEnum = pgEnum(
+  "event_visibility",
+  eventVisibilityValues,
+);
 export const songSourceEnum = pgEnum("song_source", songSourceValues);
 export const requestStatusEnum = pgEnum(
   "song_request_status",
@@ -111,10 +116,14 @@ export const events = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
+    slug: text("slug"),
     venue: text("venue"),
+    city: text("city"),
     startsAt: timestampColumn("starts_at").notNull(),
     facebookUrl: text("facebook_url"),
     status: eventStatusEnum("status").notNull().default("draft"),
+    visibility: eventVisibilityEnum("visibility").notNull().default("private"),
+    publishedAt: timestampColumn("published_at"),
     isActivePublicEvent: boolean("is_active_public_event")
       .notNull()
       .default(false),
@@ -133,6 +142,14 @@ export const events = pgTable(
     uniqueIndex("events_one_active_public_per_workspace_idx")
       .on(table.workspaceId)
       .where(sql`${table.isActivePublicEvent} = true`),
+    uniqueIndex("events_slug_idx")
+      .on(table.slug)
+      .where(sql`${table.slug} is not null`),
+    index("events_public_catalog_idx")
+      .on(table.visibility, table.publishedAt, table.status, table.startsAt)
+      .where(
+        sql`${table.visibility} = 'public' and ${table.publishedAt} is not null and ${table.slug} is not null`,
+      ),
     index("events_workspace_status_starts_at_idx").on(
       table.workspaceId,
       table.status,
@@ -145,6 +162,14 @@ export const events = pgTable(
     check(
       "events_active_public_status_check",
       sql`not ${table.isActivePublicEvent} or ${table.status} = 'active'`,
+    ),
+    check(
+      "events_slug_format_check",
+      sql`${table.slug} is null or (char_length(${table.slug}) between 3 and 80 and ${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$')`,
+    ),
+    check(
+      "events_public_requires_slug_and_published_at_check",
+      sql`${table.visibility} <> 'public' or (${table.slug} is not null and ${table.publishedAt} is not null)`,
     ),
   ],
 ).enableRLS();

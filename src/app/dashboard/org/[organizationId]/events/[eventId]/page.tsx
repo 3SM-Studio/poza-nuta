@@ -181,6 +181,25 @@ export default async function OrganizationEventDetailPage({
                   <dd>{result.event.isActivePublicEvent ? "Tak" : "Nie"}</dd>
                 </div>
                 <div>
+                  <dt>Katalog wydarzeń</dt>
+                  <dd>{result.event.visibility === "public" ? "Opublikowany" : "Prywatny"}</dd>
+                </div>
+                <div>
+                  <dt>Publiczny URL</dt>
+                  <dd>
+                    {result.event.slug ? (
+                      <Link
+                        className={styles.inlineLink}
+                        href={`/events/${result.event.slug}`}
+                      >
+                        /events/{result.event.slug}
+                      </Link>
+                    ) : (
+                      "Nie ustawiono"
+                    )}
+                  </dd>
+                </div>
+                <div>
                   <dt>Publiczna kolejka</dt>
                   <dd>{result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
                 </div>
@@ -232,6 +251,9 @@ export default async function OrganizationEventDetailPage({
             initialValues={{
               title: result.event.name,
               venue: result.event.venue ?? "",
+              city: result.event.city ?? "",
+              slug: result.event.slug ?? "",
+              visibility: result.event.visibility,
               startsAtInputValue: formatDateTimeLocalInput(
                 result.event.startsAt,
               ),
@@ -280,6 +302,9 @@ async function updateEventDetails(
   const validation = validateUpdateDashboardEventDetailsInput({
     title: formData.get("title"),
     venue: formData.get("venue"),
+    city: formData.get("city"),
+    slug: formData.get("slug"),
+    visibility: formData.has("visibility") ? "public" : "private",
     startsAt: formData.get("startsAt"),
     autoCloseAt: formData.get("autoCloseAt"),
     facebookUrl: formData.get("facebookUrl"),
@@ -470,6 +495,18 @@ function mapEventManagementActionError(
         };
       }
 
+      if (error.code === "EVENT_SLUG_ALREADY_EXISTS") {
+        return {
+          issues: [
+            {
+              field: "slug",
+              message: "Ten slug jest już zajęty przez inne wydarzenie.",
+            },
+          ],
+          message: "Nie można opublikować wydarzenia z tym slugiem.",
+        };
+      }
+
       return {
         ...emptyActionState,
         message:
@@ -478,6 +515,22 @@ function mapEventManagementActionError(
     }
 
     if (error.status === 400) {
+      if (
+        error.code === "EVENT_PUBLICATION_SLUG_REQUIRED" ||
+        error.code === "EVENT_SLUG_INVALID"
+      ) {
+        return {
+          issues: [
+            {
+              field: "slug",
+              message:
+                "Podaj poprawny slug albo zostaw pole puste, aby wygenerować go z nazwy.",
+            },
+          ],
+          message: "Nie można opublikować wydarzenia bez poprawnego sluga.",
+        };
+      }
+
       return {
         ...emptyActionState,
         message: "Sprawdź dane formularza.",

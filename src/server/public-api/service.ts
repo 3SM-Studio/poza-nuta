@@ -1,9 +1,24 @@
 import "server-only";
 
-import { and, eq, ilike, inArray, max } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  max,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { events, songRequests, songs } from "../../db/schema";
 import { getDb } from "../db";
+import { isValidEventSlug } from "../../lib/event-slug";
+import { toPublicEventContract } from "../../lib/public-event-contract";
+import { canAcceptPublicRequests } from "../../lib/public-request-eligibility";
 import {
   closeExpiredActiveEventInTransaction,
   getActivePublicEventReadOnly,
@@ -19,6 +34,22 @@ const activePublicEventFilter = and(
   eq(events.isActivePublicEvent, true),
   eq(events.status, "active"),
 );
+
+const publicEventSelection = {
+  name: events.name,
+  slug: events.slug,
+  venue: events.venue,
+  city: events.city,
+  startsAt: events.startsAt,
+  autoCloseAt: events.autoCloseAt,
+  closedAt: events.closedAt,
+  status: events.status,
+  isActivePublicEvent: events.isActivePublicEvent,
+  visibility: events.visibility,
+  publishedAt: events.publishedAt,
+  publicQueueEnabled: events.publicQueueEnabled,
+  facebookUrl: events.facebookUrl,
+};
 
 export async function getActivePublicEvent(routeName?: string) {
   const event = await runPublicApiStep(routeName, "activeEvent", () =>
@@ -42,6 +73,70 @@ export async function getActivePublicEvent(routeName?: string) {
     publicQueueEnabled: event.publicQueueEnabled,
     publicShowSongTitles: event.publicShowSongTitles,
   };
+}
+
+export async function listPublicEvents(routeName?: string) {
+  const now = new Date();
+  const publicEvents = await runPublicApiStep(routeName, "publicEvents", () =>
+    getDb()
+      .select(publicEventSelection)
+      .from(events)
+      .where(
+        and(
+          eq(events.visibility, "public"),
+          isNotNull(events.slug),
+          isNotNull(events.publishedAt),
+          or(
+            and(
+              eq(events.status, "active"),
+              or(isNull(events.autoCloseAt), gt(events.autoCloseAt, now)),
+            ),
+            and(eq(events.status, "draft"), gt(events.startsAt, now)),
+          ),
+        ),
+      )
+      .orderBy(
+        sql`case when ${events.status} = 'active' and (${events.autoCloseAt} is null or ${events.autoCloseAt} > ${now}) then 0 else 1 end`,
+        asc(events.startsAt),
+        asc(events.slug),
+      ),
+  );
+
+  return publicEvents.map((event) => toPublicEventContract(event, now));
+}
+
+export async function getPublicEventBySlug(slug: string, routeName?: string) {
+  if (!isValidEventSlug(slug)) {
+    throw new PublicApiError(
+      404,
+      "PUBLIC_EVENT_NOT_FOUND",
+      "Public event was not found.",
+    );
+  }
+
+  const [event] = await runPublicApiStep(routeName, "publicEvent", () =>
+    getDb()
+      .select(publicEventSelection)
+      .from(events)
+      .where(
+        and(
+          eq(events.visibility, "public"),
+          eq(events.slug, slug),
+          isNotNull(events.publishedAt),
+        ),
+      )
+      .limit(1),
+  );
+
+  if (!event) {
+    throw new PublicApiError(
+      404,
+      "PUBLIC_EVENT_NOT_FOUND",
+      "Public event was not found.",
+    );
+  }
+
+  return toPublicEventContract(event);
 }
 
 export async function searchPublicSongs(query: string | null) {
@@ -78,13 +173,17 @@ export async function createPublicRequest(input: PublicRequestInput) {
     const [event] = await transaction
       .select({
         id: events.id,
+        status: events.status,
+        isActivePublicEvent: events.isActivePublicEvent,
+        autoCloseAt: events.autoCloseAt,
+        closedAt: events.closedAt,
       })
       .from(events)
       .where(activePublicEventFilter)
       .for("update")
       .limit(1);
 
-    if (!event) {
+    if (!event || !canAcceptPublicRequests(event)) {
       throw new PublicApiError(
         404,
         "ACTIVE_EVENT_NOT_FOUND",
