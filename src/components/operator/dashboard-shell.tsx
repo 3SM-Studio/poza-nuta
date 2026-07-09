@@ -22,6 +22,7 @@ import {
   getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
   getDashboardOrganizationTeamPath,
+  getDashboardProfileOnboardingPath,
   isDashboardNavigationLinkActive,
 } from "@/lib/dashboard-routes";
 
@@ -327,6 +328,14 @@ function getBreadcrumbItems(input: {
       },
       {
         label: "Nowa organizacja",
+      },
+    ];
+  }
+
+  if (input.pathname === getDashboardProfileOnboardingPath()) {
+    return [
+      {
+        label: "Profil",
       },
     ];
   }

@@ -5,7 +5,10 @@ import { DashboardShell } from "../../components/operator/dashboard-shell";
 import { DashboardRuntimeError } from "../../components/operator/dashboard-runtime-error";
 import { OperatorApiError } from "../../server/operator-api/errors";
 import { listDashboardOrganizationsForAuthUser } from "../../server/operator-api/organizations";
-import { requireOperatorSession } from "../../server/operator-api/supabase-session";
+import {
+  getOperatorDisplayName,
+  requireOperatorSession,
+} from "../../server/operator-api/supabase-session";
 import {
   isTransientInfrastructureError,
   traceServerStep,
@@ -51,7 +54,7 @@ export default async function DashboardLayout({
   return (
     <DashboardShell
       organizations={organizations}
-      operatorName={session.operator.name}
+      operatorName={getOperatorDisplayName(session.operator)}
       email={session.authUser.email}
     >
       {children}
