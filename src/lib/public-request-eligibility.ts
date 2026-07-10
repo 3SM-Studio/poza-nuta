@@ -1,21 +1,26 @@
+import { getEventPhase } from "./event-phase.ts";
+
 export type PublicRequestEligibilityInput = {
-  isActivePublicEvent: boolean;
   status: string;
-  autoCloseAt: Date | null;
+  visibility: string;
+  publishedAt: Date | null;
+  startsAt: Date;
+  endsAt: Date;
   closedAt: Date | null;
+  songRequestsEnabled: boolean;
 };
 
 export function canAcceptPublicRequests(
   event: PublicRequestEligibilityInput,
   now = new Date(),
 ) {
-  if (!event.isActivePublicEvent || event.status !== "active") {
+  if (event.visibility !== "public" || !event.publishedAt) {
     return false;
   }
 
-  if (event.closedAt) {
+  if (!event.songRequestsEnabled) {
     return false;
   }
 
-  return !event.autoCloseAt || event.autoCloseAt.getTime() > now.getTime();
+  return getEventPhase(event, now) === "live";
 }

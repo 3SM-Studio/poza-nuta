@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import styles from "@/components/public/public.module.css";
+import { PublicEventRequestForm } from "@/components/public/public-event-request-form";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { PublicApiError } from "@/server/public-api/errors";
 import { getPublicEventBySlug } from "@/server/public-api/service";
@@ -94,9 +95,6 @@ export default async function PublicEventPage({ params }: PublicEventPageProps) 
             {getStateDescription(event.publicStatus, event.requestsEnabled)}
           </p>
           <div className={styles.eventActions}>
-            <Link className={styles.secondaryButton} href="/">
-              Formularz karaoke
-            </Link>
             {event.facebookUrl ? (
               <a
                 className={styles.secondaryButton}
@@ -109,6 +107,10 @@ export default async function PublicEventPage({ params }: PublicEventPageProps) 
             ) : null}
           </div>
         </section>
+
+        {event.requestsEnabled ? (
+          <PublicEventRequestForm eventName={event.name} eventSlug={event.slug} />
+        ) : null}
       </div>
     </main>
   );
@@ -132,6 +134,8 @@ function formatDateTime(value: string) {
 
 function formatPublicStatus(status: string) {
   switch (status) {
+    case "cancelled":
+      return "Odwolane";
     case "live":
       return "Trwa teraz";
     case "ended":
@@ -143,6 +147,8 @@ function formatPublicStatus(status: string) {
 
 function getStateHeading(status: string) {
   switch (status) {
+    case "cancelled":
+      return "Wydarzenie odwolane";
     case "live":
       return "Wydarzenie trwa";
     case "ended":
@@ -153,15 +159,19 @@ function getStateHeading(status: string) {
 }
 
 function getStateDescription(status: string, requestsEnabled: boolean) {
+  if (status === "cancelled") {
+    return "To wydarzenie zostalo odwolane, wiec publiczne zgloszenia sa zamkniete.";
+  }
+
   if (status === "ended") {
     return "To wydarzenie jest już zakończone, więc publiczne zgłoszenia są zamknięte.";
   }
 
   if (status === "upcoming") {
-    return "Wydarzenie pojawi się w katalogu przed startem. Zgłoszenia otworzą się, gdy operator uruchomi publiczną kolejkę.";
+    return "Wydarzenie pojawi się w katalogu przed startem. Zgłoszenia otworzą się, gdy wydarzenie będzie trwało.";
   }
 
   return requestsEnabled
-    ? "Możesz przejść do formularza karaoke i dodać swoje zgłoszenie."
+    ? "Możesz dodać swoje zgłoszenie do tego wydarzenia."
     : "Wydarzenie trwa, ale publiczne zgłoszenia są teraz zamknięte.";
 }

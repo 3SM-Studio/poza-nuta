@@ -39,7 +39,7 @@ export type DashboardOrganizationOverview = {
     name: string;
     venue: string | null;
     startsAt: Date;
-    status: "draft" | "active" | "closed";
+    status: "draft" | "active" | "closed" | "cancelled";
   }>;
   topRequestedSongs: Array<{
     songId: number;

@@ -81,14 +81,22 @@ export async function searchPublicSongs(query: string) {
 }
 
 export function createPublicRequest(input: {
+  eventSlug: string;
   songId: number;
   singerName: string;
   note: string | null;
 }) {
-  return requestJson("/api/public/requests", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return requestJson(
+    `/api/public/events/${encodeURIComponent(input.eventSlug)}/requests`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        songId: input.songId,
+        singerName: input.singerName,
+        note: input.note,
+      }),
+    },
+  );
 }
 
 export function getPublicQueue(signal?: AbortSignal) {

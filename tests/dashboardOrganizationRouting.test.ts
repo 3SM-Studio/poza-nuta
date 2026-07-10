@@ -863,6 +863,7 @@ test("organization events support owner and manager create flow", () => {
   assert.match(newPageSource, /createDashboardOrganizationEventForAuthUser/);
   assert.match(newPageSource, /getDashboardOrganizationEventPath/);
   assert.match(newPageSource, /formData\.get\("venue"\)/);
+  assert.match(newPageSource, /formData\.has\("songRequestsEnabled"\)/);
   assert.match(newPageSource, /formData\.has\("publicQueueEnabled"\)/);
   assert.match(newPageSource, /formData\.has\("publicShowSongTitles"\)/);
   assert.match(newPageSource, /formData\.has\("isActivePublicEvent"\)/);
@@ -873,6 +874,7 @@ test("organization events support owner and manager create flow", () => {
     /generateDashboardOrganizationEventSessionLinkForAuthUser/,
   );
   assert.match(detailPageSource, /result\.event\.autoCloseAt/);
+  assert.match(detailPageSource, /result\.event\.songRequestsEnabled/);
   assert.match(detailPageSource, /result\.event\.facebookUrl/);
   assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
   assert.match(
@@ -897,12 +899,18 @@ test("organization event create persists scheduling and public visibility fields
   );
 
   assert.match(schemaSource, /facebookUrl: text\("facebook_url"\)/);
-  assert.equal(schemaSource.includes("endsAt"), false);
+  assert.match(schemaSource, /endsAt: timestampColumn\("ends_at"\)\.notNull\(\)/);
+  assert.match(schemaSource, /songRequestsEnabled: boolean\("song_requests_enabled"\)/);
   assert.match(migrationSource, /ADD COLUMN "facebook_url" text/);
   assert.equal(migrationSource.includes("ends_at"), false);
   assert.match(organizationsSource, /venue: input\.event\.venue/);
   assert.match(organizationsSource, /autoCloseAt: input\.event\.autoCloseAt/);
+  assert.match(organizationsSource, /endsAt: input\.event\.autoCloseAt/);
   assert.match(organizationsSource, /facebookUrl: input\.event\.facebookUrl/);
+  assert.match(
+    organizationsSource,
+    /songRequestsEnabled: input\.event\.songRequestsEnabled/,
+  );
   assert.match(
     organizationsSource,
     /publicQueueEnabled: input\.event\.publicQueueEnabled/,
@@ -943,6 +951,7 @@ test("organization event detail exposes managed event and session link panels", 
   assert.match(panelSource, /name="startsAt"/);
   assert.match(panelSource, /name="autoCloseAt"/);
   assert.match(panelSource, /name="facebookUrl"/);
+  assert.match(panelSource, /name="songRequestsEnabled"/);
   assert.match(panelSource, /name="publicQueueEnabled"/);
   assert.match(panelSource, /name="publicShowSongTitles"/);
   assert.match(panelSource, /name="isActivePublicEvent"/);
@@ -999,6 +1008,8 @@ test("organization event management updates auto_close_at and closes without del
   assert.match(manageSource, /closeDashboardOrganizationEventForAuthUser/);
   assert.match(manageSource, /startsAt: input\.event\.startsAt/);
   assert.match(manageSource, /autoCloseAt/);
+  assert.match(manageSource, /endsAt/);
+  assert.match(manageSource, /songRequestsEnabled/);
   assert.match(manageSource, /publicQueueEnabled/);
   assert.match(manageSource, /publicShowSongTitles/);
   assert.match(manageSource, /isActivePublicEvent/);
@@ -1007,7 +1018,6 @@ test("organization event management updates auto_close_at and closes without del
   assert.match(manageSource, /isActivePublicEvent: false/);
   assert.match(manageSource, /calculateDashboardEventExtendedAutoCloseAt/);
   assert.equal(manageSource.includes(".delete("), false);
-  assert.equal(manageSource.includes("endsAt"), false);
   assert.equal(manageSource.includes("ends_at"), false);
 });
 

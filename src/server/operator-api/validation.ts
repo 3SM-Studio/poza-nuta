@@ -37,6 +37,7 @@ export type OperatorProfileInput = {
 export type EventSettingsInput = {
   name: string;
   venue: string | null;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
 };
@@ -55,6 +56,7 @@ export type CreateDashboardEventInput = {
   startsAt: Date;
   autoCloseAt: Date;
   facebookUrl: string | null;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
   isActivePublicEvent: boolean;
@@ -69,6 +71,7 @@ export type UpdateDashboardEventDetailsInput = {
   startsAt: Date;
   autoCloseAt: Date;
   facebookUrl: string | null;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
   isActivePublicEvent: boolean;
@@ -261,6 +264,13 @@ export function validateEventSettingsInput(
     });
   }
 
+  if (typeof input.songRequestsEnabled !== "boolean") {
+    issues.push({
+      field: "songRequestsEnabled",
+      message: "songRequestsEnabled must be a boolean.",
+    });
+  }
+
   if (typeof input.publicShowSongTitles !== "boolean") {
     issues.push({
       field: "publicShowSongTitles",
@@ -277,6 +287,7 @@ export function validateEventSettingsInput(
     data: {
       name: eventFields.name,
       venue: eventFields.venue,
+      songRequestsEnabled: input.songRequestsEnabled as boolean,
       publicQueueEnabled: input.publicQueueEnabled as boolean,
       publicShowSongTitles: input.publicShowSongTitles as boolean,
     },
@@ -535,6 +546,7 @@ function validateDashboardEventDetailsInput(
       startsAt,
       autoCloseAt,
       facebookUrl,
+      songRequestsEnabled: parseBooleanInput(input.songRequestsEnabled, false),
       publicQueueEnabled: parseBooleanInput(input.publicQueueEnabled, false),
       publicShowSongTitles: parseBooleanInput(input.publicShowSongTitles, true),
       isActivePublicEvent: parseBooleanInput(input.isActivePublicEvent, false),

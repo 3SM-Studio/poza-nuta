@@ -1,3 +1,5 @@
+import { getEventPhase } from "./event-phase.ts";
+
 export const SESSION_CODE_MIN_LENGTH = 16;
 export const SESSION_CODE_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -17,8 +19,9 @@ export type SessionEventAccessEventInput = {
   status: string;
   startsAt: Date;
   autoCloseAt: Date | null;
+  endsAt: Date;
   closedAt: Date | null;
-  publicQueueEnabled: boolean;
+  songRequestsEnabled: boolean;
 } | null;
 
 export function isValidSessionCodeFormat(code: string) {
@@ -40,19 +43,17 @@ export function getSessionEventAccessStatus({
     return "invalid";
   }
 
-  if (event.closedAt || event.status === "closed") {
+  const phase = getEventPhase(event, now);
+
+  if (phase === "cancelled" || phase === "ended") {
     return "closed";
   }
 
-  if (now.getTime() < event.startsAt.getTime()) {
+  if (phase === "upcoming") {
     return "scheduled";
   }
 
-  if (!event.autoCloseAt || now.getTime() >= event.autoCloseAt.getTime()) {
-    return "closed";
-  }
-
-  if (!event.publicQueueEnabled) {
+  if (!event.songRequestsEnabled) {
     return "disabled";
   }
 

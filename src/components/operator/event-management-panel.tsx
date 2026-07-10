@@ -39,6 +39,7 @@ export type EventManagementInitialValues = {
   startsAtInputValue: string;
   autoCloseAtInputValue: string;
   facebookUrl: string;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
   isActivePublicEvent: boolean;
@@ -240,6 +241,19 @@ export function EventManagementPanel({
 
             <div className={styles.formSection}>
               <h2>Widoczność i kolejka publiczna</h2>
+              <label className={styles.checkboxField}>
+                <input
+                  name="songRequestsEnabled"
+                  type="checkbox"
+                  defaultChecked={initialValues.songRequestsEnabled}
+                />
+                <span>Publiczne zgłoszenia włączone</span>
+              </label>
+              <p className={styles.eventMeta}>
+                Decyduje, czy publiczny endpoint wydarzenia przyjmuje nowe
+                piosenki.
+              </p>
+
               <label className={styles.checkboxField}>
                 <input
                   name="publicQueueEnabled"

@@ -17,8 +17,10 @@ const activeEvent = {
   status: "active",
   startsAt: new Date("2026-01-01T18:00:00.000Z"),
   autoCloseAt: new Date("2026-01-02T00:00:00.000Z"),
+  endsAt: new Date("2026-01-02T00:00:00.000Z"),
   closedAt: null,
   publicQueueEnabled: true,
+  songRequestsEnabled: true,
 };
 
 test("session codes require URL-safe bearer-token format", () => {
@@ -56,6 +58,8 @@ test("session access rejects invalid, revoked and inactive links", () => {
 });
 
 test("session access blocks scheduled, closed and disabled events", () => {
+  const queueHiddenEvent = { ...activeEvent, publicQueueEnabled: false };
+
   assert.equal(
     getSessionEventAccessStatus({
       link: activeLink,
@@ -83,7 +87,15 @@ test("session access blocks scheduled, closed and disabled events", () => {
   assert.equal(
     getSessionEventAccessStatus({
       link: activeLink,
-      event: { ...activeEvent, publicQueueEnabled: false },
+      event: queueHiddenEvent,
+      now: new Date("2026-01-01T19:00:00.000Z"),
+    }),
+    "active",
+  );
+  assert.equal(
+    getSessionEventAccessStatus({
+      link: activeLink,
+      event: { ...activeEvent, songRequestsEnabled: false },
       now: new Date("2026-01-01T19:00:00.000Z"),
     }),
     "disabled",

@@ -48,6 +48,7 @@ async function seed() {
       .returning({ id: workspaces.id });
 
     const startsAt = new Date();
+    const endsAt = calculateAutoCloseAt(startsAt);
     const insertedEvents = await db
       .insert(events)
       .values({
@@ -55,9 +56,11 @@ async function seed() {
         name: "Poza Nutą",
         venue: "Domyślny lokal",
         startsAt,
-        autoCloseAt: calculateAutoCloseAt(startsAt),
+        autoCloseAt: endsAt,
+        endsAt,
         status: "active",
         isActivePublicEvent: true,
+        songRequestsEnabled: false,
         publicQueueEnabled: false,
         publicShowSongTitles: true,
       })

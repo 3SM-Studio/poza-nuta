@@ -4,25 +4,20 @@ import {
   and,
   asc,
   eq,
-  gt,
   ilike,
   inArray,
   isNotNull,
-  isNull,
   max,
-  or,
   sql,
 } from "drizzle-orm";
 
 import { events, songRequests, songs } from "../../db/schema";
 import { getDb } from "../db";
 import { isValidEventSlug } from "../../lib/event-slug";
+import { getEventPhase } from "../../lib/event-phase";
 import { toPublicEventContract } from "../../lib/public-event-contract";
 import { canAcceptPublicRequests } from "../../lib/public-request-eligibility";
-import {
-  closeExpiredActiveEventInTransaction,
-  getActivePublicEventReadOnly,
-} from "../event-lifecycle";
+import { getActivePublicEventReadOnly } from "../event-lifecycle";
 import { traceServerStep } from "../runtime-diagnostics";
 import { PublicApiError } from "./errors";
 import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "./queue-policy";
@@ -30,23 +25,19 @@ import type { PublicRequestInput } from "./validation";
 
 export const PUBLIC_SONG_SEARCH_LIMIT = 20;
 
-const activePublicEventFilter = and(
-  eq(events.isActivePublicEvent, true),
-  eq(events.status, "active"),
-);
-
 const publicEventSelection = {
+  id: events.id,
   name: events.name,
   slug: events.slug,
   venue: events.venue,
   city: events.city,
   startsAt: events.startsAt,
-  autoCloseAt: events.autoCloseAt,
+  endsAt: events.endsAt,
   closedAt: events.closedAt,
   status: events.status,
-  isActivePublicEvent: events.isActivePublicEvent,
   visibility: events.visibility,
   publishedAt: events.publishedAt,
+  songRequestsEnabled: events.songRequestsEnabled,
   publicQueueEnabled: events.publicQueueEnabled,
   facebookUrl: events.facebookUrl,
 };
@@ -86,17 +77,10 @@ export async function listPublicEvents(routeName?: string) {
           eq(events.visibility, "public"),
           isNotNull(events.slug),
           isNotNull(events.publishedAt),
-          or(
-            and(
-              eq(events.status, "active"),
-              or(isNull(events.autoCloseAt), gt(events.autoCloseAt, now)),
-            ),
-            and(eq(events.status, "draft"), gt(events.startsAt, now)),
-          ),
         ),
       )
       .orderBy(
-        sql`case when ${events.status} = 'active' and (${events.autoCloseAt} is null or ${events.autoCloseAt} > ${now}) then 0 else 1 end`,
+        sql`case when ${events.startsAt} <= ${now} and ${events.endsAt} > ${now} then 0 when ${events.startsAt} > ${now} then 1 else 2 end`,
         asc(events.startsAt),
         asc(events.slug),
       ),
@@ -140,8 +124,6 @@ export async function getPublicEventBySlug(slug: string, routeName?: string) {
 }
 
 export async function searchPublicSongs(query: string | null) {
-  await getActivePublicEvent();
-
   if (query === null) {
     return [];
   }
@@ -166,30 +148,46 @@ export async function searchPublicSongs(query: string | null) {
     .limit(PUBLIC_SONG_SEARCH_LIMIT);
 }
 
-export async function createPublicRequest(input: PublicRequestInput) {
-  return getDb().transaction(async (transaction) => {
-    await closeExpiredActiveEventInTransaction(transaction);
+export async function createPublicRequestForEventSlug(
+  slug: string,
+  input: PublicRequestInput,
+  referenceNow = new Date(),
+) {
+  if (!isValidEventSlug(slug)) {
+    throw new PublicApiError(
+      404,
+      "PUBLIC_EVENT_NOT_FOUND",
+      "Public event was not found.",
+    );
+  }
 
+  return getDb().transaction(async (transaction) => {
     const [event] = await transaction
       .select({
         id: events.id,
+        slug: events.slug,
         status: events.status,
-        isActivePublicEvent: events.isActivePublicEvent,
-        autoCloseAt: events.autoCloseAt,
+        visibility: events.visibility,
+        publishedAt: events.publishedAt,
+        startsAt: events.startsAt,
+        endsAt: events.endsAt,
         closedAt: events.closedAt,
+        songRequestsEnabled: events.songRequestsEnabled,
       })
       .from(events)
-      .where(activePublicEventFilter)
+      .where(eq(events.slug, slug))
       .for("update")
       .limit(1);
 
-    if (!event || !canAcceptPublicRequests(event)) {
+    if (!event || event.visibility !== "public" || !event.publishedAt) {
       throw new PublicApiError(
         404,
-        "ACTIVE_EVENT_NOT_FOUND",
-        "No active public event is available.",
+        "PUBLIC_EVENT_NOT_FOUND",
+        "Public event was not found.",
       );
     }
+
+    assertPublicEventAcceptsRequests(event, referenceNow);
 
     const [song] = await transaction
       .select({ id: songs.id })
@@ -234,6 +232,47 @@ export async function createPublicRequest(input: PublicRequestInput) {
 
     return request;
   });
+}
+
+export const createPublicRequest = createPublicRequestForEventSlug;
+
+function assertPublicEventAcceptsRequests(
+  event: {
+    status: string;
+    visibility: string;
+    publishedAt: Date | null;
+    startsAt: Date;
+    endsAt: Date;
+    closedAt: Date | null;
+    songRequestsEnabled: boolean;
+  },
+  referenceNow: Date,
+) {
+  if (!event.songRequestsEnabled) {
+    throw new PublicApiError(
+      403,
+      "PUBLIC_REQUESTS_DISABLED",
+      "Song requests are disabled for this event.",
+    );
+  }
+
+  const phase = getEventPhase(event, referenceNow);
+
+  if (phase === "cancelled") {
+    throw new PublicApiError(
+      403,
+      "PUBLIC_EVENT_CANCELLED",
+      "Song requests are closed for this event.",
+    );
+  }
+
+  if (!canAcceptPublicRequests(event, referenceNow)) {
+    throw new PublicApiError(
+      403,
+      "PUBLIC_EVENT_NOT_LIVE",
+      "Song requests are available only while the event is live.",
+    );
+  }
 }
 
 export async function getPublicQueue() {

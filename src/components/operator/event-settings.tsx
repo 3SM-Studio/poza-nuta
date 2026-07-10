@@ -41,6 +41,7 @@ export function DashboardEventSettings() {
   const [event, setEvent] = useState<DashboardEvent | null>(null);
   const [name, setName] = useState("");
   const [venue, setVenue] = useState("");
+  const [songRequestsEnabled, setSongRequestsEnabled] = useState(false);
   const [publicQueueEnabled, setPublicQueueEnabled] = useState(false);
   const [publicShowSongTitles, setPublicShowSongTitles] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +71,7 @@ export function DashboardEventSettings() {
     setEvent(nextEvent);
     setName(nextEvent?.name ?? "");
     setVenue(nextEvent?.venue ?? "");
+    setSongRequestsEnabled(nextEvent?.songRequestsEnabled ?? false);
     setPublicQueueEnabled(nextEvent?.publicQueueEnabled ?? false);
     setPublicShowSongTitles(nextEvent?.publicShowSongTitles ?? true);
   }, []);
@@ -113,6 +115,7 @@ export function DashboardEventSettings() {
       const response = await updateDashboardEventSettings({
         name,
         venue: venue.trim() || null,
+        songRequestsEnabled,
         publicQueueEnabled,
         publicShowSongTitles,
       });
@@ -244,6 +247,18 @@ export function DashboardEventSettings() {
                   onNameChange={setName}
                   onVenueChange={setVenue}
                 />
+
+                <Label className={styles.checkboxField}>
+                  <input
+                    type="checkbox"
+                    checked={songRequestsEnabled}
+                    onChange={(changeEvent) =>
+                      setSongRequestsEnabled(changeEvent.target.checked)
+                    }
+                    disabled={activeAction !== null}
+                  />
+                  Publiczne zgłoszenia piosenek
+                </Label>
 
                 <Label className={styles.checkboxField}>
                   <input

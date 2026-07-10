@@ -110,6 +110,7 @@ async function createEvent(
     startsAt: formData.get("startsAt"),
     autoCloseAt: formData.get("autoCloseAt"),
     facebookUrl: formData.get("facebookUrl"),
+    songRequestsEnabled: formData.has("songRequestsEnabled"),
     publicQueueEnabled: formData.has("publicQueueEnabled"),
     publicShowSongTitles: formData.has("publicShowSongTitles"),
     isActivePublicEvent: formData.has("isActivePublicEvent"),

@@ -66,13 +66,15 @@ export type DashboardOrganizationEvent = {
   city: string | null;
   startsAt: Date;
   facebookUrl: string | null;
-  status: "draft" | "active" | "closed";
+  status: "draft" | "active" | "closed" | "cancelled";
   visibility: "private" | "public";
   publishedAt: Date | null;
   isActivePublicEvent: boolean;
   publicQueueEnabled: boolean;
+  songRequestsEnabled: boolean;
   publicShowSongTitles: boolean;
   autoCloseAt: Date | null;
+  endsAt: Date;
   closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -129,8 +131,10 @@ const dashboardEventSelection = {
   publishedAt: events.publishedAt,
   isActivePublicEvent: events.isActivePublicEvent,
   publicQueueEnabled: events.publicQueueEnabled,
+  songRequestsEnabled: events.songRequestsEnabled,
   publicShowSongTitles: events.publicShowSongTitles,
   autoCloseAt: events.autoCloseAt,
+  endsAt: events.endsAt,
   closedAt: events.closedAt,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
@@ -383,9 +387,11 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
         city: input.event.city,
         startsAt: input.event.startsAt,
         autoCloseAt: input.event.autoCloseAt,
+        endsAt: input.event.autoCloseAt,
         facebookUrl: input.event.facebookUrl,
         status: input.event.isActivePublicEvent ? "active" : "draft",
         isActivePublicEvent: input.event.isActivePublicEvent,
+        songRequestsEnabled: input.event.songRequestsEnabled,
         publicQueueEnabled: input.event.publicQueueEnabled,
         publicShowSongTitles: input.event.publicShowSongTitles,
         updatedAt: now,
@@ -431,6 +437,8 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       payload: {
         startsAt: input.event.startsAt.toISOString(),
         autoCloseAt: input.event.autoCloseAt.toISOString(),
+        endsAt: input.event.autoCloseAt.toISOString(),
+        songRequestsEnabled: input.event.songRequestsEnabled,
         publicQueueEnabled: input.event.publicQueueEnabled,
         publicShowSongTitles: input.event.publicShowSongTitles,
         isActivePublicEvent: input.event.isActivePublicEvent,
@@ -477,6 +485,7 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
       .update(events)
       .set({
         autoCloseAt: input.event.autoCloseAt,
+        endsAt: input.event.autoCloseAt,
         updatedAt: now,
       })
       .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
@@ -559,9 +568,11 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
           publishedAt: catalogFields.publishedAt,
           startsAt: input.event.startsAt,
           autoCloseAt: input.event.autoCloseAt,
+          endsAt: input.event.autoCloseAt,
           facebookUrl: input.event.facebookUrl,
           status: input.event.isActivePublicEvent ? "active" : event.status,
           isActivePublicEvent: input.event.isActivePublicEvent,
+          songRequestsEnabled: input.event.songRequestsEnabled,
           publicQueueEnabled: input.event.publicQueueEnabled,
           publicShowSongTitles: input.event.publicShowSongTitles,
           updatedAt: now,
@@ -589,6 +600,8 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
         previous: {
           startsAt: event.startsAt.toISOString(),
           autoCloseAt: event.autoCloseAt?.toISOString() ?? null,
+          endsAt: event.endsAt.toISOString(),
+          songRequestsEnabled: event.songRequestsEnabled,
           publicQueueEnabled: event.publicQueueEnabled,
           publicShowSongTitles: event.publicShowSongTitles,
           isActivePublicEvent: event.isActivePublicEvent,
@@ -599,6 +612,8 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
         next: {
           startsAt: input.event.startsAt.toISOString(),
           autoCloseAt: input.event.autoCloseAt.toISOString(),
+          endsAt: input.event.autoCloseAt.toISOString(),
+          songRequestsEnabled: input.event.songRequestsEnabled,
           publicQueueEnabled: input.event.publicQueueEnabled,
           publicShowSongTitles: input.event.publicShowSongTitles,
           isActivePublicEvent: input.event.isActivePublicEvent,
@@ -652,6 +667,7 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
       .update(events)
       .set({
         autoCloseAt,
+        endsAt: autoCloseAt,
         updatedAt: now,
       })
       .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))

@@ -5,10 +5,12 @@ export type SessionEvent = {
   name: string;
   venue: string | null;
   startsAt: string;
-  status: "draft" | "active" | "closed";
+  status: "draft" | "active" | "closed" | "cancelled";
   publicQueueEnabled: boolean;
+  songRequestsEnabled: boolean;
   publicShowSongTitles: boolean;
   autoCloseAt: string | null;
+  endsAt: string;
   closedAt: string | null;
 };
 

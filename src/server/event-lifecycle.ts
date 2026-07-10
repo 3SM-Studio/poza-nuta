@@ -30,8 +30,10 @@ export const activeEventSelection = {
   status: events.status,
   isActivePublicEvent: events.isActivePublicEvent,
   publicQueueEnabled: events.publicQueueEnabled,
+  songRequestsEnabled: events.songRequestsEnabled,
   publicShowSongTitles: events.publicShowSongTitles,
   autoCloseAt: events.autoCloseAt,
+  endsAt: events.endsAt,
   closedAt: events.closedAt,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
@@ -145,6 +147,7 @@ export async function updateActiveEventSettings(
       .set({
         name: input.name,
         venue: input.venue,
+        songRequestsEnabled: input.songRequestsEnabled,
         publicQueueEnabled: input.publicQueueEnabled,
         publicShowSongTitles: input.publicShowSongTitles,
         updatedAt: now,
@@ -161,12 +164,14 @@ export async function updateActiveEventSettings(
         previous: {
           name: event.name,
           venue: event.venue,
+          songRequestsEnabled: event.songRequestsEnabled,
           publicQueueEnabled: event.publicQueueEnabled,
           publicShowSongTitles: event.publicShowSongTitles,
         },
         next: {
           name: input.name,
           venue: input.venue,
+          songRequestsEnabled: input.songRequestsEnabled,
           publicQueueEnabled: input.publicQueueEnabled,
           publicShowSongTitles: input.publicShowSongTitles,
         },
@@ -201,6 +206,7 @@ export async function extendActiveEvent(
       .update(events)
       .set({
         autoCloseAt,
+        endsAt: autoCloseAt,
         updatedAt: now,
       })
       .where(eq(events.id, event.id))
@@ -294,8 +300,10 @@ export async function startEvent(
         venue: input.venue,
         startsAt: now,
         autoCloseAt,
+        endsAt: autoCloseAt,
         status: "active",
         isActivePublicEvent: true,
+        songRequestsEnabled: false,
         publicQueueEnabled: false,
         publicShowSongTitles: true,
       })

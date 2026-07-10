@@ -58,11 +58,13 @@ export type DashboardEvent = {
   name: string;
   venue: string | null;
   startsAt: string;
-  status: "active" | "closed";
+  status: "draft" | "active" | "closed" | "cancelled";
   isActivePublicEvent: boolean;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
   autoCloseAt: string | null;
+  endsAt: string;
   closedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -231,6 +233,7 @@ export function getDashboardEventAccessLinkRevokePath(linkId: number) {
 export function updateDashboardEventSettings(input: {
   name: string;
   venue: string | null;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
 }) {

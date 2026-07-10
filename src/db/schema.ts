@@ -15,7 +15,12 @@ import {
 } from "drizzle-orm/pg-core";
 import { authUsers } from "drizzle-orm/supabase";
 
-export const eventStatusValues = ["draft", "active", "closed"] as const;
+export const eventStatusValues = [
+  "draft",
+  "active",
+  "closed",
+  "cancelled",
+] as const;
 export const eventVisibilityValues = ["private", "public"] as const;
 export const songSourceValues = ["ising", "karafun", "manual"] as const;
 export const requestStatusValues = [
@@ -130,10 +135,14 @@ export const events = pgTable(
     publicQueueEnabled: boolean("public_queue_enabled")
       .notNull()
       .default(false),
+    songRequestsEnabled: boolean("song_requests_enabled")
+      .notNull()
+      .default(false),
     publicShowSongTitles: boolean("public_show_song_titles")
       .notNull()
       .default(false),
     autoCloseAt: timestampColumn("auto_close_at"),
+    endsAt: timestampColumn("ends_at").notNull(),
     closedAt: timestampColumn("closed_at"),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
@@ -170,6 +179,10 @@ export const events = pgTable(
     check(
       "events_public_requires_slug_and_published_at_check",
       sql`${table.visibility} <> 'public' or (${table.slug} is not null and ${table.publishedAt} is not null)`,
+    ),
+    check(
+      "events_ends_after_starts_check",
+      sql`${table.endsAt} > ${table.startsAt}`,
     ),
   ],
 ).enableRLS();

@@ -60,15 +60,18 @@ test("dashboard event validation accepts catalog fields and defaults to private"
 test("public event contract exposes only public fields and computes status", () => {
   const now = new Date("2026-07-09T18:00:00.000Z");
   const baseEvent = {
+    id: 10,
     name: "Karaoke Night",
     slug: "karaoke-night",
     venue: "Klub",
     city: "Warszawa",
     startsAt: new Date("2026-07-09T17:00:00.000Z"),
-    autoCloseAt: new Date("2026-07-09T23:00:00.000Z"),
+    endsAt: new Date("2026-07-09T23:00:00.000Z"),
     closedAt: null,
     status: "active",
-    isActivePublicEvent: true,
+    visibility: "public",
+    publishedAt: new Date("2026-07-01T12:00:00.000Z"),
+    songRequestsEnabled: true,
     publicQueueEnabled: true,
     facebookUrl: "https://www.facebook.com/events/123",
   };
@@ -78,11 +81,13 @@ test("public event contract exposes only public fields and computes status", () 
     "city",
     "endsAt",
     "facebookUrl",
+    "id",
     "name",
     "publicQueueEnabled",
     "publicStatus",
     "requestsEnabled",
     "slug",
+    "songRequestsEnabled",
     "startsAt",
     "status",
     "venueName",
@@ -95,19 +100,19 @@ test("public event contract exposes only public fields and computes status", () 
     {
       ...baseEvent,
       startsAt: new Date("2026-07-10T17:00:00.000Z"),
-      autoCloseAt: new Date("2026-07-10T23:00:00.000Z"),
+      endsAt: new Date("2026-07-10T23:00:00.000Z"),
       status: "active",
     },
     now,
   );
-  assert.equal(activeBeforePlannedStart.publicStatus, "live");
-  assert.equal(activeBeforePlannedStart.requestsEnabled, true);
+  assert.equal(activeBeforePlannedStart.publicStatus, "upcoming");
+  assert.equal(activeBeforePlannedStart.requestsEnabled, false);
 
   const upcoming = toPublicEventContract(
     {
       ...baseEvent,
       startsAt: new Date("2026-07-10T17:00:00.000Z"),
-      autoCloseAt: new Date("2026-07-10T23:00:00.000Z"),
+      endsAt: new Date("2026-07-10T23:00:00.000Z"),
       status: "draft",
     },
     now,
@@ -118,7 +123,7 @@ test("public event contract exposes only public fields and computes status", () 
   const ended = toPublicEventContract(
     {
       ...baseEvent,
-      autoCloseAt: new Date("2026-07-09T17:30:00.000Z"),
+      endsAt: new Date("2026-07-09T17:30:00.000Z"),
       status: "active",
       closedAt: null,
     },
@@ -139,14 +144,16 @@ test("public event contract exposes only public fields and computes status", () 
   assert.equal(closed.requestsEnabled, false);
 });
 
-test("public request eligibility follows active public event lifecycle, not queue visibility", () => {
+test("public request eligibility follows event time and song request capability", () => {
   const now = new Date("2026-07-09T18:00:00.000Z");
   const liveEvent = {
-    isActivePublicEvent: true,
     status: "active",
+    visibility: "public",
+    publishedAt: new Date("2026-07-01T12:00:00.000Z"),
     startsAt: new Date("2026-07-09T17:00:00.000Z"),
-    autoCloseAt: new Date("2026-07-09T23:00:00.000Z"),
+    endsAt: new Date("2026-07-09T23:00:00.000Z"),
     closedAt: null,
+    songRequestsEnabled: true,
   };
 
   assert.equal(
@@ -158,15 +165,18 @@ test("public request eligibility follows active public event lifecycle, not queu
   assert.deepEqual(
     toPublicEventContract(
       {
+        id: 11,
         name: "Karaoke Night",
         slug: "karaoke-night",
         venue: "Klub",
         city: "Warszawa",
         startsAt: new Date("2026-07-09T17:00:00.000Z"),
-        autoCloseAt: liveEvent.autoCloseAt,
+        endsAt: liveEvent.endsAt,
         closedAt: null,
         status: "active",
-        isActivePublicEvent: true,
+        visibility: "public",
+        publishedAt: liveEvent.publishedAt,
+        songRequestsEnabled: true,
         publicQueueEnabled: false,
         facebookUrl: null,
       },
@@ -177,15 +187,18 @@ test("public request eligibility follows active public event lifecycle, not queu
   assert.deepEqual(
     toPublicEventContract(
       {
+        id: 12,
         name: "Karaoke Night",
         slug: "karaoke-night",
         venue: "Klub",
         city: "Warszawa",
         startsAt: new Date("2026-07-09T17:00:00.000Z"),
-        autoCloseAt: liveEvent.autoCloseAt,
+        endsAt: liveEvent.endsAt,
         closedAt: null,
         status: "active",
-        isActivePublicEvent: true,
+        visibility: "public",
+        publishedAt: liveEvent.publishedAt,
+        songRequestsEnabled: true,
         publicQueueEnabled: true,
         facebookUrl: null,
       },
@@ -196,7 +209,7 @@ test("public request eligibility follows active public event lifecycle, not queu
   assert.equal(
     canAcceptPublicRequests({
       ...liveEvent,
-      status: "draft",
+      visibility: "private",
     }),
     false,
   );
@@ -212,30 +225,35 @@ test("public request eligibility follows active public event lifecycle, not queu
   assert.deepEqual(
     toPublicEventContract(
       {
+        id: 13,
         name: "Karaoke Night",
         slug: "karaoke-night",
         venue: "Klub",
         city: "Warszawa",
         startsAt: new Date("2026-07-10T17:00:00.000Z"),
-        autoCloseAt: new Date("2026-07-10T23:00:00.000Z"),
+        endsAt: new Date("2026-07-10T23:00:00.000Z"),
         closedAt: null,
         status: "active",
-        isActivePublicEvent: true,
+        visibility: "public",
+        publishedAt: liveEvent.publishedAt,
+        songRequestsEnabled: true,
         publicQueueEnabled: false,
         facebookUrl: null,
       },
       now,
     ),
     {
+      id: 13,
       slug: "karaoke-night",
       name: "Karaoke Night",
       startsAt: "2026-07-10T17:00:00.000Z",
       endsAt: "2026-07-10T23:00:00.000Z",
       venueName: "Klub",
       city: "Warszawa",
-      status: "live",
-      publicStatus: "live",
-      requestsEnabled: true,
+      status: "upcoming",
+      publicStatus: "upcoming",
+      requestsEnabled: false,
+      songRequestsEnabled: true,
       publicQueueEnabled: false,
       facebookUrl: null,
     },
@@ -252,7 +270,7 @@ test("public request eligibility follows active public event lifecycle, not queu
     canAcceptPublicRequests(
       {
         ...liveEvent,
-        autoCloseAt: new Date("2026-07-09T17:30:00.000Z"),
+        endsAt: new Date("2026-07-09T17:30:00.000Z"),
       },
       now,
     ),
@@ -261,7 +279,7 @@ test("public request eligibility follows active public event lifecycle, not queu
   assert.equal(
     canAcceptPublicRequests({
       ...liveEvent,
-      isActivePublicEvent: false,
+      songRequestsEnabled: false,
     }),
     false,
   );
@@ -338,7 +356,36 @@ test("public event catalog migration adds private-by-default publication fields"
   assert.match(migrationSource, /WHERE "events"\."slug" is not null/);
 });
 
-test("public catalog API filters unpublished private closed and slugless events", () => {
+test("event lifecycle migration adds endsAt and request capability safely", () => {
+  const schemaSource = readFileSync("src/db/schema.ts", "utf8");
+  const migrationSource = readFileSync(
+    "drizzle/0012_low_morgan_stark.sql",
+    "utf8",
+  );
+
+  assert.match(schemaSource, /endsAt: timestampColumn\("ends_at"\)\.notNull\(\)/);
+  assert.match(schemaSource, /songRequestsEnabled: boolean\("song_requests_enabled"\)/);
+  assert.match(schemaSource, /events_ends_after_starts_check/);
+  assert.match(schemaSource, /sql`\$\{table\.endsAt\} > \$\{table\.startsAt\}`/);
+  assert.match(schemaSource, /"cancelled"/);
+  assert.match(migrationSource, /ADD COLUMN "ends_at" timestamp with time zone;/);
+  assert.match(migrationSource, /SET "ends_at" = COALESCE\("auto_close_at"/);
+  assert.match(migrationSource, /ALTER COLUMN "ends_at" SET NOT NULL/);
+  assert.match(
+    migrationSource,
+    /SET "song_requests_enabled" = "public_queue_enabled"/,
+  );
+  assert.match(
+    migrationSource,
+    /WHERE "song_requests_enabled" = false\s+AND "public_queue_enabled" = true/,
+  );
+  assert.match(
+    migrationSource,
+    /ADD CONSTRAINT "events_ends_after_starts_check" CHECK \("events"\."ends_at" > "events"\."starts_at"\)/,
+  );
+});
+
+test("public catalog API filters unpublished private and slugless events", () => {
   const serviceSource = readFileSync("src/server/public-api/service.ts", "utf8");
   const listStart = serviceSource.indexOf("export async function listPublicEvents");
   const detailStart = serviceSource.indexOf("export async function getPublicEventBySlug");
@@ -348,9 +395,9 @@ test("public catalog API filters unpublished private closed and slugless events"
   assert.match(listSource, /eq\(events\.visibility, "public"\)/);
   assert.match(listSource, /isNotNull\(events\.slug\)/);
   assert.match(listSource, /isNotNull\(events\.publishedAt\)/);
-  assert.match(listSource, /eq\(events\.status, "active"\)/);
-  assert.match(listSource, /eq\(events\.status, "draft"\)/);
-  assert.match(listSource, /gt\(events\.startsAt, now\)/);
+  assert.match(listSource, /events\.endsAt/);
+  assert.equal(listSource.includes('eq(events.status, "active")'), false);
+  assert.equal(listSource.includes('eq(events.status, "draft")'), false);
   assert.match(listSource, /case when/);
   assert.match(detailSource, /eq\(events\.visibility, "public"\)/);
   assert.match(detailSource, /eq\(events\.slug, slug\)/);

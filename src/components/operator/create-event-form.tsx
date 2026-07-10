@@ -114,6 +114,14 @@ export function CreateEventForm({
       <div className={styles.formSection}>
         <h2>Widoczność i kolejka publiczna</h2>
         <label className={styles.checkboxField}>
+          <input name="songRequestsEnabled" type="checkbox" />
+          <span>Publiczne zgłoszenia włączone</span>
+        </label>
+        <p className={styles.eventMeta}>
+          Decyduje, czy publiczny endpoint wydarzenia przyjmuje nowe piosenki.
+        </p>
+
+        <label className={styles.checkboxField}>
           <input name="publicQueueEnabled" type="checkbox" />
           <span>Publiczna kolejka włączona</span>
         </label>

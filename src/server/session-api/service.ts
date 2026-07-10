@@ -26,8 +26,10 @@ const sessionEventSelection = {
   startsAt: events.startsAt,
   status: events.status,
   publicQueueEnabled: events.publicQueueEnabled,
+  songRequestsEnabled: events.songRequestsEnabled,
   publicShowSongTitles: events.publicShowSongTitles,
   autoCloseAt: events.autoCloseAt,
+  endsAt: events.endsAt,
   closedAt: events.closedAt,
 };
 
@@ -60,10 +62,12 @@ export type PublicSessionEvent = {
   name: string;
   venue: string | null;
   startsAt: Date;
-  status: "draft" | "active" | "closed";
+  status: "draft" | "active" | "closed" | "cancelled";
   publicQueueEnabled: boolean;
+  songRequestsEnabled: boolean;
   publicShowSongTitles: boolean;
   autoCloseAt: Date | null;
+  endsAt: Date;
   closedAt: Date | null;
 };
 
@@ -352,8 +356,10 @@ function toPublicSessionEvent(event: PublicSessionEvent): PublicSessionEvent {
     startsAt: event.startsAt,
     status: event.status,
     publicQueueEnabled: event.publicQueueEnabled,
+    songRequestsEnabled: event.songRequestsEnabled,
     publicShowSongTitles: event.publicShowSongTitles,
     autoCloseAt: event.autoCloseAt,
+    endsAt: event.endsAt,
     closedAt: event.closedAt,
   };
 }

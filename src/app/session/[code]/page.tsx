@@ -87,8 +87,10 @@ function serializeSessionEvent(
     startsAt: event.startsAt.toISOString(),
     status: event.status,
     publicQueueEnabled: event.publicQueueEnabled,
+    songRequestsEnabled: event.songRequestsEnabled,
     publicShowSongTitles: event.publicShowSongTitles,
     autoCloseAt: event.autoCloseAt?.toISOString() ?? null,
+    endsAt: event.endsAt.toISOString(),
     closedAt: event.closedAt?.toISOString() ?? null,
   };
 }

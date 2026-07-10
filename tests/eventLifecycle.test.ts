@@ -431,6 +431,7 @@ test("validateEventSettingsInput validates and normalizes all settings", () => {
     validateEventSettingsInput({
       name: "  Poza Nutą  ",
       venue: "  Dom Kultury  ",
+      songRequestsEnabled: true,
       publicQueueEnabled: true,
       publicShowSongTitles: false,
     }),
@@ -439,6 +440,7 @@ test("validateEventSettingsInput validates and normalizes all settings", () => {
       data: {
         name: "Poza Nutą",
         venue: "Dom Kultury",
+        songRequestsEnabled: true,
         publicQueueEnabled: true,
         publicShowSongTitles: false,
       },
@@ -448,6 +450,7 @@ test("validateEventSettingsInput validates and normalizes all settings", () => {
   const invalid = validateEventSettingsInput({
     name: "",
     venue: "x".repeat(121),
+    songRequestsEnabled: "yes",
     publicQueueEnabled: "yes",
     publicShowSongTitles: null,
   });
@@ -455,7 +458,13 @@ test("validateEventSettingsInput validates and normalizes all settings", () => {
   assert.equal(invalid.success, false);
   assert.deepEqual(
     invalid.success ? [] : invalid.issues.map((issue) => issue.field),
-    ["name", "venue", "publicQueueEnabled", "publicShowSongTitles"],
+    [
+      "name",
+      "venue",
+      "publicQueueEnabled",
+      "songRequestsEnabled",
+      "publicShowSongTitles",
+    ],
   );
 });
 

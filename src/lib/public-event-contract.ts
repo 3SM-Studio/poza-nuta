@@ -1,31 +1,37 @@
+import { getEventPhase, type EventPhase } from "./event-phase.ts";
 import { canAcceptPublicRequests } from "./public-request-eligibility.ts";
 
-export type PublicEventStatus = "upcoming" | "live" | "ended";
+export type PublicEventStatus = EventPhase;
 
 export type PublicEventContract = {
+  id: number;
   slug: string;
   name: string;
   startsAt: string;
-  endsAt: string | null;
+  endsAt: string;
   venueName: string | null;
   city: string | null;
   status: PublicEventStatus;
   publicStatus: PublicEventStatus;
   requestsEnabled: boolean;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   facebookUrl: string | null;
 };
 
 export type PublicEventContractInput = {
+  id: number;
   name: string;
   slug: string | null;
   venue: string | null;
   city: string | null;
   startsAt: Date;
-  autoCloseAt: Date | null;
+  endsAt: Date;
   closedAt: Date | null;
   status: string;
-  isActivePublicEvent: boolean;
+  visibility: string;
+  publishedAt: Date | null;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   facebookUrl: string | null;
 };
@@ -33,27 +39,11 @@ export type PublicEventContractInput = {
 export function getPublicEventStatus(
   event: Pick<
     PublicEventContractInput,
-    "status" | "startsAt" | "autoCloseAt" | "closedAt"
+    "status" | "startsAt" | "endsAt" | "closedAt"
   >,
   now = new Date(),
 ): PublicEventStatus {
-  if (event.status === "closed" || event.closedAt) {
-    return "ended";
-  }
-
-  if (event.status === "active") {
-    if (!event.autoCloseAt || now.getTime() < event.autoCloseAt.getTime()) {
-      return "live";
-    }
-
-    return "ended";
-  }
-
-  if (now.getTime() < event.startsAt.getTime()) {
-    return "upcoming";
-  }
-
-  return "ended";
+  return getEventPhase(event, now);
 }
 
 export function toPublicEventContract(
@@ -67,15 +57,17 @@ export function toPublicEventContract(
   const publicStatus = getPublicEventStatus(event, now);
 
   return {
+    id: event.id,
     slug: event.slug,
     name: event.name,
     startsAt: event.startsAt.toISOString(),
-    endsAt: event.autoCloseAt?.toISOString() ?? null,
+    endsAt: event.endsAt.toISOString(),
     venueName: event.venue,
     city: event.city,
     status: publicStatus,
     publicStatus,
     requestsEnabled: canAcceptPublicRequests(event, now),
+    songRequestsEnabled: event.songRequestsEnabled,
     publicQueueEnabled: event.publicQueueEnabled,
     facebookUrl: event.facebookUrl,
   };
