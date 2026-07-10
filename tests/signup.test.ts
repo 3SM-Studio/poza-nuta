@@ -234,6 +234,11 @@ test("auth callback redirect validates next and rejects open redirects", () => {
       input: "/dashboard/queue?event=123",
       expected: "/dashboard/queue?event=123",
     },
+    {
+      name: "platform setup",
+      input: "/setup",
+      expected: "/setup",
+    },
   ];
 
   for (const { name, input, expected } of cases) {
@@ -304,6 +309,20 @@ test("auth callback accepts safe local next paths", async () => {
   assert.deepEqual(redirect, {
     status: "success",
     location: "https://app.example.test/dashboard/new",
+  });
+});
+
+test("auth callback accepts setup next path", async () => {
+  const redirect = await resolveAuthCallbackRedirect({
+    requestUrl: new URL(
+      "https://app.example.test/auth/callback?code=valid-code&next=%2Fsetup",
+    ),
+    exchangeCodeForSession: async () => ({}),
+  });
+
+  assert.deepEqual(redirect, {
+    status: "success",
+    location: "https://app.example.test/setup",
   });
 });
 
