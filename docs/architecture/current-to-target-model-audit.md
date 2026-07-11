@@ -1,6 +1,15 @@
 # Current To Target Model Audit
 
-Status: audit of the current worktree and target platform model.
+> Historical note, 2026-07-11: this document is an audit of the worktree before
+> `328b992 fix: remove global queue and restore session-scoped flow` and
+> `e36069e feat: add event discovery homepage and directory`. Sections that
+> describe global public request flow, coupled request/queue capability, or a
+> Poza Nutą-branded homepage do not describe the current implementation after
+> those commits. The target model and migration recommendations remain
+> applicable. For current implementation status, read `PROJECT_CONTEXT.md` and
+> `docs/ROADMAP_STATUS.md`.
+
+Status: historical worktree audit and target platform model reference.
 Date: 2026-07-10.
 Branch observed: `feat/public-event-directory-list`.
 Scope: current schema, services, dashboard, public request flow and the
