@@ -3,15 +3,26 @@ import "server-only";
 import {
   and,
   asc,
+  desc,
   eq,
+  gte,
   ilike,
   isNotNull,
+  lt,
+  or,
   sql,
 } from "drizzle-orm";
 
 import { events, songs } from "../../db/schema";
 import { getDb } from "../db";
 import { isValidEventSlug } from "../../lib/event-slug";
+import {
+  getPublicEventDateRange,
+  matchesPublicEventPhase,
+  normalizePublicEventsQuery,
+  type PublicEventSort,
+  type PublicEventsQuery,
+} from "../../lib/public-event-discovery";
 import { toPublicEventContract } from "../../lib/public-event-contract";
 import { traceServerStep } from "../runtime-diagnostics";
 import { PublicApiError } from "./errors";
@@ -35,27 +46,52 @@ const publicEventSelection = {
   facebookUrl: events.facebookUrl,
 };
 
-export async function listPublicEvents(routeName?: string) {
+export async function listPublicEvents(
+  routeName?: string,
+  query: PublicEventsQuery = {},
+) {
   const now = new Date();
+  const normalizedQuery = normalizePublicEventsQuery(query);
+  const filters = [
+    eq(events.visibility, "public"),
+    isNotNull(events.slug),
+    isNotNull(events.publishedAt),
+  ];
+  const dateRange = getPublicEventDateRange(normalizedQuery.date);
+
+  if (normalizedQuery.q) {
+    const pattern = `%${escapeLikePattern(normalizedQuery.q)}%`;
+    const searchFilter = or(
+      ilike(events.name, pattern),
+      ilike(events.venue, pattern),
+      ilike(events.city, pattern),
+    );
+
+    if (searchFilter) {
+      filters.push(searchFilter);
+    }
+  }
+
+  if (normalizedQuery.city) {
+    filters.push(ilike(events.city, `%${escapeLikePattern(normalizedQuery.city)}%`));
+  }
+
+  if (dateRange) {
+    filters.push(gte(events.startsAt, dateRange.start));
+    filters.push(lt(events.startsAt, dateRange.end));
+  }
+
   const publicEvents = await runPublicApiStep(routeName, "publicEvents", () =>
     getDb()
       .select(publicEventSelection)
       .from(events)
-      .where(
-        and(
-          eq(events.visibility, "public"),
-          isNotNull(events.slug),
-          isNotNull(events.publishedAt),
-        ),
-      )
-      .orderBy(
-        sql`case when ${events.startsAt} <= ${now} and ${events.endsAt} > ${now} then 0 when ${events.startsAt} > ${now} then 1 else 2 end`,
-        asc(events.startsAt),
-        asc(events.slug),
-      ),
+      .where(and(...filters))
+      .orderBy(...getPublicEventOrderBy(normalizedQuery.sort, now)),
   );
 
-  return publicEvents.map((event) => toPublicEventContract(event, now));
+  return publicEvents
+    .map((event) => toPublicEventContract(event, now))
+    .filter((event) => matchesPublicEventPhase(event.publicStatus, normalizedQuery.phase));
 }
 
 export async function getPublicEventBySlug(slug: string, routeName?: string) {
@@ -119,6 +155,20 @@ export async function searchPublicSongs(query: string | null) {
 
 function escapeLikePattern(input: string) {
   return input.replace(/[\\%_]/g, "\\$&");
+}
+
+function getPublicEventOrderBy(sort: PublicEventSort, now: Date) {
+  if (sort === "newest") {
+    return [desc(events.publishedAt), desc(events.id)];
+  }
+
+  const referenceNow = now.toISOString();
+
+  return [
+    sql`case when ${events.startsAt} <= ${referenceNow}::timestamptz and ${events.endsAt} > ${referenceNow}::timestamptz then 0 when ${events.startsAt} > ${referenceNow}::timestamptz then 1 else 2 end`,
+    asc(events.startsAt),
+    asc(events.slug),
+  ];
 }
 
 function runPublicApiStep<T>(

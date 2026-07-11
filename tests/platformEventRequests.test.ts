@@ -181,7 +181,7 @@ test("public song search is global catalog search without active event selection
 });
 
 test("public event page is informational and does not render a request form", () => {
-  const pageSource = readFileSync("src/app/events/[slug]/page.tsx", "utf8");
+  const pageSource = readFileSync("src/app/(public)/events/[slug]/page.tsx", "utf8");
 
   assert.match(pageSource, /getPublicEventBySlug\(slug/);
   assert.match(pageSource, /kod QR/);

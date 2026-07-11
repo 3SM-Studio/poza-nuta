@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import styles from "@/components/public/public.module.css";
@@ -46,16 +44,6 @@ export default async function PublicEventPage({ params }: PublicEventPageProps) 
     <main className={styles.publicPage}>
       <div className={styles.eventShell}>
         <header className={styles.eventHeader}>
-          <Link className={styles.brand} href="/" aria-label="Poza Nutą">
-            <Image
-              className={styles.brandLogo}
-              src="/brand/poza_nuta_logo-white.png"
-              alt="Poza Nutą"
-              width={1254}
-              height={1254}
-              loading="eager"
-            />
-          </Link>
           <p className={styles.statusPill}>{formatPublicStatus(event.publicStatus)}</p>
           <h1>{event.name}</h1>
         </header>

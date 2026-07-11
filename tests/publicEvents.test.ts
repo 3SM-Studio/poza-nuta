@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -8,6 +8,12 @@ import {
   isValidEventSlug,
 } from "../src/lib/event-slug.ts";
 import { isEventSlugUniqueViolation } from "../src/lib/event-slug-db-error.ts";
+import {
+  getPublicEventDateRange,
+  getWarsawWeekendRange,
+  isInWarsawWeekend,
+  normalizePublicEventsQuery,
+} from "../src/lib/public-event-discovery.ts";
 import { toPublicEventContract } from "../src/lib/public-event-contract.ts";
 import { canAcceptPublicRequests } from "../src/lib/public-request-eligibility.ts";
 import { validateUpdateDashboardEventDetailsInput } from "../src/server/operator-api/validation.ts";
@@ -395,13 +401,246 @@ test("public catalog API filters unpublished private and slugless events", () =>
   assert.match(listSource, /eq\(events\.visibility, "public"\)/);
   assert.match(listSource, /isNotNull\(events\.slug\)/);
   assert.match(listSource, /isNotNull\(events\.publishedAt\)/);
-  assert.match(listSource, /events\.endsAt/);
+  assert.match(serviceSource, /events\.endsAt/);
   assert.equal(listSource.includes('eq(events.status, "active")'), false);
   assert.equal(listSource.includes('eq(events.status, "draft")'), false);
-  assert.match(listSource, /case when/);
+  assert.match(serviceSource, /case when/);
   assert.match(detailSource, /eq\(events\.visibility, "public"\)/);
   assert.match(detailSource, /eq\(events\.slug, slug\)/);
   assert.match(detailSource, /PUBLIC_EVENT_NOT_FOUND/);
+});
+
+test("public event query normalization accepts ended and safely falls back", () => {
+  assert.deepEqual(
+    normalizePublicEventsQuery({
+      q: "  Karaoke   Klub  ",
+      city: "  Gdynia ",
+      date: "2026-07-10",
+      phase: "ended",
+      sort: "newest",
+    }),
+    {
+      q: "Karaoke Klub",
+      city: "Gdynia",
+      date: "2026-07-10",
+      phase: "ended",
+      sort: "newest",
+    },
+  );
+  assert.deepEqual(
+    normalizePublicEventsQuery({
+      date: "2026-02-31",
+      phase: "cancelled",
+      sort: "popular",
+    }),
+    {
+      q: null,
+      city: null,
+      date: null,
+      phase: "all",
+      sort: "soonest",
+    },
+  );
+});
+
+test("public event date filter builds Warsaw calendar-day ranges including DST", () => {
+  const regularDay = getPublicEventDateRange("2026-07-10");
+  assert.equal(regularDay?.start.toISOString(), "2026-07-09T22:00:00.000Z");
+  assert.equal(regularDay?.end.toISOString(), "2026-07-10T22:00:00.000Z");
+
+  const dstStart = getPublicEventDateRange("2026-03-29");
+  assert.equal(dstStart?.start.toISOString(), "2026-03-28T23:00:00.000Z");
+  assert.equal(dstStart?.end.toISOString(), "2026-03-29T22:00:00.000Z");
+  assert.equal(
+    dstStart
+      ? (dstStart.end.getTime() - dstStart.start.getTime()) / 3_600_000
+      : null,
+    23,
+  );
+
+  const dstEnd = getPublicEventDateRange("2026-10-25");
+  assert.equal(dstEnd?.start.toISOString(), "2026-10-24T22:00:00.000Z");
+  assert.equal(dstEnd?.end.toISOString(), "2026-10-25T23:00:00.000Z");
+  assert.equal(
+    dstEnd ? (dstEnd.end.getTime() - dstEnd.start.getTime()) / 3_600_000 : null,
+    25,
+  );
+
+  assert.equal(getPublicEventDateRange("2026-02-31"), null);
+  assert.equal(getPublicEventDateRange("not-a-date"), null);
+});
+
+test("Warsaw weekend range covers Friday Saturday Sunday and UTC date drift", () => {
+  const friday = getWarsawWeekendRange(new Date("2026-07-10T10:00:00.000Z"));
+  assert.equal(friday.start.toISOString(), "2026-07-10T22:00:00.000Z");
+  assert.equal(friday.end.toISOString(), "2026-07-12T22:00:00.000Z");
+
+  const saturday = getWarsawWeekendRange(new Date("2026-07-11T10:00:00.000Z"));
+  assert.equal(saturday.start.toISOString(), "2026-07-10T22:00:00.000Z");
+  assert.equal(saturday.end.toISOString(), "2026-07-12T22:00:00.000Z");
+
+  const sunday = getWarsawWeekendRange(new Date("2026-07-12T10:00:00.000Z"));
+  assert.equal(sunday.start.toISOString(), "2026-07-10T22:00:00.000Z");
+  assert.equal(sunday.end.toISOString(), "2026-07-12T22:00:00.000Z");
+
+  const warsawSaturdayUtcFriday = getWarsawWeekendRange(
+    new Date("2026-07-10T22:30:00.000Z"),
+  );
+  assert.equal(
+    warsawSaturdayUtcFriday.start.toISOString(),
+    "2026-07-10T22:00:00.000Z",
+  );
+  assert.equal(
+    warsawSaturdayUtcFriday.end.toISOString(),
+    "2026-07-12T22:00:00.000Z",
+  );
+});
+
+test("Warsaw weekend membership is start-inclusive and end-exclusive", () => {
+  const referenceNow = new Date("2026-07-11T12:00:00.000Z");
+
+  assert.equal(
+    isInWarsawWeekend("2026-07-10T21:59:59.999Z", referenceNow),
+    false,
+  );
+  assert.equal(
+    isInWarsawWeekend("2026-07-10T22:00:00.000Z", referenceNow),
+    true,
+  );
+  assert.equal(
+    isInWarsawWeekend("2026-07-12T21:59:59.999Z", referenceNow),
+    true,
+  );
+  assert.equal(
+    isInWarsawWeekend("2026-07-12T22:00:00.000Z", referenceNow),
+    false,
+  );
+});
+
+test("homepage renders neutral discovery and search links to events directory", () => {
+  const homeSource = readFileSync("src/app/(public)/page.tsx", "utf8");
+  const homeComponentSource = readFileSync(
+    "src/components/public/discovery-home-page.tsx",
+    "utf8",
+  );
+  const searchFormSource = readFileSync(
+    "src/components/public/event-search-form.tsx",
+    "utf8",
+  );
+
+  assert.match(homeSource, /DiscoveryHomePage/);
+  assert.match(homeSource, /dynamic = "force-dynamic"/);
+  assert.match(homeComponentSource, /Znajdź karaoke blisko siebie/);
+  assert.match(homeComponentSource, /Odkrywaj wydarzenia karaoke w całej Polsce/);
+  assert.match(searchFormSource, /action="\/events"/);
+  assert.match(searchFormSource, /name="q"/);
+  assert.match(searchFormSource, /name="city"/);
+  assert.match(searchFormSource, /name="date"/);
+});
+
+test("public route group uses shared public layout and header", () => {
+  const rootLayoutSource = readFileSync("src/app/layout.tsx", "utf8");
+  const publicLayoutSource = readFileSync("src/app/(public)/layout.tsx", "utf8");
+  const headerSource = readFileSync(
+    "src/components/public/public-site-header.tsx",
+    "utf8",
+  );
+
+  assert.match(rootLayoutSource, /<html lang="pl">/);
+  assert.doesNotMatch(rootLayoutSource, /PublicSiteHeader/);
+  assert.match(publicLayoutSource, /PublicSiteHeader/);
+  assert.match(headerSource, /<header/);
+  assert.match(headerSource, /<nav/);
+  assert.match(headerSource, /aria-label="Nawigacja publiczna"/);
+  assert.match(headerSource, /href="\/"/);
+  assert.match(headerSource, /loading="eager"/);
+  assert.doesNotMatch(headerSource, /priority|preload|fetchPriority/);
+  assert.match(headerSource, /href="\/events"/);
+  assert.match(headerSource, /Wydarzenia/);
+  assert.match(headerSource, /href="\/dashboard"/);
+  assert.match(headerSource, /Panel organizatora/);
+  assert.equal(existsSync("src/app/(public)/session"), false);
+  assert.equal(existsSync("src/app/(public)/dashboard"), false);
+  assert.equal(existsSync("src/app/page.tsx"), false);
+  assert.equal(existsSync("src/app/events/page.tsx"), false);
+});
+
+test("homepage carousels use real event sections and skip empty data", () => {
+  const homeComponentSource = readFileSync(
+    "src/components/public/discovery-home-page.tsx",
+    "utf8",
+  );
+  const carouselSource = readFileSync(
+    "src/components/public/event-carousel.tsx",
+    "utf8",
+  );
+
+  assert.match(homeComponentSource, /title="Trwa teraz"/);
+  assert.match(homeComponentSource, /title="Nadchodzące karaoke"/);
+  assert.match(homeComponentSource, /title="Ten weekend"/);
+  assert.match(homeComponentSource, /title="Nowo dodane"/);
+  assert.match(homeComponentSource, /isInWarsawWeekend/);
+  assert.match(homeComponentSource, /isPromotablePublicEventStatus/);
+  assert.match(carouselSource, /useEmblaCarousel\(\{ loop: false \}\)/);
+  assert.match(carouselSource, /events\.length === 0/);
+  assert.match(carouselSource, /return null/);
+  assert.match(carouselSource, /canScrollPrev/);
+  assert.match(carouselSource, /canScrollNext/);
+  assert.doesNotMatch(carouselSource, /Autoplay|autoplay/);
+});
+
+test("events directory renders full catalog grid and maps filters to service contract", () => {
+  const pageSource = readFileSync("src/app/(public)/events/page.tsx", "utf8");
+  const routeSource = readFileSync("src/app/api/public/events/route.ts", "utf8");
+  const serviceSource = readFileSync("src/server/public-api/service.ts", "utf8");
+  const discoveryHelperSource = readFileSync(
+    "src/lib/public-event-discovery.ts",
+    "utf8",
+  );
+  const searchFormSource = readFileSync(
+    "src/components/public/event-search-form.tsx",
+    "utf8",
+  );
+
+  assert.match(pageSource, /Katalog wydarzeń karaoke/);
+  assert.match(pageSource, /showDirectoryFilters/);
+  assert.match(pageSource, /className=\{styles\.grid\}/);
+  assert.match(pageSource, /PublicEventCard/);
+  assert.match(pageSource, /Brak pasujących wydarzeń/);
+  assert.match(routeSource, /url\.searchParams\.get\("q"\)/);
+  assert.match(routeSource, /url\.searchParams\.get\("city"\)/);
+  assert.match(routeSource, /url\.searchParams\.get\("date"\)/);
+  assert.match(routeSource, /url\.searchParams\.get\("phase"\)/);
+  assert.match(routeSource, /url\.searchParams\.get\("sort"\)/);
+  assert.match(
+    discoveryHelperSource,
+    /publicEventPhaseValues = \["all", "live", "upcoming", "ended"\]/,
+  );
+  assert.match(
+    discoveryHelperSource,
+    /publicEventSortValues = \["soonest", "newest"\]/,
+  );
+  assert.match(serviceSource, /ilike\(events\.name, pattern\)/);
+  assert.match(serviceSource, /ilike\(events\.city/);
+  assert.match(serviceSource, /gte\(events\.startsAt, dateRange\.start\)/);
+  assert.match(serviceSource, /desc\(events\.publishedAt\)/);
+  assert.match(searchFormSource, /value="ended"/);
+  assert.match(searchFormSource, /Zakończone/);
+});
+
+test("event cards use the public contract and link to the event slug", () => {
+  const cardSource = readFileSync(
+    "src/components/public/event-card.tsx",
+    "utf8",
+  );
+
+  assert.match(cardSource, /event\.name/);
+  assert.match(cardSource, /event\.startsAt/);
+  assert.match(cardSource, /event\.city/);
+  assert.match(cardSource, /event\.venueName/);
+  assert.match(cardSource, /event\.publicStatus/);
+  assert.match(cardSource, /href=\{`\/events\/\$\{event\.slug\}`\}/);
+  assert.doesNotMatch(cardSource, /workspaceId|operator|accessLink|songRequests/);
 });
 
 test("public event detail route stays informational without request form", () => {
@@ -410,7 +649,7 @@ test("public event detail route stays informational without request form", () =>
     "src/app/api/public/events/[slug]/route.ts",
     "utf8",
   );
-  const pageSource = readFileSync("src/app/events/[slug]/page.tsx", "utf8");
+  const pageSource = readFileSync("src/app/(public)/events/[slug]/page.tsx", "utf8");
 
   assert.match(listRouteSource, /listPublicEvents/);
   assert.match(detailRouteSource, /getPublicEventBySlug/);
@@ -418,6 +657,7 @@ test("public event detail route stays informational without request form", () =>
   assert.match(pageSource, /notFound\(\)/);
   assert.match(pageSource, /kod QR/);
   assert.doesNotMatch(pageSource, /PublicEventRequestForm/);
+  assert.doesNotMatch(pageSource, /brandLogo/);
   assert.doesNotMatch(pageSource, /searchPublicSongs/);
   assert.doesNotMatch(pageSource, /createPublicRequest/);
 });

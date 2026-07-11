@@ -1,0 +1,311 @@
+.page {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.shell {
+  width: min(100% - 2rem, 72rem);
+  margin: 0 auto;
+  padding: 1.25rem 0 3rem;
+}
+
+.hero {
+  display: grid;
+  gap: 1.25rem;
+  padding: 2rem 0 1.25rem;
+}
+
+.hero h1 {
+  max-width: 52rem;
+  margin: 0;
+  font-size: clamp(2.3rem, 7vw, 4.75rem);
+  line-height: 1.02;
+}
+
+.hero p {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.55;
+}
+
+.searchForm {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-1);
+}
+
+.searchField {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.searchField label {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.searchField input,
+.searchField select {
+  min-height: 3rem;
+  width: 100%;
+  border: 1px solid var(--input);
+  border-radius: 0.55rem;
+  background: var(--surface-2);
+  color: var(--foreground);
+  font: inherit;
+  padding: 0.72rem 0.8rem;
+}
+
+.searchField input:focus,
+.searchField select:focus {
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.primaryButton,
+.secondaryButton,
+.iconButton {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.55rem;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.primaryButton {
+  border: 1px solid var(--primary-strong);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 0.75rem 1rem;
+}
+
+.secondaryButton,
+.iconButton {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--foreground);
+}
+
+.secondaryButton {
+  padding: 0.75rem 1rem;
+}
+
+.iconButton {
+  width: 3rem;
+  padding: 0;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover,
+.iconButton:hover:not(:disabled) {
+  border-color: var(--accent-soft-border);
+  background: var(--surface-3);
+  color: var(--primary);
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.iconButton:focus-visible,
+.card:focus-within {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.iconButton:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.sections {
+  display: grid;
+  gap: 2rem;
+  margin-top: 1.5rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.sectionHeader p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+}
+
+.carouselControls {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+
+.carouselViewport {
+  overflow: hidden;
+}
+
+.carouselTrack {
+  display: flex;
+  margin-left: -0.75rem;
+  touch-action: pan-y pinch-zoom;
+}
+
+.carouselSlide {
+  min-width: 0;
+  flex: 0 0 86%;
+  padding-left: 0.75rem;
+}
+
+.grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.card {
+  display: grid;
+  min-height: 100%;
+  gap: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-1);
+  padding: 1rem;
+}
+
+.cardHeader {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.statusPill {
+  width: fit-content;
+  border: 1px solid var(--accent-soft-border);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.28rem 0.55rem;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.eventMeta {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.eventMeta div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.eventMeta dt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.eventMeta dd {
+  margin: 0;
+}
+
+.cardLink {
+  align-self: end;
+  color: var(--primary);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+
+.emptyState,
+.errorState,
+.legacyNotice {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-1);
+  padding: 1rem;
+}
+
+.emptyState h2,
+.errorState h2,
+.legacyNotice h1 {
+  margin: 0;
+}
+
+.emptyState p,
+.errorState p,
+.legacyNotice p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+@media (min-width: 640px) {
+  .searchForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .primaryButton {
+    width: 100%;
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .carouselSlide {
+    flex-basis: 48%;
+  }
+}
+
+@media (min-width: 960px) {
+  .shell {
+    padding-top: 2rem;
+  }
+
+  .searchForm {
+    grid-template-columns: minmax(14rem, 1.6fr) repeat(4, minmax(8.5rem, 1fr)) auto;
+  }
+
+  .primaryButton {
+    width: auto;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .carouselSlide {
+    flex-basis: 33.333%;
+  }
+}
