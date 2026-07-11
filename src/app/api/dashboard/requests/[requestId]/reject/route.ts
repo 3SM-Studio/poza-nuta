@@ -1,13 +1,11 @@
-import type { NextRequest } from "next/server";
-
-import { handleOperatorQueueAction } from "../../../../../../server/operator-api/route-handlers";
+import { legacyGoneResponse } from "../../../../../../server/legacy-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export function POST(
-  request: NextRequest,
-  context: { params: Promise<{ requestId: string }> },
-) {
-  return handleOperatorQueueAction(request, context.params, "reject");
+export function POST() {
+  return legacyGoneResponse(
+    "DASHBOARD_QUEUE_ACTION_ENDPOINT_GONE",
+    "Use the event-scoped dashboard queue API.",
+  );
 }

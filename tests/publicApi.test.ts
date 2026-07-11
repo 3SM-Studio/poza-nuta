@@ -64,62 +64,27 @@ test("public API maps database timeout to controlled 503", () => {
   assert.match(source, /503/);
 });
 
-test("public active event API uses a read-only lookup path", () => {
+test("legacy public active event and queue APIs return controlled 410", () => {
+  const publicEventRouteSource = readFileSync(
+    new URL("../src/app/api/public/event/route.ts", import.meta.url),
+    "utf8",
+  );
+  const publicQueueRouteSource = readFileSync(
+    new URL("../src/app/api/public/queue/route.ts", import.meta.url),
+    "utf8",
+  );
   const publicServiceSource = readFileSync(
     new URL("../src/server/public-api/service.ts", import.meta.url),
     "utf8",
   );
-  const lifecycleSource = readFileSync(
-    new URL("../src/server/event-lifecycle.ts", import.meta.url),
-    "utf8",
-  );
-  const activeEventStart = publicServiceSource.indexOf(
-    "export async function getActivePublicEvent",
-  );
-  const activeEventEnd = publicServiceSource.indexOf(
-    "export async function searchPublicSongs",
-  );
-  const activeEventSource = publicServiceSource.slice(
-    activeEventStart,
-    activeEventEnd,
-  );
-  const readOnlyStart = lifecycleSource.indexOf(
-    "export async function getActivePublicEventReadOnly",
-  );
-  const readOnlyEnd = lifecycleSource.indexOf(
-    "export async function closeExpiredActiveEventInTransaction",
-  );
-  const readOnlySource = lifecycleSource.slice(readOnlyStart, readOnlyEnd);
 
-  assert.match(activeEventSource, /getActivePublicEventReadOnly/);
-  assert.equal(activeEventSource.includes("getActiveEventAfterLazyClose"), false);
-  assert.equal(
-    activeEventSource.includes("closeExpiredActiveEventInTransaction"),
-    false,
-  );
-  assert.equal(readOnlySource.includes(".transaction("), false);
-  assert.equal(readOnlySource.includes(".update("), false);
-  assert.match(readOnlySource, /lte\(events\.startsAt, now\)/);
-  assert.match(readOnlySource, /gt\(events\.autoCloseAt, now\)/);
-});
-
-test("public queue respects queue visibility before loading items", () => {
-  const publicServiceSource = readFileSync(
-    new URL("../src/server/public-api/service.ts", import.meta.url),
-    "utf8",
-  );
-  const queueStart = publicServiceSource.indexOf(
-    "export async function getPublicQueue",
-  );
-  const queueEnd = publicServiceSource.indexOf("function escapeLikePattern");
-  const queueSource = publicServiceSource.slice(queueStart, queueEnd);
-  const disabledBranchStart = queueSource.indexOf("if (!event.publicQueueEnabled)");
-  const firstQueueItemsStart = queueSource.indexOf("queueItems");
-
-  assert.ok(disabledBranchStart >= 0);
-  assert.ok(firstQueueItemsStart > disabledBranchStart);
-  assert.match(queueSource, /enabled: false as const/);
-  assert.match(queueSource, /showSongTitles: event\.publicShowSongTitles/);
+  assert.match(publicEventRouteSource, /PUBLIC_ACTIVE_EVENT_ENDPOINT_GONE/);
+  assert.match(publicQueueRouteSource, /PUBLIC_QUEUE_ENDPOINT_GONE/);
+  assert.match(publicEventRouteSource, /legacyGoneResponse/);
+  assert.match(publicQueueRouteSource, /legacyGoneResponse/);
+  assert.doesNotMatch(publicServiceSource, /export async function getActivePublicEvent/);
+  assert.doesNotMatch(publicServiceSource, /export async function getPublicQueue/);
+  assert.doesNotMatch(publicServiceSource, /getActivePublicEventReadOnly/);
 });
 
 test("public API response returns JSON 503 for Postgres statement timeout", async () => {

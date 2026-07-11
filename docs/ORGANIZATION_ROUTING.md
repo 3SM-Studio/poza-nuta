@@ -138,9 +138,8 @@ tokens.
 
 ## Public Queue Realtime Status
 
-The public `/queue` route does not subscribe to the private dashboard broadcast
-channel. In this stage it uses safe polling/refetch against `/api/public/queue`.
-
-True public-safe realtime should be implemented later with a separate
-Supabase Realtime broadcast policy/channel or another explicitly approved
-mechanism. Do not expose the private dashboard channel publicly.
+The global public `/queue` page has been removed, and `/api/public/queue` remains
+only as a legacy 410 endpoint. Participant queue access is session-scoped under
+`/session/[code]` and uses Realtime only as an invalidation signal before
+refetching through the session API. Do not expose the private dashboard channel
+publicly.

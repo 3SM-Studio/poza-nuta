@@ -99,18 +99,22 @@ Find karaoke:
 4. User views organizer, venue and event capabilities.
 
 Submit a guest song request:
-1. Guest opens `/events/[slug]`.
-2. Event page carries or resolves a concrete event id.
+1. Guest opens an event access link at `/session/[code]` from the organizer's QR
+   code or shared session code.
+2. The session code resolves exactly one concrete event id on the backend.
 3. Guest fills required participant data, such as pseudonym.
 4. Backend validates event visibility, publication, phase, capability and
    cancellation state.
 5. Request is stored against the exact event id.
 
 Submit as a logged-in user:
-1. User opens the same event flow.
+1. User opens the same `/session/[code]` event access flow.
 2. Backend still accepts the request by event id.
 3. If a valid user session exists, request may be linked to user profile.
 4. Account gives history and later points features, but is not required.
+
+`/events/[slug]` is the public informational catalog page for an event. The
+public slug does not grant request permission and must not create song requests.
 
 Publish an event:
 1. Authorized organization or event manager creates a draft.
@@ -300,12 +304,16 @@ Guest request is allowed when the event:
 - is not cancelled, postponed away from current time, or closed early.
 
 The backend must not require a session user for normal public requests.
+It must require a valid event access link at `/session/[code]`; the code, not a
+public slug, grants access to the event features.
 
 Every request must point to a concrete `eventId`. The backend must not globally
 search for one active event.
 
-Logged-in users may link a request to their user profile. Guest requests may be
-linked later through a secure guest session, code or claim flow.
+Logged-in users may link a request to their user profile. Guest continuity is a
+separate future session/token model for tracking a guest's own requests,
+cancellation and later account claim. It is not the same thing as the event
+access link that unlocks `/session/[code]`.
 
 ## Queue
 
@@ -407,7 +415,9 @@ Public event pages must not expose:
 - private notes;
 - unpublished/private events.
 
-Guest session tokens must not be stored in localStorage or sessionStorage.
+Future guest continuity/session tokens must not be stored in localStorage or
+sessionStorage. Event access links for `/session/[code]` are separate
+organizer-issued access codes that resolve the event.
 Prefer HttpOnly cookies or short-lived signed claim links.
 
 Participant personal data must be scoped to event operations and should be
@@ -442,7 +452,8 @@ Closed early event:
 - `@PozaNuta` is one organizer profile.
 - One account can hold many roles.
 - Guest song requests remain allowed.
-- Public request creation must use concrete event id.
+- Public request creation must use a valid `/session/[code]` event access link
+  that resolves a concrete event id.
 - Event capabilities are optional.
 - Multiple events can be live at the same time.
 - No global active public event should exist in the target model.

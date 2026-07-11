@@ -46,6 +46,40 @@ test("operator UI client uses canonical dashboard API paths", () => {
   );
 });
 
+test("legacy global operator queue routes are tombstones or redirects", () => {
+  const dashboardQueueRoute = readFileSync(
+    new URL("../src/app/api/dashboard/queue/route.ts", import.meta.url),
+    "utf8",
+  );
+  const operatorQueueRoute = readFileSync(
+    new URL("../src/app/api/operator/queue/route.ts", import.meta.url),
+    "utf8",
+  );
+  const dashboardQueuePage = readFileSync(
+    new URL("../src/app/dashboard/queue/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const operatorQueuePage = readFileSync(
+    new URL("../src/app/operator/queue/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const dashboardActionRoute = readFileSync(
+    new URL(
+      "../src/app/api/dashboard/requests/[requestId]/approve/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(dashboardQueueRoute, /DASHBOARD_QUEUE_ENDPOINT_GONE/);
+  assert.match(operatorQueueRoute, /dashboard\/queue\/route/);
+  assert.match(dashboardQueuePage, /redirect\("\/dashboard"\)/);
+  assert.match(operatorQueuePage, /redirect\("\/dashboard"\)/);
+  assert.match(dashboardActionRoute, /DASHBOARD_QUEUE_ACTION_ENDPOINT_GONE/);
+  assert.doesNotMatch(dashboardQueueRoute, /getOperatorQueue/);
+  assert.doesNotMatch(dashboardActionRoute, /handleOperatorQueueAction/);
+});
+
 test("operator me request stays on a same-origin relative API path", async (t) => {
   const originalFetch = globalThis.fetch;
   const originalVercelUrl = process.env.VERCEL_URL;

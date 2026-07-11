@@ -4,6 +4,10 @@ import { and, eq, ilike, inArray, max, sql } from "drizzle-orm";
 
 import { eventAccessLinks, events, songRequests, songs } from "../../db/schema";
 import {
+  canUseSessionPublicQueue,
+  canUseSessionSongRequests,
+} from "../../lib/session-capabilities";
+import {
   getSessionEventAccessStatus,
   isValidSessionCodeFormat,
   type SessionEventAccessStatus,
@@ -93,7 +97,7 @@ export async function resolveSessionEventAccess(
 }
 
 export async function getSessionEvent(code: string) {
-  const session = await requireActiveSession(code);
+  const session = await requireLiveSession(code);
 
   return {
     event: toPublicSessionEvent(session.event),
@@ -104,7 +108,7 @@ export async function searchSessionSongs(
   code: string,
   query: string | null,
 ) {
-  await requireActiveSession(code);
+  await requireSongRequestSession(code);
 
   if (query === null) {
     return [];
@@ -131,7 +135,16 @@ export async function searchSessionSongs(
 }
 
 export async function getSessionQueue(code: string) {
-  const session = await requireActiveSession(code);
+  const session = await requireLiveSession(code);
+
+  if (!canUseSessionPublicQueue(session.event)) {
+    return {
+      eventId: session.event.id,
+      enabled: false as const,
+      showSongTitles: session.event.publicShowSongTitles,
+      items: [],
+    };
+  }
 
   if (session.event.publicShowSongTitles) {
     const items = await getDb()
@@ -192,7 +205,7 @@ export async function createSessionRequest(
   input: SessionRequestInput,
 ) {
   return getDb().transaction(async (transaction) => {
-    const session = await requireActiveSessionInTransaction(
+    const session = await requireSongRequestSessionInTransaction(
       transaction,
       code,
     );
@@ -252,20 +265,25 @@ export async function createSessionRequest(
   });
 }
 
-async function requireActiveSession(code: string) {
+async function requireLiveSession(code: string) {
   const row = await findSessionEventByCode(code);
-  return requireActiveSessionRow(row);
+  return requireLiveSessionRow(row);
 }
 
-async function requireActiveSessionInTransaction(
+async function requireSongRequestSession(code: string) {
+  const session = await requireLiveSession(code);
+  return requireSongRequestsEnabled(session);
+}
+
+async function requireSongRequestSessionInTransaction(
   transaction: DatabaseTransaction,
   code: string,
 ) {
   const row = await findSessionEventByCodeInTransaction(transaction, code);
-  return requireActiveSessionRow(row);
+  return requireSongRequestsEnabled(requireLiveSessionRow(row));
 }
 
-function requireActiveSessionRow(row: SessionEventRow | null) {
+function requireLiveSessionRow(row: SessionEventRow | null) {
   const status = getSessionEventAccessStatus({
     link: row?.link ?? null,
     event: row?.event ?? null,
@@ -295,7 +313,11 @@ function requireActiveSessionRow(row: SessionEventRow | null) {
     );
   }
 
-  if (status === "disabled") {
+  return row;
+}
+
+function requireSongRequestsEnabled(row: SessionEventRow) {
+  if (!canUseSessionSongRequests(row.event)) {
     throw new PublicApiError(
       403,
       "SESSION_PUBLIC_REQUESTS_DISABLED",

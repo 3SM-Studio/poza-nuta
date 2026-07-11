@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import { getEventPhase } from "../src/lib/event-phase.ts";
@@ -126,57 +126,40 @@ test("songRequests true with liveQueue false still accepts requests", () => {
   );
 });
 
-test("event-scoped public request endpoint is anonymous and loads exactly the slugged event", () => {
-  const routeSource = readFileSync(
-    "src/app/api/public/events/[slug]/requests/route.ts",
-    "utf8",
-  );
+test("public event slug does not expose a song request creation endpoint", () => {
   const legacyRouteSource = readFileSync(
     "src/app/api/public/requests/route.ts",
     "utf8",
   );
   const serviceSource = readFileSync("src/server/public-api/service.ts", "utf8");
-  const createStart = serviceSource.indexOf(
-    "export async function createPublicRequestForEventSlug",
-  );
-  const createEnd = serviceSource.indexOf("export const createPublicRequest");
-  const createSource = serviceSource.slice(createStart, createEnd);
+  const clientSource = readFileSync("src/components/public/api.ts", "utf8");
 
-  assert.match(routeSource, /params: Promise<\{ slug: string \}>/);
-  assert.match(routeSource, /createPublicRequestForEventSlug/);
-  assert.doesNotMatch(routeSource, /requireOperatorSession|createServerClient|getUser|getSession/);
+  assert.equal(
+    existsSync("src/app/api/public/events/[slug]/requests/route.ts"),
+    false,
+  );
   assert.match(legacyRouteSource, /PUBLIC_REQUEST_ENDPOINT_GONE/);
-  assert.match(legacyRouteSource, /410/);
+  assert.match(
+    readFileSync("src/server/legacy-api.ts", "utf8"),
+    /status: 410/,
+  );
   assert.doesNotMatch(legacyRouteSource, /createPublicRequest/);
   assert.doesNotMatch(legacyRouteSource, /validatePublicRequestInput/);
-  assert.match(createSource, /where\(eq\(events\.slug, slug\)\)/);
-  assert.match(createSource, /event\.visibility !== "public"/);
-  assert.match(createSource, /event\.publishedAt/);
-  assert.match(createSource, /songRequestsEnabled/);
-  assert.match(serviceSource, /getEventPhase/);
-  assert.match(createSource, /eventId: event\.id/);
-  assert.doesNotMatch(createSource, /getActivePublicEvent/);
-  assert.doesNotMatch(createSource, /DEFAULT_WORKSPACE_HANDLE/);
-  assert.doesNotMatch(createSource, /isActivePublicEvent/);
-  assert.doesNotMatch(createSource, /publicQueueEnabled/);
+  assert.doesNotMatch(serviceSource, /createPublicRequestForEventSlug/);
+  assert.doesNotMatch(serviceSource, /export const createPublicRequest/);
+  assert.doesNotMatch(clientSource, /createPublicRequest/);
+  assert.doesNotMatch(clientSource, /\/api\/public\/events\/.*requests/);
 });
 
-test("parallel live events are accepted independently and missing slug is rejected", () => {
+test("parallel live events can be request-eligible without relying on global public queue visibility", () => {
   const eventA = { ...liveRequestEvent, slug: "karaoke-a", id: 101 };
   const eventB = { ...liveRequestEvent, slug: "karaoke-b", id: 202 };
-  const serviceSource = readFileSync("src/server/public-api/service.ts", "utf8");
-  const routeSource = readFileSync(
-    "src/app/api/public/events/[slug]/requests/route.ts",
-    "utf8",
-  );
+  const queueHiddenEvent = { ...liveRequestEvent, publicQueueEnabled: false };
 
   assert.equal(canAcceptPublicRequests(eventA, referenceNow), true);
   assert.equal(canAcceptPublicRequests(eventB, referenceNow), true);
+  assert.equal(canAcceptPublicRequests(queueHiddenEvent, referenceNow), true);
   assert.notEqual(eventA.id, eventB.id);
-  assert.match(serviceSource, /eventId: event\.id/);
-  assert.doesNotMatch(serviceSource, /limit\(1\);\s*const \[event\].*startsAt/s);
-  assert.match(routeSource, /const \{ slug \} = await context\.params/);
-  assert.match(serviceSource, /PUBLIC_EVENT_NOT_FOUND/);
 });
 
 test("public song search is global catalog search without active event selection", () => {
@@ -185,7 +168,7 @@ test("public song search is global catalog search without active event selection
     "export async function searchPublicSongs",
   );
   const searchEnd = serviceSource.indexOf(
-    "export async function createPublicRequestForEventSlug",
+    "function escapeLikePattern",
   );
   const searchSource = serviceSource.slice(searchStart, searchEnd);
 
@@ -197,21 +180,16 @@ test("public song search is global catalog search without active event selection
   assert.doesNotMatch(searchSource, /from\(events\)/);
 });
 
-test("event page form submits requests to the scoped endpoint for the loaded event slug", () => {
+test("public event page is informational and does not render a request form", () => {
   const pageSource = readFileSync("src/app/events/[slug]/page.tsx", "utf8");
-  const formSource = readFileSync(
-    "src/components/public/public-event-request-form.tsx",
-    "utf8",
-  );
-  const clientSource = readFileSync("src/components/public/api.ts", "utf8");
 
   assert.match(pageSource, /getPublicEventBySlug\(slug/);
-  assert.match(pageSource, /<PublicEventRequestForm/);
-  assert.match(pageSource, /eventSlug=\{event\.slug\}/);
-  assert.match(formSource, /createPublicRequest\(\{\s*eventSlug,/s);
-  assert.match(
-    clientSource,
-    /`\/api\/public\/events\/\$\{encodeURIComponent\(input\.eventSlug\)\}\/requests`/,
+  assert.match(pageSource, /kod QR/);
+  assert.doesNotMatch(pageSource, /PublicEventRequestForm/);
+  assert.doesNotMatch(pageSource, /createPublicRequest/);
+  assert.doesNotMatch(pageSource, /searchPublicSongs/);
+  assert.equal(
+    existsSync("src/components/public/public-event-request-form.tsx"),
+    false,
   );
-  assert.doesNotMatch(formSource, /getPublicEvent|getActivePublicEvent/);
 });

@@ -20,7 +20,8 @@ seed data, and `db:check` have passed. The iSing catalog import has completed:
 
 The dark/neon theme and logo branding are implemented. Public navigation now
 shows an entry point to the dashboard only when an active operator session is
-present, and `/queue` has a logo, separator, title, and safe polling fallback.
+present. The global `/queue` page has been removed; participant queue access is
+session-scoped.
 
 Multi-organization dashboard routing has started: organization maps to
 `workspaces`, `organizationId` maps to `workspaces.public_id`, and org pages
@@ -49,7 +50,7 @@ URL.
 | Google account linking | NOT STARTED | `/dashboard/account/me` is read-only and does not call link/unlink identity APIs. | Decide later whether Google linking is needed after dashboard smoke. |
 | Auth redirect URLs | BLOCKER FOR DEMO | Required for production auth, but no evidence in repo proves Supabase dashboard redirect URLs are configured. | Add Vercel production URL to Supabase Auth redirect URLs. |
 | Public landing | DONE | `/` exists in `src/app/page.tsx`; public request page supports search/request flow and dashboard entry visibility for active operators. | Smoke test on production URL. |
-| Public queue | PARTIAL | `/queue` exists; public queue API and UI are implemented; header branding is updated; the client now has polling/refetch fallback. No public-safe broadcast channel exists yet. | Smoke test queue visibility settings and polling on production URL; plan public-safe realtime separately. |
+| Public queue | PARTIAL | The global `/queue` page is removed and `/api/public/queue` is a legacy 410 tombstone. Participant queue access is available through `/session/[code]` when enabled for the event. | Smoke test session-scoped queue visibility and Realtime invalidation on the production URL. |
 | Public request flow | PARTIAL | Public search and request APIs exist and validate input; requests are stored against the active event. No participant session gating yet. | For demo: smoke test request creation. For production: add session/anti-spam controls. |
 | Dashboard | PARTIAL | `/dashboard` exists and is protected by Supabase session plus local operator record. Authenticated production QA is not yet recorded. | Run authenticated dashboard smoke on Vercel. |
 | Dashboard queue | DONE | `/dashboard/queue` exists; operator actions and source badges are implemented; tests cover transition policy and client paths. | Confirm on production with real request data. |
@@ -58,7 +59,7 @@ URL.
 | Organization settings | PARTIAL | Org-scoped settings can show `public_id`, update name, and archive by setting `workspaces.active=false`. Mutations are owner-only. There is no full audit trail or last-owner protection for this org-scoped archive flow yet. | Smoke test on Vercel with a disposable organization before using on important data. |
 | Organization team | PARTIAL | `/dashboard/org/[organizationId]/team` lists local workspace members read-only with local operator name/auth id, role, and active state. It does not invite users or query Supabase Auth admin data. | Add member invite/role management later with explicit RBAC and service-role design. |
 | Account route | DONE | `/dashboard/account/me` displays safe read-only Auth/operator details and login methods without tokens. | Smoke test after login on Vercel. |
-| Realtime queue | PARTIAL | Migration `0004_dashboard_queue_realtime_broadcast.sql` creates a private dashboard trigger/policy; dashboard client subscribes privately and refetches via API. Public `/queue` uses polling fallback only. | Verify dashboard realtime with two authenticated windows; design public-safe broadcast separately. |
+| Realtime queue | PARTIAL | Migration `0004_dashboard_queue_realtime_broadcast.sql` creates a private dashboard trigger/policy; dashboard and session queue clients use Realtime as an invalidation signal and refetch through event-scoped APIs. | Verify dashboard and session-scoped Realtime with authenticated and participant browsers. |
 | Event lifecycle | DONE | Start, extend, close, lazy auto-close, warning helper, and audit logging exist with tests. | Production smoke start/extend/close only with a safe demo event. |
 | Event access links | DONE | Backend and dashboard UI create/list/revoke links; raw code is only returned on create; tests cover code generation and hashing. | Decide whether access links remain auxiliary or feed the future QR/session flow. |
 | iSing importer | DONE | `pnpm db:import:ising` exists; safety guard, dry-run, pagination, mapping, and tests are implemented. | Do not modify unless import quality or iSing API behavior changes. |
@@ -84,7 +85,7 @@ URL.
   workspace.
 - Run public request to dashboard queue smoke.
 - Confirm dashboard realtime queue updates in two authenticated windows and
-  public `/queue` polling refreshes without errors.
+  session-scoped participant queue invalidation refreshes without errors.
 - Confirm Vercel uses the same Supabase database that contains the imported
   iSing catalog.
 

@@ -211,6 +211,13 @@ test("event queue reads and writes are scoped to the resolved event", () => {
     new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
     "utf8",
   );
+  const itemStart = serviceSource.indexOf(
+    "async function requireDashboardEventQueueItem",
+  );
+  const renumberStart = serviceSource.indexOf(
+    "async function renumberApprovedQueue",
+  );
+  const itemSource = serviceSource.slice(itemStart, renumberStart);
 
   assert.match(
     serviceSource,
@@ -225,9 +232,57 @@ test("event queue reads and writes are scoped to the resolved event", () => {
     /eq\(songRequests\.id, input\.requestId\),\s*eq\(songRequests\.eventId, context\.event\.id\)/s,
   );
   assert.match(
+    itemSource,
+    /eq\(songRequests\.id, requestId\),\s*eq\(songRequests\.eventId, eventId\)/s,
+  );
+  assert.match(itemSource, /404,\s*"REQUEST_NOT_FOUND"/s);
+  assert.match(
+    itemSource,
+    /"The request does not belong to this event\."/,
+  );
+  assert.match(
     serviceSource,
     /eq\(events\.id, eventId\), eq\(events\.workspaceId, organization\.id\)/,
   );
+});
+
+test("event queue isolation returns safe 404 before mutating a request from another event", () => {
+  const serviceSource = readFileSync(
+    new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
+    "utf8",
+  );
+  const actionStart = serviceSource.indexOf(
+    "export async function applyDashboardOrganizationEventQueueActionForAuthUser",
+  );
+  const moveStart = serviceSource.indexOf(
+    "export async function moveDashboardOrganizationEventQueueRequestForAuthUser",
+  );
+  const actionSource = serviceSource.slice(actionStart, moveStart);
+  const itemStart = serviceSource.indexOf(
+    "async function requireDashboardEventQueueItem",
+  );
+  const renumberStart = serviceSource.indexOf(
+    "async function renumberApprovedQueue",
+  );
+  const itemSource = serviceSource.slice(itemStart, renumberStart);
+
+  assert.match(actionSource, /const \[queueRequest\] = await transaction/);
+  assert.match(actionSource, /\.for\("update"\)/);
+  assert.match(
+    actionSource,
+    /eq\(songRequests\.id, input\.requestId\),\s*eq\(songRequests\.eventId, context\.event\.id\)/s,
+  );
+  assert.match(actionSource, /if \(!queueRequest\) \{/);
+  assert.match(actionSource, /404,\s*"REQUEST_NOT_FOUND"/s);
+  assert.match(
+    actionSource,
+    /eq\(songRequests\.id, queueRequest\.id\),\s*eq\(songRequests\.eventId, context\.event\.id\)/s,
+  );
+  assert.match(
+    itemSource,
+    /eq\(songRequests\.id, requestId\),\s*eq\(songRequests\.eventId, eventId\)/s,
+  );
+  assert.match(itemSource, /404,\s*"REQUEST_NOT_FOUND"/s);
 });
 
 test("event queue mutations require active workspace membership", () => {
@@ -339,13 +394,13 @@ test("public queue broadcast migration does not expose song requests to browsers
   );
 });
 
-test("public session and global queues keep their existing privacy paths", () => {
+test("session queue keeps privacy paths and global public queue is removed", () => {
   const sessionServiceSource = readFileSync(
     new URL("../src/server/session-api/service.ts", import.meta.url),
     "utf8",
   );
-  const publicServiceSource = readFileSync(
-    new URL("../src/server/public-api/service.ts", import.meta.url),
+  const publicQueueRouteSource = readFileSync(
+    new URL("../src/app/api/public/queue/route.ts", import.meta.url),
     "utf8",
   );
   const sessionQueueStart = sessionServiceSource.indexOf(
@@ -373,8 +428,8 @@ test("public session and global queues keep their existing privacy paths", () =>
     /eq\(songRequests\.eventId, session\.event\.id\)/,
   );
   assert.doesNotMatch(hiddenSessionQueueSource, /songs\.title|songs\.artist/);
-  assert.match(publicServiceSource, /export async function getPublicQueue/);
-  assert.match(publicServiceSource, /showSongTitles: event\.publicShowSongTitles/);
+  assert.match(publicQueueRouteSource, /PUBLIC_QUEUE_ENDPOINT_GONE/);
+  assert.doesNotMatch(publicQueueRouteSource, /getPublicQueue/);
 });
 
 test("event queue panel uses Supabase Realtime invalidation without polling", () => {

@@ -7,7 +7,6 @@ export type SessionEventAccessStatus =
   | "invalid"
   | "scheduled"
   | "closed"
-  | "disabled"
   | "active";
 
 export type SessionEventAccessLinkInput = {
@@ -21,7 +20,6 @@ export type SessionEventAccessEventInput = {
   autoCloseAt: Date | null;
   endsAt: Date;
   closedAt: Date | null;
-  songRequestsEnabled: boolean;
 } | null;
 
 export function isValidSessionCodeFormat(code: string) {
@@ -51,10 +49,6 @@ export function getSessionEventAccessStatus({
 
   if (phase === "upcoming") {
     return "scheduled";
-  }
-
-  if (!event.songRequestsEnabled) {
-    return "disabled";
   }
 
   return "active";

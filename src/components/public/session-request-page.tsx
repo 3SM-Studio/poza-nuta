@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
+import { getSessionCapabilityState } from "@/lib/session-capabilities";
 import {
   normalizeSessionRequesterName,
   SESSION_REQUESTER_NAME_MAX_LENGTH,
@@ -50,9 +51,16 @@ export function SessionRequestPage({
   const [queue, setQueue] = useState<PublicQueueResponse | null>(null);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [isRefreshingQueue, setIsRefreshingQueue] = useState(false);
+  const capabilities = getSessionCapabilityState(event);
+  const canSubmitSongRequests = capabilities.canSubmitSongRequests;
+  const canViewPublicQueue = capabilities.canViewPublicQueue;
 
   const loadQueue = useCallback(
     async (signal?: AbortSignal) => {
+      if (!canViewPublicQueue) {
+        return;
+      }
+
       try {
         const response = await getSessionQueue(code, signal);
 
@@ -66,14 +74,18 @@ export function SessionRequestPage({
         setQueueMessage(getQueueErrorMessage(caughtError));
       }
     },
-    [code],
+    [canViewPublicQueue, code],
   );
   const liveStatus = usePublicQueueRealtime(
-    event.id,
+    canViewPublicQueue ? event.id : null,
     async (_reason, signal) => loadQueue(signal),
   );
 
   useEffect(() => {
+    if (!canViewPublicQueue) {
+      return;
+    }
+
     const controller = new AbortController();
 
     async function initializeQueue() {
@@ -85,7 +97,7 @@ export function SessionRequestPage({
     return () => {
       controller.abort();
     };
-  }, [loadQueue]);
+  }, [canViewPublicQueue, loadQueue]);
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,7 +159,9 @@ export function SessionRequestPage({
       setSearchResults([]);
       setRequesterName("");
       setSubmitMessage(REQUEST_SUCCESS_MESSAGE);
-      await loadQueue();
+      if (canViewPublicQueue) {
+        await loadQueue();
+      }
     } catch (caughtError) {
       setSubmitMessage(getSubmitErrorMessage(caughtError));
     } finally {
@@ -156,6 +170,10 @@ export function SessionRequestPage({
   }
 
   async function refreshQueue() {
+    if (!canViewPublicQueue) {
+      return;
+    }
+
     setIsRefreshingQueue(true);
     await loadQueue();
     setIsRefreshingQueue(false);
@@ -163,6 +181,18 @@ export function SessionRequestPage({
 
   return (
     <>
+      {capabilities.allSessionFeaturesDisabled ? (
+        <section className={styles.publicSection}>
+          <h2>Sesja wydarzenia</h2>
+          <p className={styles.inlineMessage} role="status">
+            Zgłoszenia piosenek i publiczny podgląd kolejki są wyłączone dla
+            tej sesji.
+          </p>
+        </section>
+      ) : null}
+
+      {canSubmitSongRequests ? (
+        <>
       <section className={styles.publicSection}>
         <div className={styles.sectionHeading}>
           <h2>Wybierz piosenkę</h2>
@@ -305,7 +335,10 @@ export function SessionRequestPage({
           </div>
         ) : null}
       </section>
+        </>
+      ) : null}
 
+      {canViewPublicQueue ? (
       <section className={styles.publicSection}>
         <div className={styles.sectionHeading}>
           <div>
@@ -366,6 +399,7 @@ export function SessionRequestPage({
           </p>
         )}
       </section>
+      ) : null}
     </>
   );
 }

@@ -1,18 +1,11 @@
-import {
-  jsonResponse,
-  publicApiErrorResponse,
-} from "../../../../server/public-api/responses";
-import { getActivePublicEvent } from "../../../../server/public-api/service";
+import { legacyGoneResponse } from "../../../../server/legacy-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
-  try {
-    const event = await getActivePublicEvent("public.event");
-
-    return jsonResponse({ event });
-  } catch (error) {
-    return publicApiErrorResponse(error);
-  }
+  return legacyGoneResponse(
+    "PUBLIC_ACTIVE_EVENT_ENDPOINT_GONE",
+    "Use /api/public/events or /api/session/[code]/event.",
+  );
 }

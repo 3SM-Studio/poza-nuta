@@ -1,13 +1,3 @@
-export type PublicEvent = {
-  id: number;
-  name: string;
-  venue: string | null;
-  startsAt: string;
-  status: "active";
-  publicQueueEnabled: boolean;
-  publicShowSongTitles: boolean;
-};
-
 export type PublicSong = {
   id: number;
   source: "ising" | "karafun" | "manual";
@@ -64,43 +54,12 @@ export class PublicClientError extends Error {
   }
 }
 
-export async function getPublicEvent() {
-  const response = await requestJson<{ event: PublicEvent }>(
-    "/api/public/event",
-  );
-
-  return response.event;
-}
-
 export async function searchPublicSongs(query: string) {
   const response = await requestJson<{ items: PublicSong[] }>(
     `/api/public/songs/search?q=${encodeURIComponent(query)}`,
   );
 
   return response.items;
-}
-
-export function createPublicRequest(input: {
-  eventSlug: string;
-  songId: number;
-  singerName: string;
-  note: string | null;
-}) {
-  return requestJson(
-    `/api/public/events/${encodeURIComponent(input.eventSlug)}/requests`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        songId: input.songId,
-        singerName: input.singerName,
-        note: input.note,
-      }),
-    },
-  );
-}
-
-export function getPublicQueue(signal?: AbortSignal) {
-  return requestJson<PublicQueueResponse>("/api/public/queue", { signal });
 }
 
 export async function getDashboardEntryStatus() {

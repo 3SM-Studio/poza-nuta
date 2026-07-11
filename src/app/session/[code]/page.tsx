@@ -40,6 +40,7 @@ export default async function SessionPage({ params }: SessionPageProps) {
               alt="Poza Nutą"
               width={1254}
               height={1254}
+              loading="eager"
             />
           </Link>
           <h1>{event?.name ?? "Sesja karaoke"}</h1>
@@ -70,16 +71,12 @@ function getSessionAccessMessage(status: ResolveStatus) {
       return "Wydarzenie jeszcze się nie rozpoczęło.";
     case "closed":
       return "Zgłoszenia są już zamknięte.";
-    case "disabled":
-      return "Publiczne zgłoszenia są wyłączone.";
     default:
       return "Link sesji jest nieprawidłowy albo wygasł.";
   }
 }
 
-function serializeSessionEvent(
-  event: PublicSessionEvent,
-): SessionEvent {
+function serializeSessionEvent(event: PublicSessionEvent): SessionEvent {
   return {
     id: event.id,
     name: event.name,

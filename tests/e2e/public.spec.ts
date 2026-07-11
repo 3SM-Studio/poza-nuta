@@ -66,13 +66,10 @@ test.describe("public smoke", () => {
     );
   });
 
-  test("public queue loads without dashboard auth", async ({ page }) => {
-    await page.goto("/queue");
+  test("global public queue page is removed", async ({ page }) => {
+    const response = await page.goto("/queue");
 
-    await expect(
-      page.getByRole("heading", { name: "Publiczna kolejka" }),
-    ).toBeVisible();
-    await expect(page.locator("main")).toBeVisible();
+    expect(response?.status()).toBe(404);
   });
 
   test("session route loads without dashboard auth", async ({ page }) => {

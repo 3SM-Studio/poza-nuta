@@ -645,7 +645,7 @@ test("account is in avatar menu and not a main header nav link", () => {
   assert.match(userMenuSource, /Wyloguj/);
 });
 
-test("dashboard logo links to dashboard while public logos link home", () => {
+test("dashboard logo links to dashboard while the public request logo links home", () => {
   const dashboardShellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
@@ -654,21 +654,12 @@ test("dashboard logo links to dashboard while public logos link home", () => {
     "src/components/public/public-request-page.tsx",
     "utf8",
   );
-  const publicQueueSource = readFileSync(
-    "src/components/public/public-queue-page.tsx",
-    "utf8",
-  );
-
   assert.match(
     dashboardShellSource,
     /className=\{styles\.dashboardBrand\}[\s\S]*?href="\/dashboard"/,
   );
   assert.match(
     publicRequestSource,
-    /className=\{styles\.brand\}[\s\S]*?href="\/"/,
-  );
-  assert.match(
-    publicQueueSource,
     /className=\{styles\.brand\}[\s\S]*?href="\/"/,
   );
 });
@@ -1117,11 +1108,7 @@ test("account identity sanitizer exposes login methods without tokens", () => {
   assert.equal(JSON.stringify(identities).includes("secret"), false);
 });
 
-test("public queue uses Supabase Realtime invalidation without data polling", () => {
-  const pageSource = readFileSync(
-    "src/components/public/public-queue-page.tsx",
-    "utf8",
-  );
+test("session queue uses Supabase Realtime invalidation without data polling", () => {
   const sessionPageSource = readFileSync(
     "src/components/public/session-request-page.tsx",
     "utf8",
@@ -1131,15 +1118,11 @@ test("public queue uses Supabase Realtime invalidation without data polling", ()
     "utf8",
   );
 
-  assert.match(pageSource, /usePublicQueueRealtime/);
   assert.match(sessionPageSource, /usePublicQueueRealtime/);
   assert.match(hookSource, /\.on\("broadcast"/);
   assert.match(hookSource, /supabase\.removeChannel\(channel\)/);
   assert.match(hookSource, /new AbortController\(\)/);
-  assert.equal(pageSource.includes("public-queue-polling"), false);
   assert.equal(sessionPageSource.includes("public-queue-polling"), false);
-  assert.equal(pageSource.includes("setInterval"), false);
-  assert.equal(pageSource.includes("setTimeout"), false);
   assert.equal(sessionPageSource.includes("setInterval"), false);
   assert.equal(sessionPageSource.includes("setTimeout"), false);
 });
@@ -1173,15 +1156,20 @@ test("dashboard routes expose skeleton loading fallbacks", () => {
   }
 });
 
-test("public queue renders skeleton first and keeps stale queue on refresh errors", () => {
+test("global public queue page is removed and session queue handles refresh errors", () => {
+  const queueRouteSource = readFileSync(
+    "src/app/api/public/queue/route.ts",
+    "utf8",
+  );
   const source = readFileSync(
-    "src/components/public/public-queue-page.tsx",
+    "src/components/public/session-request-page.tsx",
     "utf8",
   );
 
-  assert.match(source, /PublicQueueSkeleton/);
-  assert.match(source, /showInitialError = !isLoading && error && !queue/);
-  assert.match(source, /showRefreshError = !isLoading && error && queue/);
+  assert.equal(existsSync("src/app/queue/page.tsx"), false);
+  assert.match(queueRouteSource, /PUBLIC_QUEUE_ENDPOINT_GONE/);
+  assert.match(source, /queueMessage/);
+  assert.match(source, /setQueueMessage\(getQueueErrorMessage\(caughtError\)\)/);
   assert.equal(source.includes("!error && queue?.enabled"), false);
   assert.equal(source.includes("!error && queue && !queue.enabled"), false);
 });

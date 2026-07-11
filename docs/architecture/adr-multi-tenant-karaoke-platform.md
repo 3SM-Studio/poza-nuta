@@ -178,11 +178,15 @@ request.
 
 The backend can optionally link a request to a user profile when a valid session
 exists, but the public guest flow remains available when the event allows song
-requests.
+requests. The Stage 1 guest flow starts from an event access link
+`/session/[code]`; `/events/[slug]` remains informational and does not grant
+request permission.
 
-Guest request sessions must use a secure server-controlled mechanism, such as
-HttpOnly cookies or signed claim links. Do not store participant tokens in
-`localStorage` or `sessionStorage`.
+Future guest continuity sessions, used for tracking a guest's own requests,
+cancellation and later account claim, must use a secure server-controlled
+mechanism, such as HttpOnly cookies or signed claim links. Do not store
+participant tokens in `localStorage` or `sessionStorage`. These future
+continuity sessions are distinct from organizer-issued event access links.
 
 ### First Publication Requires Moderation
 
@@ -204,7 +208,8 @@ performances, not for request creation.
 - `workspace_members` maps to organization memberships during transition.
 - Text `events.venue` and `events.city` are insufficient for the target venue
   model; event pages need `venueId` and historical venue snapshots where needed.
-- Public request routes must be rewritten to accept and validate `eventId`.
+- Public request routes must be scoped by an event access link or another
+  concrete event reference; a public slug alone must not create a request.
 - Public event listing and detail can reuse catalog concepts, but must not rely
   on default workspace selection.
 - Queue endpoints must be scoped to event id or session code, never to a global
@@ -248,8 +253,9 @@ capabilities.
 - Never trust client-supplied role, organization id, venue id or event
   permission.
 - All protected reads and writes must enforce server-side authorization.
-- Public request endpoints must validate event id, visibility, publication,
-  phase, cancellation state and capability.
+- Public request endpoints must resolve a concrete event from an event access
+  link or another explicit event reference, then validate visibility,
+  publication, phase, cancellation state and capability.
 - Public endpoints need rate limiting before broad public launch.
 - Public contracts must not expose internal workspace ids, operator ids, access
   link hashes, guest tokens or private notes.
@@ -279,7 +285,7 @@ Minimum tests for implementation stages:
 
 - concrete `eventId` request acceptance and rejection;
 - private/unpublished/cancelled/ended event rejection;
-- guest request without session;
+- guest request without user account but with a valid event access link;
 - logged-in request optionally linked to user profile;
 - multiple simultaneous live events;
 - capability separation between `songRequests` and `liveQueue`;

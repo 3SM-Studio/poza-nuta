@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import styles from "@/components/public/public.module.css";
-import { PublicEventRequestForm } from "@/components/public/public-event-request-form";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { PublicApiError } from "@/server/public-api/errors";
 import { getPublicEventBySlug } from "@/server/public-api/service";
@@ -54,6 +53,7 @@ export default async function PublicEventPage({ params }: PublicEventPageProps) 
               alt="Poza Nutą"
               width={1254}
               height={1254}
+              loading="eager"
             />
           </Link>
           <p className={styles.statusPill}>{formatPublicStatus(event.publicStatus)}</p>
@@ -108,9 +108,6 @@ export default async function PublicEventPage({ params }: PublicEventPageProps) 
           </div>
         </section>
 
-        {event.requestsEnabled ? (
-          <PublicEventRequestForm eventName={event.name} eventSlug={event.slug} />
-        ) : null}
       </div>
     </main>
   );
@@ -172,6 +169,6 @@ function getStateDescription(status: string, requestsEnabled: boolean) {
   }
 
   return requestsEnabled
-    ? "Możesz dodać swoje zgłoszenie do tego wydarzenia."
+    ? "Zgłoszenia piosenek są dostępne podczas wydarzenia przez kod QR udostępniony przez organizatora."
     : "Wydarzenie trwa, ale publiczne zgłoszenia są teraz zamknięte.";
 }

@@ -56,7 +56,8 @@ The target model has:
 - Supabase Auth remains identity only.
 - Local tables remain the source of business permissions.
 - Browser code must not read business tables through Supabase.
-- Public request creation can be anonymous.
+- Public request creation can be anonymous, but must be entered through a valid
+  event access link such as `/session/[code]`.
 - A logged-in user may optionally link a request to their profile.
 - Publishing an event does not mean the event has started.
 - Many events may be live at the same time.
@@ -164,9 +165,11 @@ Source of truth: `src/db/schema.ts`.
 
 `event_access_links`
 
-- Current role: session/share code links for an event.
+- Current role: organizer-issued event access links for `/session/[code]`,
+  resolving one concrete event id.
 - Compatible as a transition mechanism if scoped and audited.
-- Target gap: guest request sessions and claim flows need separate token design.
+- Target gap: guest continuity sessions and claim flows need separate token
+  design; they are not the same as event access links.
 
 `song_requests`
 
@@ -216,9 +219,9 @@ profile relations or capabilities.
 `src/app/events/[slug]/page.tsx` reads through the public service, which is good
 for the server boundary.
 
-The current public event contract does not expose a stable event id. The target
-request form must submit a concrete event id, so the detail contract needs to be
-reworked before public requests can be correct.
+The public event detail page is informational. It must not render the request
+form and the public slug must not authorize creating a request. Song requests
+start from `/session/[code]`, where the code resolves the concrete event id.
 
 ### Public Request Flow
 
@@ -236,10 +239,10 @@ It also filters by:
 
 This is incompatible with the target platform model.
 
-Target flow:
+Target flow superseded by the Stage 1 session decision:
 
-1. Request includes concrete `eventId`.
-2. Backend loads exactly that event.
+1. Request enters through `/session/[code]`.
+2. Backend resolves the code to exactly one event.
 3. Backend validates publication and public visibility.
 4. Backend validates `songRequests` capability.
 5. Backend validates phase from `startsAt` and `endsAt`.
@@ -254,7 +257,7 @@ target design:
 
 - search can be global song catalog search, optionally event-scoped by
   capability;
-- public queue must be scoped to event id or secure session code.
+- public queue must be scoped to a secure session code.
 
 ### Dashboard
 
@@ -341,12 +344,15 @@ This section classifies the actual uncommitted diff observed on
   neutral platform.
 - `src/server/event-lifecycle.ts`: `DEFAULT_WORKSPACE_HANDLE` and active public
   event lookup remain central.
-- `src/server/public-api/service.ts`: public request, search and queue still
-  rely on a default active/current event path.
+- `src/server/public-api/service.ts`: historical finding superseded for
+  Stage 1 by session-scoped requests; public event detail remains
+  informational, and request/search/queue capabilities belong under
+  `/session/[code]`.
 - `src/lib/public-request-eligibility.ts`: uses `publicQueueEnabled` as request
   eligibility instead of a `songRequests` capability.
-- `src/app/events/[slug]/page.tsx`: detail copy and queue fields still expose
-  current queue-centric model.
+- `src/app/events/[slug]/page.tsx`: historical finding superseded for
+  Stage 1; the page should remain informational and must not expose request
+  creation.
 - `tests/publicApi.test.ts`: protects active public event source-code behavior
   and default current-event assumptions.
 
@@ -361,8 +367,9 @@ This section classifies the actual uncommitted diff observed on
   policy.
 - `tests/dashboardOrganizationRouting.test.ts`: assertions requiring
   `EVENT_PUBLICATION_TIME_OVERLAP` protect the wrong invariant.
-- Any route or test path that keeps public request creation without concrete
-  `eventId` needs rewrite rather than incremental polishing.
+- Any route or test path that keeps public request creation without a valid
+  event access link resolving a concrete event id needs rewrite rather than
+  incremental polishing.
 
 ### 5. Tests Protecting Wrong Assumptions
 
@@ -620,10 +627,11 @@ migrations. It is not itself a migration plan or approval to change the schema.
 ### Stage 1: Generic Event Catalog Core
 
 - Neutral homepage and public catalog language.
-- Add concrete `eventId` to public request flow.
+- Add event access links for request flow so `/session/[code]` resolves a
+  concrete event id.
 - Introduce `endsAt` beside `autoCloseAt` with backfill.
 - Introduce `event_capabilities` for at least `songRequests` and `liveQueue`.
-- Keep guest requests without account.
+- Keep guest requests without account, but require a valid event access link.
 - Remove public request dependency on default active event.
 
 ### Stage 2: Public Profiles, Organizations And Venues
@@ -646,7 +654,7 @@ migrations. It is not itself a migration plan or approval to change the schema.
 ### Stage 4: Queue, Guest Sessions And History
 
 - Expand request statuses.
-- Add guest request sessions.
+- Add guest continuity sessions.
 - Add event-scoped queue and participant request tracking.
 - Add request-to-account claim flow.
 
@@ -662,8 +670,8 @@ migrations. It is not itself a migration plan or approval to change the schema.
 **Future recommendation.**
 
 - `docs/platform-model-freeze`: only the product model, ADR and audit.
-- `feat/platform-event-core`: `eventId` request flow, `endsAt`, capabilities and
-  neutral catalog core.
+- `feat/platform-event-core`: session-scoped request flow, `endsAt`,
+  capabilities and neutral catalog core.
 - `feat/public-profiles-venues`: public profiles, organizations, venues and
   `@handle` routing.
 - `feat/public-signup-moderation`: public signup, onboarding, claims and
@@ -684,7 +692,7 @@ one feature without separating or rewriting the incompatible parts.
    not imply the wrong platform model.
 4. Commit schema expansion for `endsAt` and capabilities with a Drizzle
    migration, but do not run production migrations without approval.
-5. Commit concrete `eventId` public request flow and negative tests.
+5. Commit session-scoped public request flow and negative tests.
 6. Commit public profile/organization/venue expansion in a separate branch.
 
 ## First Safe Implementation Step
@@ -693,15 +701,15 @@ one feature without separating or rewriting the incompatible parts.
 
 The first safe implementation step after this audit is not UI polishing.
 
-It is to make public request creation event-scoped:
+It is to make public request creation session-scoped and event-resolved:
 
-1. public event detail contract exposes a safe event id or request endpoint
-   token;
-2. request form posts the concrete event reference;
-3. backend loads exactly that event;
-4. backend validates public visibility, publication, `songRequests`
+1. public event detail stays informational and does not expose a request form;
+2. event access link `/session/[code]` resolves one concrete event id;
+3. request form posts through the session-scoped endpoint;
+4. backend loads exactly that event from the access link;
+5. backend validates public visibility, publication, `songRequests`
    capability, phase and cancellation/closed-early state;
-5. tests prove two simultaneous live events can both accept requests
+6. tests prove two simultaneous live events can both accept requests
    independently.
 
 This step removes the most dangerous target-model mismatch: global active event

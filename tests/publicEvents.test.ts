@@ -404,8 +404,7 @@ test("public catalog API filters unpublished private and slugless events", () =>
   assert.match(detailSource, /PUBLIC_EVENT_NOT_FOUND/);
 });
 
-test("public event routes exist without replacing the karaoke home page", () => {
-  const homeSource = readFileSync("src/app/page.tsx", "utf8");
+test("public event detail route stays informational without request form", () => {
   const listRouteSource = readFileSync("src/app/api/public/events/route.ts", "utf8");
   const detailRouteSource = readFileSync(
     "src/app/api/public/events/[slug]/route.ts",
@@ -413,11 +412,14 @@ test("public event routes exist without replacing the karaoke home page", () => 
   );
   const pageSource = readFileSync("src/app/events/[slug]/page.tsx", "utf8");
 
-  assert.match(homeSource, /PublicRequestPage/);
   assert.match(listRouteSource, /listPublicEvents/);
   assert.match(detailRouteSource, /getPublicEventBySlug/);
   assert.match(pageSource, /getPublicEventBySlug/);
   assert.match(pageSource, /notFound\(\)/);
+  assert.match(pageSource, /kod QR/);
+  assert.doesNotMatch(pageSource, /PublicEventRequestForm/);
+  assert.doesNotMatch(pageSource, /searchPublicSongs/);
+  assert.doesNotMatch(pageSource, /createPublicRequest/);
 });
 
 test("publishing remains behind event manager RBAC and preserves publishedAt on unpublish", () => {
