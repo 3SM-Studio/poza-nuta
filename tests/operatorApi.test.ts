@@ -94,6 +94,7 @@ test("Supabase Auth users must map to an active local operator", () => {
       displayName: null,
       profileCompletedAt: null,
       active: false,
+      suspendedAt: null,
     }),
     {
       allowed: false,
@@ -109,6 +110,7 @@ test("Supabase Auth users must map to an active local operator", () => {
       displayName: null,
       profileCompletedAt: null,
       active: true,
+      suspendedAt: null,
     }),
     {
       allowed: true,
@@ -208,6 +210,7 @@ test("sign-in page distinguishes guests, authorized operators and denied users",
       displayName: null,
       profileCompletedAt: null,
       active: false,
+      suspendedAt: null,
     }),
     {
       state: "unauthorized",
@@ -221,6 +224,7 @@ test("sign-in page distinguishes guests, authorized operators and denied users",
       displayName: null,
       profileCompletedAt: null,
       active: true,
+      suspendedAt: null,
     }),
     {
       state: "authorized",

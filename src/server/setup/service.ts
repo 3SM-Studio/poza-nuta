@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import {
   events,
@@ -92,6 +92,9 @@ function createDrizzleSetupTransactionStore(
           authUserId: input.authUserId,
           passwordHash: SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER,
           active: true,
+          suspendedAt: null,
+          suspensionReason: null,
+          suspendedByOperatorId: null,
           updatedAt: input.now,
         })
         .returning({ id: operatorUsers.id });
@@ -244,6 +247,7 @@ async function countCompleteOwnerLinks(
         eq(platformMembers.role, "platform_owner"),
         eq(platformMembers.active, true),
         eq(operatorUsers.active, true),
+        isNull(operatorUsers.suspendedAt),
         sql`${operatorUsers.authUserId} is not null`,
         eq(workspaceMembers.active, true),
         eq(workspaceMembers.role, "owner"),

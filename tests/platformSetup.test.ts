@@ -462,6 +462,40 @@ test("bootstrap state resolver classifies initialized and inconsistent states", 
   );
 });
 
+test("setup remains inconsistent when the active owner is not a complete owner link", async () => {
+  const suspendedOwnerCounts = counts({
+    platformMembers: 1,
+    activePlatformOwners: 1,
+    operatorUsers: 1,
+    workspaces: 1,
+    workspaceMembers: 1,
+    completeOwnerLinks: 0,
+  });
+
+  const bootstrapState = resolvePlatformBootstrapStateFromCounts(
+    suspendedOwnerCounts,
+  );
+
+  assert.equal(bootstrapState.state, "inconsistent");
+  assert.notEqual(bootstrapState.state, "uninitialized");
+
+  const store = new FakeSetupStore(suspendedOwnerCounts);
+
+  await assert.rejects(
+    () =>
+      completePlatformSetupWithStore(validSetupInput, {
+        store,
+        getVerifiedUser: async () => verifiedUser,
+        setupTokenHash: validTokenHash,
+      }),
+    (error) =>
+      error instanceof OperatorApiError &&
+      error.code === "PLATFORM_SETUP_INCONSISTENT",
+  );
+  assert.equal(store.operators.length, 0);
+  assert.equal(store.platformMembers.length, 0);
+});
+
 test("setup finalization requires a verified session and confirmed email", async () => {
   await assert.rejects(
     () =>

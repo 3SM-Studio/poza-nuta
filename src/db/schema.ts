@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -50,6 +51,8 @@ export const platformMemberRoleValues = [
   "platform_admin",
   "support",
 ] as const;
+
+export const operatorSuspensionReasonMaxLength = 500;
 
 export const eventStatusEnum = pgEnum("event_status", eventStatusValues);
 export const eventVisibilityEnum = pgEnum(
@@ -249,6 +252,11 @@ export const operatorUsers = pgTable(
     }),
     passwordHash: text("password_hash").notNull(),
     active: boolean("active").notNull().default(true),
+    suspendedAt: timestampColumn("suspended_at"),
+    suspensionReason: text("suspension_reason"),
+    suspendedByOperatorId: bigint("suspended_by_operator_id", {
+      mode: "number",
+    }),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },
@@ -260,6 +268,25 @@ export const operatorUsers = pgTable(
     index("operator_users_active_idx")
       .on(table.active)
       .where(sql`${table.active} = true`),
+    foreignKey({
+      name: "operator_users_suspended_by_operator_id_operator_users_id_fk",
+      columns: [table.suspendedByOperatorId],
+      foreignColumns: [table.id],
+    }).onDelete("restrict"),
+    check(
+      "operator_users_suspension_state_check",
+      sql`(
+        (${table.suspendedAt} is null and ${table.suspensionReason} is null and ${table.suspendedByOperatorId} is null)
+        or
+        (
+          ${table.suspendedAt} is not null
+          and ${table.suspensionReason} is not null
+          and char_length(${table.suspensionReason}) between 1 and ${sql.raw(String(operatorSuspensionReasonMaxLength))}
+          and ${table.suspensionReason} = btrim(${table.suspensionReason})
+          and ${table.suspendedByOperatorId} is not null
+        )
+      )`,
+    ),
   ],
 ).enableRLS();
 

@@ -16,6 +16,7 @@ import {
   mapSupabaseSignupError,
   resolveOperatorAccess,
   resolveSignInPageAccess,
+  type AccessibleOperatorRecord,
   type LinkedOperatorRecord,
 } from "./auth-policy";
 import { OperatorApiError } from "./errors";
@@ -273,6 +274,7 @@ async function findLinkedOperator(
       displayName: operatorUsers.displayName,
       profileCompletedAt: operatorUsers.profileCompletedAt,
       active: operatorUsers.active,
+      suspendedAt: operatorUsers.suspendedAt,
     })
     .from(operatorUsers)
     .where(eq(operatorUsers.authUserId, authUserId))
@@ -283,7 +285,7 @@ async function findLinkedOperator(
 
 async function ensureSignupOperatorForAuthUser(input: {
   authUserId: string;
-}): Promise<LinkedOperatorRecord & { active: true }> {
+}): Promise<AccessibleOperatorRecord> {
   return getDb().transaction(async (transaction) => {
     const [existingOperator] = await transaction
       .select({
@@ -292,24 +294,24 @@ async function ensureSignupOperatorForAuthUser(input: {
         displayName: operatorUsers.displayName,
         profileCompletedAt: operatorUsers.profileCompletedAt,
         active: operatorUsers.active,
+        suspendedAt: operatorUsers.suspendedAt,
       })
       .from(operatorUsers)
       .where(eq(operatorUsers.authUserId, input.authUserId))
       .limit(1);
 
     if (existingOperator) {
-      if (!existingOperator.active) {
+      const access = resolveOperatorAccess(input.authUserId, existingOperator);
+
+      if (!access.allowed) {
         throw new OperatorApiError(
-          403,
-          "OPERATOR_INACTIVE",
-          "This operator account is inactive.",
+          access.status,
+          access.code,
+          access.message,
         );
       }
 
-      return {
-        ...existingOperator,
-        active: true,
-      };
+      return access.operator;
     }
 
     const name = await generateUniqueOperatorName(
@@ -326,6 +328,9 @@ async function ensureSignupOperatorForAuthUser(input: {
         // Passwords are managed exclusively by Supabase Auth.
         passwordHash: SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER,
         active: true,
+        suspendedAt: null,
+        suspensionReason: null,
+        suspendedByOperatorId: null,
       })
       .returning({
         id: operatorUsers.id,

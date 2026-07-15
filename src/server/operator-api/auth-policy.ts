@@ -4,12 +4,18 @@ export type LinkedOperatorRecord = {
   displayName: string | null;
   profileCompletedAt: Date | null;
   active: boolean;
+  suspendedAt: Date | null;
 };
+
+export type AccessibleOperatorRecord = Omit<
+  LinkedOperatorRecord,
+  "active" | "suspendedAt"
+> & { active: true };
 
 export type OperatorAccessDecision =
   | {
       allowed: true;
-      operator: LinkedOperatorRecord & { active: true };
+      operator: AccessibleOperatorRecord;
     }
   | {
       allowed: false;
@@ -17,7 +23,8 @@ export type OperatorAccessDecision =
       code:
         | "AUTHENTICATION_REQUIRED"
         | "OPERATOR_NOT_LINKED"
-        | "OPERATOR_INACTIVE";
+        | "OPERATOR_INACTIVE"
+        | "OPERATOR_SUSPENDED";
       message: string;
     };
 
@@ -27,11 +34,14 @@ export type SignInPageAccessDecision =
     }
   | {
       state: "authorized";
-      operator: LinkedOperatorRecord & { active: true };
+      operator: AccessibleOperatorRecord;
     }
   | {
       state: "unauthorized";
-      code: "OPERATOR_NOT_LINKED" | "OPERATOR_INACTIVE";
+      code:
+        | "OPERATOR_NOT_LINKED"
+        | "OPERATOR_INACTIVE"
+        | "OPERATOR_SUSPENDED";
     };
 
 export function resolveOperatorAccess(
@@ -65,10 +75,22 @@ export function resolveOperatorAccess(
     };
   }
 
+  if (operator.suspendedAt !== null) {
+    return {
+      allowed: false,
+      status: 403,
+      code: "OPERATOR_SUSPENDED",
+      message: "Application access is suspended.",
+    };
+  }
+
   return {
     allowed: true,
     operator: {
-      ...operator,
+      id: operator.id,
+      name: operator.name,
+      displayName: operator.displayName,
+      profileCompletedAt: operator.profileCompletedAt,
       active: true,
     },
   };
@@ -94,8 +116,9 @@ export function resolveSignInPageAccess(
   return {
     state: "unauthorized",
     code:
-      access.code === "OPERATOR_INACTIVE"
-        ? "OPERATOR_INACTIVE"
+      access.code === "OPERATOR_INACTIVE" ||
+      access.code === "OPERATOR_SUSPENDED"
+        ? access.code
         : "OPERATOR_NOT_LINKED",
   };
 }

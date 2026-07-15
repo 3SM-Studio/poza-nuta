@@ -90,6 +90,8 @@ function getLoginErrorMessage(error: unknown) {
         return "To konto nie jest powiązane z operatorem.";
       case "OPERATOR_INACTIVE":
         return "To konto operatora jest nieaktywne.";
+      case "OPERATOR_SUSPENDED":
+        return "Dostęp do aplikacji jest zawieszony.";
       default:
         return "Nie udało się zalogować. Spróbuj ponownie.";
     }
