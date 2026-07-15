@@ -24,6 +24,7 @@
     "test:node": "node --experimental-strip-types --test tests/*.test.ts",
     "test:vitest": "vitest run",
     "test:vitest:watch": "vitest",
+    "test:postgres:owner-guard": "node --experimental-strip-types --test tests/postgres/platformOwnerGuard.integration.test.ts",
     "e2e": "playwright test"
   },
   "engines": {

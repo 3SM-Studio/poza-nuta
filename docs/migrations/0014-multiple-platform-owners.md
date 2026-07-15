@@ -22,7 +22,9 @@ ostatniego eligible ownera. Musi chronić ownera wyłącznie według zaakceptowa
 definicji eligible platform ownera. Ticket 7 musi zostać wdrożony przed
 udostępnieniem mutacji ról lub suspension ownera.
 
-Migracja 0014 nie została wykonana w ramach tego zadania.
+Migracja `0014` nie została zastosowana na Supabase ani żadnej istniejącej
+bazie. Została wykonana wyłącznie w izolowanym PostgreSQL 15 jako część testów
+pełnego łańcucha migracji `0015`.
 
 ## Preconditions
 
@@ -35,13 +37,21 @@ Przed wykonaniem należy:
    `platform_members_operator_idx`.
 4. Zanotować osobne agregaty aktywnych owner memberships, eligible owner
    memberships i complete bootstrap owner links bez ujawniania identyfikatorów.
-5. Potwierdzić, że istnieje co najmniej jeden eligible platform owner oraz co
-   najmniej jeden complete bootstrap owner link wymagany przez obecny setup.
+5. W initialized environment potwierdzić, że istnieje co najmniej jeden eligible
+   platform owner oraz co najmniej jeden complete bootstrap owner link wymagany
+   przez obecny setup. Ten warunek nie dotyczy pełnego przebiegu migracji na
+   świeżej bazie.
 6. Dla produkcji przygotować aktualny backup lub restore point i uzyskać
    osobną, jawną zgodę na migrację.
 
 Migracja nie wymaga backfillu ani mutacji istniejących danych. Usunięcie indeksu
 nie usuwa i nie zmienia obecnego ownera.
+
+Migracja `0014` może być częścią pełnego przebiegu migracji na świeżej bazie.
+Taka baza może zawierać wyłącznie legacy workspace `Poza Nutą` / `pozanuta`
+utworzony przez `0005`, bez operatora i owner membership. Pierwszego ownera
+tworzy setup, a ten legalny stan uninitialized klasyfikuje i chroni późniejsza
+migracja `0015_platform_owner_guard`.
 
 ## Kolejność Wdrożenia
 
