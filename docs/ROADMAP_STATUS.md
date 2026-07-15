@@ -1,8 +1,8 @@
 # Poza Nutą — Roadmap Status
 
-Date: 2026-07-11
+Date: 2026-07-15
 Branch: `feat/platform-stage-1`
-Implementation baseline: `e36069e feat: add event discovery homepage and directory`
+Implementation baseline: `a684151 test: add Vitest component testing foundation`
 Repository: `VictorAsvira/poza-nuta`
 
 This document is an operational status snapshot of the current Poza Nutą repo.
@@ -43,7 +43,7 @@ smoke testing, and database-backed coverage for the critical session flow.
 
 | Area | Status | Evidence from repo or latest run | Next step |
 | --- | --- | --- | --- |
-| GitHub repo | PARTIAL | Feature branch `feat/platform-stage-1` contains implementation through `e36069e`; remote publication is not confirmed in this snapshot. | Push can happen after explicit approval; review and smoke should block merge/deploy, not the technical branch push. |
+| GitHub repo | LOCAL COMMIT AHEAD | Feature branch `feat/platform-stage-1` contains implementation through `a684151`; `origin/feat/platform-stage-1` remains at `5de056b` in this snapshot. | Push only after explicit approval; review and smoke should block merge/deploy. |
 | Vercel readiness | DONE | `docs/DEPLOYMENT.md` defines Root Directory `.`, `pnpm install`, `pnpm build`, Node.js `24.x`; `package.json` has `packageManager` and Node `>=24`. | Import the GitHub repo into Vercel with root directory `.`. |
 | Vercel deploy | BLOCKER FOR DEMO | Repo is ready, but no confirmed production deployment URL or production smoke result is recorded. | Confirm the Vercel project and latest deployment. |
 | Vercel ENV | BLOCKER FOR DEMO | Required env vars are documented, but live Vercel settings were not inspected in this snapshot. | Set or verify `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. |
@@ -69,6 +69,10 @@ smoke testing, and database-backed coverage for the critical session flow.
 | iSing importer | DONE | `pnpm db:import:ising` exists; safety guard, dry-run, pagination, mapping, and tests are implemented. | Do not modify unless import quality or iSing API behavior changes. |
 | iSing imported catalog | DONE | Latest user-run import completed: `processed=2754`, `inserted=2654`, `updated=100`, `errors=0`. | Confirm Vercel `DATABASE_URL` points to this same populated database. |
 | Import jobs | PARTIAL | `import_jobs` schema exists, but there is no dashboard import status UI or automation. | Keep CLI/manual import for demo; design import jobs UI later. |
+| Platform admin contract | DOCUMENTED / `/admin` NOT IMPLEMENTED | The accepted roles, owner-only platform-role mutations, eligible-owner invariant, application suspension, read-only Organizations MVP, retention and import-job delivery plan are documented in `docs/features/platform-admin-dashboard.md`. Ticket 2 Vitest Foundation is complete, but no `/admin` route, guard, shell or service exists. | Implement Ticket 3 Platform Authorization Policy next; keep later migrations, domain services, infrastructure and UI in their scoped tickets. |
+| Platform roles | FOUNDATION / CONSTRAINT CHANGE REQUIRED | `platform_members` already supports `platform_owner`, `platform_admin` and `support`, but the current unique index allows only one active owner and setup logic expects exactly one. Only owner may mutate any platform role; admin performs no `platform_members` mutations. | Safely allow multiple eligible owners and add concurrency-safe last-owner protection before role-management UI. |
+| Admin suspension and retention | DECIDED / NOT IMPLEMENTED | Suspension is application-level and preserves Supabase identity, memberships and history. Retention is 365 days for audit/job metadata, 30 days for safe error details and at most 7 days for private KaraFun files. | Discover the compatible data representation and cleanup mechanism without selecting storage or scheduler prematurely. |
+| Vitest foundation | DONE | Commit `a684151` adds an isolated Vitest runner, jsdom component environment and one local shadcn Button test while preserving `node:test` and Playwright. | Use Vitest for new unit/component coverage starting with the platform authorization policy; do not migrate existing suites wholesale. |
 | Dark/neon theme | DONE | Theme is implemented in app CSS and component styles; latest QA passed build/test checks. | Only do targeted visual fixes before demo. |
 | Logo branding | DONE | Logo asset is committed under `public/brand/poza_nuta_logo-white.png`; public and dashboard branding use it. | Keep root logo out of Git unless explicitly needed. |
 | Mobile/accessibility QA | PARTIAL | Recent browser QA checked public views and dark theme basics; no full release-grade mobile/accessibility matrix is recorded. | Add demo smoke notes for mobile widths and focus states. |
@@ -102,6 +106,7 @@ smoke testing, and database-backed coverage for the critical session flow.
 - Backup/rollback.
 - E2E tests.
 - Import automation/cron.
+- Platform admin RBAC and audit-backed operations.
 - Documented incident procedure.
 
 ## Out Of Order / Already Done

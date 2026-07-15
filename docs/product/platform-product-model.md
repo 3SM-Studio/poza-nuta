@@ -8,6 +8,7 @@ data changes, production changes, or implementation changes by itself.
 Related documents:
 - [ADR: Multi-Tenant Karaoke Platform](../architecture/adr-multi-tenant-karaoke-platform.md)
 - [Current To Target Model Audit](../architecture/current-to-target-model-audit.md)
+- [Platform Admin Dashboard Contract](../features/platform-admin-dashboard.md)
 
 Decision labels:
 - **Accepted decision**: binding product rule for the platform rebuild.
@@ -164,6 +165,70 @@ Authorization comes from memberships and roles:
 Account identity is provided by Supabase Auth. Business permissions are decided
 by local application records. Do not trust client-supplied roles or profile
 claims.
+
+## Platform Administration
+
+**Accepted decision.**
+
+Platform administration uses `/admin`; organization administration remains at
+`/dashboard/org/[organizationId]`. Organization membership never grants a
+platform role, and organization owners can manage members and roles only in
+their own organization.
+
+Platform roles are:
+
+- `platform_owner`: full platform access, platform-role management, imports,
+  audit and owner-only critical settings;
+- `platform_admin`: application suspension of ordinary users, imports and
+  read-only operational oversight of users and organizations, but no mutation
+  of any platform role or owner-only setting;
+- `support`: read-only access to users, organizations, imports and safe error
+  information; no imports or role mutations.
+
+Only `platform_owner` may grant, change, deactivate or remove any
+`platform_members` role, including `platform_owner`, `platform_admin` and
+`support`. `platform_admin` performs no `platform_members` mutations.
+
+An eligible platform owner is a user who simultaneously has an active local
+application profile, is not suspended, and has an active `platform_members`
+membership with role `platform_owner`.
+
+Multiple eligible platform owners are allowed. No operation or race may remove,
+deactivate, demote, suspend or delete the last eligible platform owner.
+
+Application-level account suspension is part of the Users MVP. It requires a
+reason and audit record, preserves identity, memberships and history, and is
+reversed by unlock. It does not delete or directly block the Supabase Auth
+identity. A user cannot suspend themself. A `platform_admin` cannot suspend a
+`platform_owner`; a `platform_owner` may suspend another owner only when at
+least one other eligible platform owner remains. Physical account/Auth identity
+deletion is outside the MVP.
+
+The first `/admin` MVP contains a secure guard and AdminShell, read-only
+Overview, Imports, Users, Organizations and Audit. Catalog, Events, Moderation
+and System remain later modules.
+
+The first Organizations module is read-only: search, organization detail,
+status, memberships and roles, event count and safe audit history. Platform
+cross-organization mutations require a separate product decision and
+specification. Organization owners continue to manage members only in their own
+organization dashboard.
+
+Imports are durable, idempotent, upsert-based background jobs. They never
+truncate or destructively replace songs, and only one job per source may be
+active. The worker, private storage and scheduler technologies require separate
+technical decisions.
+
+Retention is fixed at 365 days from record creation for audit records, 365 days
+from terminal state for import job metadata, 30 days from recording for safe
+error details, and at most 7 days from upload for private KaraFun source files,
+regardless of job state. Files may be deleted sooner after diagnostics. A job
+that never becomes terminal requires a stale-job and maximum-retention rule in
+the worker/cleanup ADR. Cleanup cannot extend retention by rewriting its anchor
+timestamp. Timestamp names are semantic, not preselected columns. Cleanup must
+be operationally verifiable and audited. Audit export is outside the first MVP.
+Secrets, tokens, credentials and raw sensitive errors must never enter audit or
+durable logs.
 
 ## Organizations
 
@@ -405,7 +470,7 @@ link. The exact claim mechanism is an open decision.
 
 ## Privacy Rules
 
-**Accepted decision, with open retention details.**
+**Accepted decision.**
 
 Public event pages must not expose:
 - operator internal ids;
@@ -423,7 +488,11 @@ Prefer HttpOnly cookies or short-lived signed claim links.
 Participant personal data must be scoped to event operations and should be
 minimized in public queue views.
 
-Detailed data retention and anonymization policy is an open decision.
+Administrative retention is closed with the clock anchors defined in Platform
+Administration: audit from creation, import job metadata from terminal state,
+safe error detail from recording and KaraFun file from upload. Detailed
+retention and anonymization remain open only for other data domains, including
+participants, events, profiles, requests and performance history.
 
 ## Cancellation And Postponement
 
@@ -475,4 +544,6 @@ Closed early event:
 - Notification channels and notification consent model.
 - Ranking and points display policy.
 - Exact mechanism for assigning a guest performance to a user account.
-- Data retention and anonymization policy.
+- Detailed retention and anonymization for participants, events, profiles,
+  requests and performance history. Administrative retention is already
+  accepted and is not open.

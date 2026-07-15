@@ -9,6 +9,7 @@ changes by itself.
 Related documents:
 - [Product Model](../product/platform-product-model.md)
 - [Current To Target Model Audit](./current-to-target-model-audit.md)
+- [Platform Admin Dashboard Contract](../features/platform-admin-dashboard.md)
 
 Decision labels:
 - **Accepted decision**: binding architecture decision for the rebuild.
@@ -57,6 +58,110 @@ Supabase Auth proves identity. Local application tables decide permissions.
 A person can be a participant, organization owner, venue manager and event
 operator at the same time. The role depends on the membership or assignment
 being evaluated.
+
+### Platform Administration Is A Separate Authorization Boundary
+
+The platform administration surface uses `/admin`. Organization administration
+remains under `/dashboard/org/[organizationId]`. An organization role does not
+grant platform access and a platform role does not implicitly become an
+organization membership.
+
+An `/admin` request must resolve, server-side, all of the following:
+
+1. a valid Supabase Auth user;
+2. an active linked local operator record;
+3. an active `platform_members` record;
+4. the permission required for the requested read or mutation.
+
+Client-supplied platform roles are never trusted. Browser code does not read
+`platform_members`, `workspace_members`, `import_jobs` or audit tables directly.
+Protected data is returned through server-side services and thin App Router
+adapters.
+
+Platform roles are:
+
+- `platform_owner`: full platform access, platform-role management, imports,
+  audit and critical settings;
+- `platform_admin`: application suspension of ordinary users, imports and
+  read-only operational oversight of users and organizations, without authority
+  to mutate any `platform_members` role or owner-only critical setting;
+- `support`: read-only operational access, including safe import errors, with
+  no import execution or platform-role mutation.
+
+Only `platform_owner` may grant, change, deactivate or remove any platform role,
+including `platform_owner`, `platform_admin` and `support`. `platform_admin`
+performs no mutations of `platform_members`.
+
+An eligible platform owner is a user who simultaneously has an active local
+application profile, is not suspended, and has an active `platform_members`
+membership with role `platform_owner`.
+
+Multiple eligible platform owners are allowed. Every path that can delete,
+deactivate, demote or suspend an owner must preserve at least one eligible
+platform owner, including under concurrent requests. The transition must
+remove the current database uniqueness rule that permits only one active owner
+and replace it with durable last-owner protection. Bootstrap logic must treat
+one or more eligible owners as initialized. The exact locking/database
+mechanism is deferred to migration discovery and review.
+
+Suspension is an application authorization state, not deletion or direct
+blocking of the Supabase Auth identity. It requires a reason and audit record,
+preserves identity, memberships and history, and unlock restores application
+access. Self-suspension is forbidden. `platform_admin` cannot suspend a
+`platform_owner`; an owner may suspend another owner only when the last-owner
+invariant preserves another eligible platform owner. The implementation
+representation is intentionally not selected in this ADR.
+
+Organization owners can invite, remove and change members only inside their own
+organization. They cannot grant platform roles. The first `/admin/organizations`
+module is read-only; future platform cross-organization mutations require a
+separate product decision and specification.
+
+### Imports Are Durable Jobs
+
+iSing and KaraFun imports must run as durable background jobs rather than as
+long-running HTTP requests. The UI creates a job and observes its state through
+server-side APIs. Jobs are idempotent, use song upserts and never truncate or
+destructively replace the catalog. At most one job for a source may be active at
+the same time.
+
+Minimum target states are `queued`, `running`, `succeeded`, `failed` and
+`cancelled`. Jobs record source, initiating operator, timestamps, progress,
+counters and a sanitized error summary. Import secrets and service credentials
+remain server-side. Job creation, cancellation and completion are audit events.
+
+The exact worker and queue technology is intentionally not selected by this
+ADR. A follow-up ADR must compare a Postgres-backed job table with a dedicated
+worker, a managed queue/workflow service and a Supabase-hosted worker option
+against Vercel execution limits, retry semantics, cancellation, observability,
+cost and private CSV storage. A request-lifetime callback is not sufficient as
+the sole durability mechanism for a full catalog import.
+
+Audit records are retained for 365 days from creation. Import job metadata is
+retained for 365 days from terminal state. Safe diagnostic details are retained
+for 30 days from recording. KaraFun source files stay in private storage for no
+more than 7 days from upload, regardless of job state, and may be removed
+earlier after diagnostics. A never-terminal job requires stale-job recovery and
+a maximum retention rule in the worker/cleanup ADR. Cleanup cannot extend a
+period by rewriting its anchor timestamp. These timestamp names are semantic,
+not preselected columns.
+
+File deletion preserves job metadata, counters and an anonymized, sanitized
+summary. Cleanup must be observable and audited. Audit export is outside the
+first MVP. The storage provider and cleanup scheduler require separate technical
+analysis. Secrets, tokens, credentials and raw sensitive errors are never
+durable audit or logging payloads.
+
+Every new administrative mutation uses a shared server-side audit writer. The
+implementation first discovers existing `operator_audit_log` usage and then
+chooses a compatible table extension or platform audit layer. Audit semantics
+cover actor, action, target type/id, outcome, safe reason/summary and timestamps;
+payload sanitization excludes secrets, tokens, cookies, complete Auth payloads
+and raw errors.
+
+These administrative periods are accepted and closed. Detailed retention and
+anonymization for other domains, including participants, events, profiles,
+requests and performance history, remain an open product decision.
 
 ### Organization And Venue Are Separate
 
@@ -302,5 +407,6 @@ Minimum tests for implementation stages:
 - Notification channels and consent model.
 - Future ranking rules.
 - Exact guest-performance-to-account claim mechanism.
-- Data retention and anonymization policy.
+- Detailed retention and anonymization for participants, events, profiles,
+  requests and performance history. Administrative retention is closed.
 - Detailed moderation SLA and appeal process.
