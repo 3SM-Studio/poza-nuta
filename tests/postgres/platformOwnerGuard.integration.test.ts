@@ -1,19 +1,28 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { promisify } from "node:util";
 import postgres from "postgres";
 
-const execFileAsync = promisify(execFile);
-const image = "postgres:15-alpine";
-const migrationJournalPath = "drizzle/meta/_journal.json";
+import {
+  applyPostgresMigration as applyMigration,
+  applyPostgresMigrations as applyMigrations,
+  createPostgresDatabase as createDatabase,
+  createPostgresTestClient as createClient,
+  dropPostgresDatabase as dropDatabase,
+  installPostgresCompatibilityFixture as installCompatibilityFixture,
+  postgresDatabaseName as databaseName,
+  postgresTestContainerExists as containerExists,
+  removePostgresTestHarness as removeHarness,
+  startPostgresTestHarness,
+  withBlankPostgresDatabase,
+  withPostgresClone,
+  type PostgresTestHarness as Harness,
+  type SqlExecutor,
+} from "./postgresTestHarness.ts";
+
 const guardConstraint = "eligible_platform_owner_required";
-const commandTimeoutMs = 120_000;
 const transactionTimeoutMs = 20_000;
 
-type SqlExecutor = postgres.Sql | postgres.TransactionSql;
 type Owner = { operatorId: number; membershipId: number };
 type Reduction =
   | "suspend"
@@ -25,69 +34,11 @@ type Reduction =
 type Isolation = "READ COMMITTED" | "REPEATABLE READ" | "SERIALIZABLE";
 type PgFailure = Error & { code?: string; constraint_name?: string };
 
-type Harness = {
-  containerName: string;
-  host: string;
-  port: number;
-  password: string;
-};
-
-type Journal = {
-  entries: Array<{ idx: number; tag: string }>;
-};
-
-const compatibilityFixture = `
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    CREATE ROLE anon NOLOGIN;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    CREATE ROLE authenticated NOLOGIN;
-  END IF;
-END;
-$$;
-
-CREATE SCHEMA IF NOT EXISTS auth;
-CREATE TABLE IF NOT EXISTS auth.users (
-  id uuid PRIMARY KEY
-);
-CREATE OR REPLACE FUNCTION auth.uid()
-RETURNS uuid
-LANGUAGE sql
-STABLE
-AS $$ SELECT NULL::uuid $$;
-
-CREATE SCHEMA IF NOT EXISTS realtime;
-CREATE TABLE IF NOT EXISTS realtime.messages (
-  extension text NOT NULL DEFAULT 'broadcast'
-);
-ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
-CREATE OR REPLACE FUNCTION realtime.topic()
-RETURNS text
-LANGUAGE sql
-STABLE
-AS $$ SELECT ''::text $$;
-CREATE OR REPLACE FUNCTION realtime.send(
-  payload jsonb,
-  event_name text,
-  topic_name text,
-  private_channel boolean
-)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN;
-END;
-$$;
-`;
-
 test(
   "platform owner guard preserves at least one eligible owner",
   { timeout: 600_000 },
   async (t) => {
-    const harness = await startHarness();
+    const harness = await startPostgresTestHarness("pozanuta-owner-guard");
     let templateDatabase = "";
 
     try {
@@ -544,225 +495,17 @@ test(
   },
 );
 
-async function startHarness(): Promise<Harness> {
-  const containerName = `pozanuta-owner-guard-${randomUUID()}`;
-  const passwordBytes = randomBytes(32);
-  const password = passwordBytes.toString("base64url");
-  passwordBytes.fill(0);
-  const environment = dockerEnvironment(password);
-
-  await docker(
-    [
-      "run",
-      "-d",
-      "--name",
-      containerName,
-      "--pull",
-      "missing",
-      "--env",
-      "POSTGRES_PASSWORD",
-      "--env",
-      "POSTGRES_USER=postgres",
-      "--env",
-      "POSTGRES_DB=postgres",
-      "--publish",
-      "127.0.0.1::5432",
-      "--health-cmd",
-      "pg_isready -U postgres -d postgres",
-      "--health-interval",
-      "1s",
-      "--health-timeout",
-      "3s",
-      "--health-retries",
-      "60",
-      image,
-    ],
-    environment,
-  );
-
-  try {
-    await waitForHealthy(containerName);
-    const portOutput = await docker(["port", containerName, "5432/tcp"]);
-    const portMatch = portOutput.match(/127\.0\.0\.1:(\d+)/);
-    assert.ok(portMatch, "Docker did not publish PostgreSQL on 127.0.0.1");
-
-    return {
-      containerName,
-      host: "127.0.0.1",
-      port: Number(portMatch[1]),
-      password,
-    };
-  } catch (error) {
-    await removeHarness(containerName);
-    throw error;
-  }
-}
-
-async function removeHarness(containerName: string): Promise<void> {
-  try {
-    await docker(["rm", "--force", containerName]);
-  } catch (error) {
-    if (await containerExists(containerName)) {
-      throw error;
-    }
-  }
-}
-
-async function containerExists(containerName: string): Promise<boolean> {
-  try {
-    await docker(["inspect", containerName]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function waitForHealthy(containerName: string): Promise<void> {
-  const deadline = Date.now() + 90_000;
-
-  while (Date.now() < deadline) {
-    const status = await docker([
-      "inspect",
-      "--format",
-      "{{.State.Health.Status}}",
-      containerName,
-    ]);
-
-    if (status === "healthy") return;
-    if (status === "unhealthy") {
-      throw new Error("Isolated PostgreSQL container became unhealthy");
-    }
-
-    await delay(500);
-  }
-
-  throw new Error("Timed out waiting for isolated PostgreSQL container");
-}
-
-async function docker(
-  args: string[],
-  env: NodeJS.ProcessEnv = dockerEnvironment(),
-): Promise<string> {
-  const { stdout } = await execFileAsync("docker", args, {
-    cwd: process.cwd(),
-    env,
-    timeout: commandTimeoutMs,
-    windowsHide: true,
-  });
-  return stdout.trim();
-}
-
-function dockerEnvironment(password?: string): NodeJS.ProcessEnv {
-  return {
-    NODE_ENV: process.env.NODE_ENV,
-    Path: process.env.Path,
-    PATHEXT: process.env.PATHEXT,
-    SystemRoot: process.env.SystemRoot,
-    WINDIR: process.env.WINDIR,
-    ComSpec: process.env.ComSpec,
-    TEMP: process.env.TEMP,
-    TMP: process.env.TMP,
-    USERPROFILE: process.env.USERPROFILE,
-    APPDATA: process.env.APPDATA,
-    LOCALAPPDATA: process.env.LOCALAPPDATA,
-    ProgramData: process.env.ProgramData,
-    ...(password ? { POSTGRES_PASSWORD: password } : {}),
-  };
-}
-
-function createClient(harness: Harness, database: string): postgres.Sql {
-  return postgres({
-    host: harness.host,
-    port: harness.port,
-    database,
-    user: "postgres",
-    password: harness.password,
-    max: 2,
-    connect_timeout: 10,
-    idle_timeout: 5,
-    prepare: false,
-    onnotice: () => undefined,
-  });
-}
-
-async function installCompatibilityFixture(sql: postgres.Sql): Promise<void> {
-  await sql.unsafe('CREATE EXTENSION IF NOT EXISTS "pg_trgm"');
-  await sql.unsafe(compatibilityFixture);
-}
-
-async function applyMigrations(
-  sql: postgres.Sql,
-  throughIndex: number,
-): Promise<void> {
-  const journal = JSON.parse(
-    readFileSync(migrationJournalPath, "utf8"),
-  ) as Journal;
-
-  for (const entry of journal.entries.filter(
-    ({ idx }) => idx <= throughIndex,
-  )) {
-    await applyMigrationEntry(sql, entry.tag);
-  }
-}
-
-async function applyMigration(sql: postgres.Sql, index: number): Promise<void> {
-  const journal = JSON.parse(
-    readFileSync(migrationJournalPath, "utf8"),
-  ) as Journal;
-  const entry = journal.entries.find(({ idx }) => idx === index);
-  assert.ok(entry, `Migration ${index} is missing from the journal`);
-  await applyMigrationEntry(sql, entry.tag);
-}
-
-async function applyMigrationEntry(
-  sql: postgres.Sql,
-  tag: string,
-): Promise<void> {
-  const migration = readFileSync(`drizzle/${tag}.sql`, "utf8");
-  const statements = migration
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
-
-  await sql.begin(async (tx) => {
-    for (const statement of statements) {
-      await tx.unsafe(statement);
-    }
-  });
-}
-
-async function createDatabase(
-  admin: postgres.Sql,
-  database: string,
-  template?: string,
-): Promise<void> {
-  assert.match(database, /^[a-z0-9_]+$/);
-  if (template) assert.match(template, /^[a-z0-9_]+$/);
-  await admin.unsafe(
-    `CREATE DATABASE "${database}"${template ? ` TEMPLATE "${template}"` : ""}`,
-  );
-}
-
-async function dropDatabase(admin: postgres.Sql, database: string): Promise<void> {
-  assert.match(database, /^[a-z0-9_]+$/);
-  await admin.unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
-}
-
 async function withBlankDatabase(
   harness: Harness,
   admin: postgres.Sql,
   callback: (sql: postgres.Sql, database: string) => Promise<void>,
 ): Promise<void> {
-  const database = databaseName("owner_guard_blank");
-  await createDatabase(admin, database);
-  const sql = createClient(harness, database);
-
-  try {
-    await callback(sql, database);
-  } finally {
-    await sql.end({ timeout: 5 });
-    await dropDatabase(admin, database);
-  }
+  await withBlankPostgresDatabase(
+    harness,
+    admin,
+    "owner_guard_blank",
+    callback,
+  );
 }
 
 async function withClone(
@@ -771,20 +514,13 @@ async function withClone(
   template: string,
   callback: (sql: postgres.Sql, database: string) => Promise<void>,
 ): Promise<void> {
-  const database = databaseName("owner_guard_case");
-  await createDatabase(admin, database, template);
-  const sql = createClient(harness, database);
-
-  try {
-    await callback(sql, database);
-  } finally {
-    await sql.end({ timeout: 5 });
-    await dropDatabase(admin, database);
-  }
-}
-
-function databaseName(prefix: string): string {
-  return `${prefix}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  await withPostgresClone(
+    harness,
+    admin,
+    template,
+    "owner_guard_case",
+    callback,
+  );
 }
 
 async function insertOperator(

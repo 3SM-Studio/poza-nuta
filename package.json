@@ -25,6 +25,7 @@
     "test:vitest": "vitest run",
     "test:vitest:watch": "vitest",
     "test:postgres:owner-guard": "node --experimental-strip-types --test tests/postgres/platformOwnerGuard.integration.test.ts",
+    "test:postgres:platform-role-mutations": "node --experimental-strip-types --test tests/postgres/platformRoleMutations.integration.test.ts",
     "e2e": "playwright test"
   },
   "engines": {
