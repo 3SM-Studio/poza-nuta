@@ -205,7 +205,6 @@ export function resolvePlatformBootstrapStateFromCounts(
   }
 
   if (
-    counts.activePlatformOwners === 1 &&
     counts.completeOwnerLinks >= 1 &&
     counts.workspaces >= 1
   ) {

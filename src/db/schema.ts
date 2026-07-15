@@ -335,9 +335,6 @@ export const platformMembers = pgTable(
   },
   (table) => [
     uniqueIndex("platform_members_operator_idx").on(table.operatorUserId),
-    uniqueIndex("platform_members_one_active_owner_idx")
-      .on(table.role)
-      .where(sql`${table.role} = 'platform_owner' and ${table.active} = true`),
     index("platform_members_role_idx").on(table.role),
     index("platform_members_active_idx")
       .on(table.active)

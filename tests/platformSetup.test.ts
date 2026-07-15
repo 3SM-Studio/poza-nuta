@@ -462,8 +462,72 @@ test("bootstrap state resolver classifies initialized and inconsistent states", 
   );
 });
 
-test("setup remains inconsistent when the active owner is not a complete owner link", async () => {
-  const suspendedOwnerCounts = counts({
+test("bootstrap treats one or more complete bootstrap owner links as initialized", () => {
+  for (const completeOwnerLinkCount of [1, 2, 3]) {
+    assert.equal(
+      resolvePlatformBootstrapStateFromCounts(
+        counts({
+          platformMembers: completeOwnerLinkCount,
+          activePlatformOwners: completeOwnerLinkCount,
+          operatorUsers: completeOwnerLinkCount,
+          workspaces: 1,
+          workspaceMembers: completeOwnerLinkCount,
+          completeOwnerLinks: completeOwnerLinkCount,
+        }),
+      ).state,
+      "initialized",
+    );
+  }
+});
+
+test("bootstrap uses complete bootstrap owner links instead of exact active owner membership count", () => {
+  assert.equal(
+    resolvePlatformBootstrapStateFromCounts(
+      counts({
+        platformMembers: 2,
+        activePlatformOwners: 2,
+        operatorUsers: 2,
+        workspaces: 1,
+        workspaceMembers: 1,
+        completeOwnerLinks: 1,
+      }),
+    ).state,
+    "initialized",
+  );
+  assert.equal(
+    resolvePlatformBootstrapStateFromCounts(
+      counts({
+        platformMembers: 2,
+        activePlatformOwners: 2,
+        operatorUsers: 2,
+        workspaces: 1,
+        workspaceMembers: 0,
+        completeOwnerLinks: 0,
+      }),
+    ).state,
+    "inconsistent",
+  );
+});
+
+test("existing platform data never reopens setup as uninitialized", () => {
+  const existingPlatformStates = [
+    counts({ platformMembers: 1 }),
+    counts({ activePlatformOwners: 2, platformMembers: 2 }),
+    counts({ operatorUsers: 1 }),
+    counts({ workspaceMembers: 1, workspaces: 1 }),
+    counts({ events: 1 }),
+  ];
+
+  for (const existingState of existingPlatformStates) {
+    assert.notEqual(
+      resolvePlatformBootstrapStateFromCounts(existingState).state,
+      "uninitialized",
+    );
+  }
+});
+
+test("setup remains inconsistent without a complete bootstrap owner link", async () => {
+  const incompleteOwnerCounts = counts({
     platformMembers: 1,
     activePlatformOwners: 1,
     operatorUsers: 1,
@@ -473,13 +537,13 @@ test("setup remains inconsistent when the active owner is not a complete owner l
   });
 
   const bootstrapState = resolvePlatformBootstrapStateFromCounts(
-    suspendedOwnerCounts,
+    incompleteOwnerCounts,
   );
 
   assert.equal(bootstrapState.state, "inconsistent");
   assert.notEqual(bootstrapState.state, "uninitialized");
 
-  const store = new FakeSetupStore(suspendedOwnerCounts);
+  const store = new FakeSetupStore(incompleteOwnerCounts);
 
   await assert.rejects(
     () =>
@@ -672,7 +736,7 @@ test("deployment docs specify invite template without setup token", () => {
   assert.match(docsSource, /Disable email link tracking/);
 });
 
-test("platform setup migration preserves platform_member_role and one active owner", () => {
+test("platform setup migration preserves platform_member_role history", () => {
   const schemaSource = readFileSync("src/db/schema.ts", "utf8");
   const migrationSource = readFileSync(
     "drizzle/0011_platform_initial_setup.sql",
