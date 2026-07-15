@@ -578,13 +578,14 @@ release evidence.
 
 **Delivery status:** implemented in `a684151`.
 
-- **Outcome:** new unit/component tests can run in Vitest.
-- **Scope:** minimal runner/config and one test of an existing local shadcn
-  component.
-- **Out of scope:** migration of existing `node:test` or Playwright suites.
+- **Outcome:** a working Vitest runner for new unit and component tests.
+- **Scope:** minimal runner/configuration and one test of an existing local
+  shadcn component.
+- **Out of scope:** migration of existing `node:test` or Playwright suites and
+  permission-policy tests; the policy does not exist before Ticket 3, so its
+  tests belong to Ticket 3.
 - **Dependencies:** Ticket 1.
-- **Acceptance:** existing tests remain unchanged, both runners are explicit and
-  permission-policy coverage starts with Ticket 3 after that policy exists.
+- **Acceptance:** existing tests remain unchanged and both runners are explicit.
 - **Verification:** focused Vitest test plus full current quality gates.
 
 ### Ticket 3: Platform Authorization Policy
