@@ -20,7 +20,10 @@
     "db:link:operator-auth": "node --experimental-strip-types src/db/link-operator-auth.ts",
     "db:link-workspace-member": "node --experimental-strip-types src/db/link-workspace-member.ts",
     "db:studio": "drizzle-kit studio",
-    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test": "pnpm run test:node && pnpm run test:vitest",
+    "test:node": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:vitest": "vitest run",
+    "test:vitest:watch": "vitest",
     "e2e": "playwright test"
   },
   "engines": {
@@ -29,6 +32,9 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
     "@types/node": "^24.0.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.15",
@@ -37,9 +43,11 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.9",
+    "jsdom": "29.1.1",
     "postcss": "^8.5.16",
     "tailwindcss": "^4.3.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "4.1.10"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.0",

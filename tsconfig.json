@@ -33,6 +33,7 @@
   "include": [
     "next-env.d.ts",
     "next.config.ts",
+    "vitest.config.ts",
     "drizzle.config.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
@@ -40,6 +41,7 @@
     "src/**/*.tsx",
     "drizzle/**/*.ts",
     "tests/**/*.ts",
+    "tests/**/*.tsx",
     "scripts/**/*.mjs"
   ],
   "exclude": [
