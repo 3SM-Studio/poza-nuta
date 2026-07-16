@@ -228,6 +228,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     );
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: context.organization.operatorId,
       eventId: context.event.id,
       action: `event_queue_${input.action}`,
@@ -385,6 +386,7 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
     );
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: context.organization.operatorId,
       eventId: context.event.id,
       action: "move_event_queue_request",

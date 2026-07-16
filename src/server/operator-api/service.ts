@@ -245,6 +245,7 @@ export async function applyOperatorQueueAction(
       .limit(1);
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId,
       eventId: event.id,
       action,

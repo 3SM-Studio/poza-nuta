@@ -47,6 +47,7 @@ export const importJobInitiatorKindValues = [
   "system",
   "legacy",
 ] as const;
+export const auditActorKindValues = ["operator", "system", "legacy"] as const;
 export const workspaceMemberRoleValues = [
   "owner",
   "manager",
@@ -84,6 +85,10 @@ export const importJobModeEnum = pgEnum("import_job_mode", importJobModeValues);
 export const importJobInitiatorKindEnum = pgEnum(
   "import_job_initiator_kind",
   importJobInitiatorKindValues,
+);
+export const auditActorKindEnum = pgEnum(
+  "audit_actor_kind",
+  auditActorKindValues,
 );
 export const workspaceMemberRoleEnum = pgEnum(
   "workspace_member_role",
@@ -462,6 +467,7 @@ export const operatorAuditLog = pgTable(
   "operator_audit_log",
   {
     id: idColumn(),
+    actorKind: auditActorKindEnum("actor_kind").notNull(),
     operatorId: bigint("operator_id", { mode: "number" }).references(
       () => operatorUsers.id,
       { onDelete: "set null" },
@@ -490,6 +496,11 @@ export const operatorAuditLog = pgTable(
     index("operator_audit_log_action_created_at_idx").on(
       table.action,
       table.createdAt.desc(),
+    ),
+    check(
+      "operator_audit_log_actor_check",
+      sql`(${table.actorKind} = 'operator')
+        or (${table.actorKind} in ('system', 'legacy') and ${table.operatorId} is null)`,
     ),
   ],
 ).enableRLS();
@@ -522,6 +533,10 @@ export const importJobs = pgTable(
     sourceArtifactId: uuid("source_artifact_id"),
     artifactUploadedAt: timestampColumn("artifact_uploaded_at"),
     artifactDeletedAt: timestampColumn("artifact_deleted_at"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    claimToken: uuid("claim_token"),
+    leaseExpiresAt: timestampColumn("lease_expires_at"),
+    heartbeatAt: timestampColumn("heartbeat_at"),
   },
   (table) => [
     foreignKey({
@@ -558,6 +573,15 @@ export const importJobs = pgTable(
     uniqueIndex("import_jobs_one_active_per_source_idx")
       .on(table.source)
       .where(sql`${table.status} in ('queued', 'running')`),
+    index("import_jobs_queued_claim_idx")
+      .on(table.createdAt, table.id)
+      .where(sql`${table.status} = 'queued'`),
+    index("import_jobs_recovery_idx")
+      .on(table.leaseExpiresAt, table.id)
+      .where(sql`${table.status} = 'running'`),
+    uniqueIndex("import_jobs_claim_token_idx")
+      .on(table.claimToken)
+      .where(sql`${table.claimToken} is not null`),
     check(
       "import_jobs_counts_check",
       sql`${table.totalCount} >= 0 and ${table.importedCount} >= 0 and ${table.skippedCount} >= 0`,
@@ -656,6 +680,36 @@ export const importJobs = pgTable(
     check(
       "import_jobs_cancellation_request_check",
       sql`${table.cancellationRequestedByOperatorId} is null or ${table.cancellationRequestedAt} is not null`,
+    ),
+    check(
+      "import_jobs_worker_attempt_check",
+      sql`${table.attemptCount} between 0 and 3`,
+    ),
+    check(
+      "import_jobs_worker_claim_check",
+      sql`(
+          ${table.status} = 'queued'
+          and ${table.attemptCount} = 0
+          and ${table.claimToken} is null
+          and ${table.leaseExpiresAt} is null
+          and ${table.heartbeatAt} is null
+        ) or (
+          ${table.status} = 'running'
+          and ${table.attemptCount} between 1 and 3
+          and ${table.claimToken} is not null
+          and ${table.leaseExpiresAt} is not null
+          and ${table.heartbeatAt} is not null
+        ) or (
+          ${table.status} in ('succeeded', 'failed', 'cancelled')
+          and ${table.claimToken} is null
+          and ${table.leaseExpiresAt} is null
+          and ${table.heartbeatAt} is null
+        )`,
+    ),
+    check(
+      "import_jobs_worker_lease_check",
+      sql`(${table.heartbeatAt} is null or ${table.heartbeatAt} >= ${table.startedAt})
+        and (${table.leaseExpiresAt} is null or ${table.leaseExpiresAt} >= ${table.heartbeatAt})`,
     ),
   ],
 ).enableRLS();

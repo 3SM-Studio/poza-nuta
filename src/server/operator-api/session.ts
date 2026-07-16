@@ -95,6 +95,7 @@ export async function loginOperator(input: LoginInput) {
       .returning({ id: operatorSessions.id });
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: operator.id,
       action: "login",
       entityId: String(createdSession.id),
@@ -203,6 +204,7 @@ export async function logoutOperator(session: AuthenticatedOperatorSession) {
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: session.operator.id,
       action: "logout",
       entityId: String(session.sessionId),

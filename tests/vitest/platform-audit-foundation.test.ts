@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createPlatformAuditRecord,
+  createSystemPlatformAuditRecord,
   PlatformAuditValidationError,
   type PlatformAuditEvent,
 } from "@/server/platform-admin/audit-core";
@@ -23,6 +24,7 @@ const validEvent = {
 describe("platform audit record contract", () => {
   it("maps the platform contract onto the existing audit table shape", () => {
     expect(createPlatformAuditRecord(7, validEvent)).toEqual({
+      actorKind: "operator",
       operatorId: 7,
       action: "user.suspend",
       entityId: "42",
@@ -36,6 +38,31 @@ describe("platform audit record contract", () => {
           source: "platform_admin",
           retainedMemberships: true,
         },
+      },
+    });
+  });
+
+  it("creates a sanitized system actor without a synthetic operator", () => {
+    expect(
+      createSystemPlatformAuditRecord({
+        action: "import.complete",
+        targetType: "import_job",
+        targetId: "42",
+        outcome: "success",
+        summary: "Import job completed.",
+        metadata: { processedCount: 3 },
+      }),
+    ).toEqual({
+      actorKind: "system",
+      operatorId: null,
+      action: "import.complete",
+      entityId: "42",
+      payload: {
+        schemaVersion: 1,
+        targetType: "import_job",
+        outcome: "success",
+        summary: "Import job completed.",
+        metadata: { processedCount: 3 },
       },
     });
   });

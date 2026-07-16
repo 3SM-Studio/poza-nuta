@@ -81,6 +81,7 @@ export async function loginOperator(input: LoginInput) {
 
     await traceServerStep("dashboard.login", "writeAuditLog", () =>
       getDb().insert(operatorAuditLog).values({
+        actorKind: "operator",
         operatorId: decision.operator.id,
         action: "login",
         entityId: data.user.id,
@@ -255,6 +256,7 @@ export async function logoutOperator() {
   if (operator) {
     await traceServerStep("dashboard.logout", "writeAuditLog", () =>
       getDb().insert(operatorAuditLog).values({
+        actorKind: "operator",
         operatorId: operator.id,
         action: "logout",
         entityId: user.id,

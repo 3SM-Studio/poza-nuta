@@ -134,6 +134,13 @@
       "when": 1784204366417,
       "tag": "0018_import_job_data_foundation_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784224352535,
+      "tag": "0019_import_job_worker_foundation",
+      "breakpoints": true
     }
   ]
 }

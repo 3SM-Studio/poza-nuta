@@ -77,6 +77,7 @@ export async function createActiveEventAccessLink(
       .returning(eventAccessLinkMetadataSelection);
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId,
       eventId: event.id,
       action: "create_event_access_link",
@@ -156,6 +157,7 @@ export async function revokeActiveEventAccessLink(
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId,
       eventId: event.id,
       action: "revoke_event_access_link",

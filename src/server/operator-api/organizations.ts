@@ -430,6 +430,7 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "create_event",
@@ -500,6 +501,7 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "update_event_auto_close_at",
@@ -592,6 +594,7 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "update_dashboard_event_details",
@@ -682,6 +685,7 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "extend_dashboard_event",
@@ -737,6 +741,7 @@ export async function closeDashboardOrganizationEventForAuthUser(input: {
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "close_dashboard_event",
@@ -1123,6 +1128,7 @@ async function createEventSessionLinkInTransaction(
   }
 
   await transaction.insert(operatorAuditLog).values({
+    actorKind: "operator",
     operatorId: organization.operatorId,
     eventId: event.id,
     action: "generate_event_session_link",

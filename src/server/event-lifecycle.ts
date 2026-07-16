@@ -113,6 +113,7 @@ export async function closeExpiredActiveEventInTransaction(
   }
 
   await transaction.insert(operatorAuditLog).values({
+    actorKind: "system",
     operatorId: null,
     eventId: closedEvent.id,
     action: "auto_close_event",
@@ -156,6 +157,7 @@ export async function updateActiveEventSettings(
       .returning(activeEventSelection);
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId,
       eventId: event.id,
       action: "update_event_settings",
@@ -213,6 +215,7 @@ export async function extendActiveEvent(
       .returning(activeEventSelection);
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId,
       eventId: event.id,
       action: "extend_event",
@@ -252,6 +255,7 @@ export async function closeActiveEvent(operatorId: number) {
       .returning(activeEventSelection);
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId,
       eventId: event.id,
       action: "close_event",
@@ -310,6 +314,7 @@ export async function startEvent(
       .returning(activeEventSelection);
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId,
       eventId: createdEvent.id,
       action: "start_event",

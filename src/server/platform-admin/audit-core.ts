@@ -38,7 +38,8 @@ export type PlatformAuditEvent = {
 };
 
 export type PlatformAuditRecord = {
-  operatorId: number;
+  actorKind: "operator" | "system";
+  operatorId: number | null;
   action: PlatformAuditAction;
   entityId: string;
   payload: {
@@ -82,6 +83,21 @@ export function createPlatformAuditRecord(
     throw new PlatformAuditValidationError("Audit actor is invalid.");
   }
 
+  return createValidatedPlatformAuditRecord("operator", operatorId, event);
+}
+
+export function createSystemPlatformAuditRecord(
+  event: PlatformAuditEvent,
+): PlatformAuditRecord {
+  return createValidatedPlatformAuditRecord("system", null, event);
+}
+
+function createValidatedPlatformAuditRecord(
+  actorKind: PlatformAuditRecord["actorKind"],
+  operatorId: number | null,
+  event: PlatformAuditEvent,
+): PlatformAuditRecord {
+
   assertIncluded(platformAuditActions, event.action, "action");
   assertIncluded(platformAuditTargetTypes, event.targetType, "target type");
   assertIncluded(platformAuditOutcomes, event.outcome, "outcome");
@@ -109,6 +125,7 @@ export function createPlatformAuditRecord(
   }
 
   return {
+    actorKind,
     operatorId,
     action: event.action,
     entityId: targetId,

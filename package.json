@@ -31,6 +31,7 @@
     "test:postgres:import-job-status-expansion": "node --experimental-strip-types --test tests/postgres/importJobStatusExpansion.integration.test.ts",
     "test:postgres:import-job-data-foundation-expand": "node --experimental-strip-types --test tests/postgres/importJobDataFoundationExpand.integration.test.ts",
     "test:postgres:import-job-data-foundation-contract": "node --experimental-strip-types --test tests/postgres/importJobDataFoundationContract.integration.test.ts",
+    "test:postgres:import-job-worker-foundation": "node --experimental-strip-types --test tests/postgres/importJobWorkerFoundation.integration.test.ts",
     "e2e": "playwright test"
   },
   "engines": {
