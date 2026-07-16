@@ -546,7 +546,10 @@ test("public route group uses shared public layout and header", () => {
     "utf8",
   );
 
-  assert.match(rootLayoutSource, /<html lang="pl">/);
+  assert.match(
+    rootLayoutSource,
+    /<html lang="pl" suppressHydrationWarning>/,
+  );
   assert.doesNotMatch(rootLayoutSource, /PublicSiteHeader/);
   assert.match(publicLayoutSource, /PublicSiteHeader/);
   assert.match(headerSource, /<header/);

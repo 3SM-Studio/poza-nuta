@@ -72,6 +72,49 @@ test.describe("public smoke", () => {
     expect(response?.status()).toBe(404);
   });
 
+  test("admin redirects an unauthenticated visitor to sign-in", async ({ page }) => {
+    await page.goto("/admin");
+
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(
+      page.getByRole("heading", { name: "Logowanie do dashboardu" }),
+    ).toBeVisible();
+  });
+
+  test("public and protected entry points remain stable across supported widths", async ({
+    page,
+  }) => {
+    const consoleErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        consoleErrors.push(message.text());
+      }
+    });
+
+    for (const width of [320, 390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+
+      for (const route of ["/", "/events"]) {
+        const response = await page.goto(route);
+
+        expect(response?.status()).toBeLessThan(500);
+        await expect(page.locator("main")).toBeVisible();
+        expect(await hasHorizontalOverflow(page)).toBe(false);
+      }
+
+      const dashboardResponse = await page.goto("/dashboard");
+      expect(dashboardResponse?.status()).toBeLessThan(500);
+      await expect(page).toHaveURL(/\/sign-in$/);
+      expect(await hasHorizontalOverflow(page)).toBe(false);
+    }
+
+    expect(
+      consoleErrors.filter((message) =>
+        /hydration|uncaught|unhandled|error:/i.test(message),
+      ),
+    ).toEqual([]);
+  });
+
   test("session route loads without dashboard auth", async ({ page }) => {
     const code = getOptionalE2ESessionCode();
 
@@ -81,3 +124,9 @@ test.describe("public smoke", () => {
     await expect(page.locator("main")).toContainText(/Link sesji|Wybierz piosenkę/);
   });
 });
+
+async function hasHorizontalOverflow(page: import("@playwright/test").Page) {
+  return page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth,
+  );
+}
