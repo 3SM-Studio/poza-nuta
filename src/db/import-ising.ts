@@ -1,6 +1,9 @@
 import { config } from "dotenv";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
+import {
+  drizzle,
+  type PostgresJsDatabase,
+} from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import {
@@ -13,7 +16,7 @@ import {
   mapISingSongToSong,
   type ISingSongPayload,
 } from "./ising-mapping.ts";
-import { getErrorMessage, logDatabaseError } from "./log-db-error.ts";
+import { logDatabaseError } from "./log-db-error.ts";
 import { importJobs, songs } from "./schema.ts";
 
 const DEFAULT_API_BASE_URL = "https://api.ising.pl/v2";
@@ -45,6 +48,43 @@ export type ISingImportSummary = {
   pages: number;
   dryRun: boolean;
 };
+
+export const ISING_IMPORT_FAILURE_ERROR = "IMPORT_FAILED";
+
+type ImportJobDatabase = Pick<PostgresJsDatabase, "update">;
+
+export async function markISingImportJobSucceeded(
+  database: ImportJobDatabase,
+  jobId: number,
+  summary: ISingImportSummary,
+  finishedAt: Date,
+) {
+  await database
+    .update(importJobs)
+    .set({
+      status: "succeeded",
+      totalRows: summary.processed,
+      importedCount: summary.inserted + summary.updated,
+      skippedCount: summary.skipped,
+      finishedAt,
+    })
+    .where(eq(importJobs.id, jobId));
+}
+
+export async function markISingImportJobFailed(
+  database: ImportJobDatabase,
+  jobId: number,
+  finishedAt: Date,
+) {
+  await database
+    .update(importJobs)
+    .set({
+      status: "failed",
+      error: ISING_IMPORT_FAILURE_ERROR,
+      finishedAt,
+    })
+    .where(eq(importJobs.id, jobId));
+}
 
 type ImportDependencies = {
   fetchFn?: typeof fetch;
@@ -272,29 +312,13 @@ async function main() {
     });
 
     if (db !== null && jobId !== null) {
-      await db
-        .update(importJobs)
-        .set({
-          status: "done",
-          totalRows: summary.processed,
-          importedCount: summary.inserted + summary.updated,
-          skippedCount: summary.skipped,
-          finishedAt: new Date(),
-        })
-        .where(eq(importJobs.id, jobId));
+      await markISingImportJobSucceeded(db, jobId, summary, new Date());
     }
 
     printSummary(summary);
   } catch (error) {
     if (db !== null && jobId !== null) {
-      await db
-        .update(importJobs)
-        .set({
-          status: "failed",
-          error: getErrorMessage(error),
-          finishedAt: new Date(),
-        })
-        .where(eq(importJobs.id, jobId));
+      await markISingImportJobFailed(db, jobId, new Date());
     }
 
     throw error;

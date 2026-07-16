@@ -39,6 +39,9 @@ export const importJobStatusValues = [
   "running",
   "done",
   "failed",
+  "queued",
+  "succeeded",
+  "cancelled",
 ] as const;
 export const workspaceMemberRoleValues = [
   "owner",

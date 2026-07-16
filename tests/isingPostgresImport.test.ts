@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -13,6 +14,33 @@ import {
 } from "../src/db/ising-mapping.ts";
 
 const checkedAt = new Date("2026-07-05T12:00:00.000Z");
+
+test("iSing main uses the production durable writers", () => {
+  const source = readFileSync("src/db/import-ising.ts", "utf8");
+
+  assert.match(source, /export async function markISingImportJobSucceeded\(/);
+  assert.match(source, /export async function markISingImportJobFailed\(/);
+  assert.match(
+    source,
+    /await markISingImportJobSucceeded\(db, jobId, summary, new Date\(\)\)/,
+  );
+  assert.match(
+    source,
+    /await markISingImportJobFailed\(db, jobId, new Date\(\)\)/,
+  );
+  assert.doesNotMatch(source, /getErrorMessage/);
+  assert.doesNotMatch(
+    source,
+    /markISingImportJobFailed\([^)]*(?:error|message|payload)/i,
+  );
+  assert.match(source, /status: "running"/);
+  assert.match(source, /status: "succeeded"/);
+  assert.doesNotMatch(source, /status: "done"/);
+  assert.doesNotMatch(source, /status: "queued"/);
+  assert.match(source, /if \(db !== null && !options\.dryRun\)/);
+  assert.match(source, /\.onConflictDoUpdate\(/);
+  assert.doesNotMatch(source, /\.delete\(|\btruncate\b/i);
+});
 
 test("mapISingSongToSong maps iSing metadata to songs insert payload", () => {
   const song = mapISingSongToSong(sampleSong(), checkedAt);
