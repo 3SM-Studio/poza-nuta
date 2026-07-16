@@ -75,6 +75,7 @@ export async function createISingImportJob(
       safeErrorCode: null,
       safeErrorSummary: null,
       error: null,
+      createdAt: startedAt,
       startedAt,
       terminalAt: null,
       updatedAt: startedAt,
@@ -99,6 +100,12 @@ export async function markISingImportJobSucceeded(
   summary: ISingImportSummary,
   finishedAt: Date,
 ) {
+  const terminalAt = sql<Date>`greatest(
+    ${importJobs.createdAt},
+    coalesce(${importJobs.startedAt}, ${importJobs.createdAt}),
+    ${sql.param(finishedAt, importJobs.terminalAt)}
+  )`;
+
   await database
     .update(importJobs)
     .set({
@@ -111,8 +118,8 @@ export async function markISingImportJobSucceeded(
       safeErrorCode: null,
       safeErrorSummary: null,
       error: null,
-      terminalAt: finishedAt,
-      updatedAt: finishedAt,
+      terminalAt,
+      updatedAt: terminalAt,
     })
     .where(eq(importJobs.id, jobId));
 }
@@ -122,6 +129,12 @@ export async function markISingImportJobFailed(
   jobId: number,
   finishedAt: Date,
 ) {
+  const terminalAt = sql<Date>`greatest(
+    ${importJobs.createdAt},
+    coalesce(${importJobs.startedAt}, ${importJobs.createdAt}),
+    ${sql.param(finishedAt, importJobs.terminalAt)}
+  )`;
+
   await database
     .update(importJobs)
     .set({
@@ -129,8 +142,8 @@ export async function markISingImportJobFailed(
       safeErrorCode: ISING_IMPORT_FAILURE_ERROR,
       safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY,
       error: null,
-      terminalAt: finishedAt,
-      updatedAt: finishedAt,
+      terminalAt,
+      updatedAt: terminalAt,
     })
     .where(eq(importJobs.id, jobId));
 }

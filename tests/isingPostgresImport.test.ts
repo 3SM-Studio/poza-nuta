@@ -43,6 +43,10 @@ test("iSing main uses the production durable writers", () => {
   assert.match(source, /mode: "write"/);
   assert.match(source, /initiatorKind: "system"/);
   assert.match(source, /startedByOperatorId: null/);
+  assert.match(source, /createdAt: startedAt/);
+  assert.match(source, /const terminalAt = sql<Date>`greatest\(/);
+  assert.match(source, /terminalAt,/);
+  assert.match(source, /updatedAt: terminalAt/);
   assert.match(source, /processedCount: summary\.processed/);
   assert.match(source, /errorCount: 0/);
   assert.match(source, /safeErrorCode: ISING_IMPORT_FAILURE_ERROR/);

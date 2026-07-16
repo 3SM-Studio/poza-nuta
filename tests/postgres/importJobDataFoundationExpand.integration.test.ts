@@ -562,7 +562,7 @@ test(
           );
 
           await context.test(
-            "production iSing writer persists the complete expand model",
+            "production iSing writer keeps lifecycle timestamps monotonic across clock skew",
             async () => {
               const database = drizzle({ client: sql });
               const startedAt = new Date("2026-01-03T09:00:00.000Z");
@@ -581,6 +581,7 @@ test(
                 safeErrorCode: null,
                 safeErrorSummary: null,
                 error: null,
+                createdAt: startedAt.toISOString(),
                 startedAt: startedAt.toISOString(),
                 terminalAt: null,
                 updatedAt: startedAt.toISOString(),
@@ -589,7 +590,7 @@ test(
                 artifactDeletedAt: null,
               });
 
-              const succeededAt = new Date("2026-01-03T09:30:00.000Z");
+              const skewedSuccessAt = new Date("2026-01-03T08:59:59.000Z");
               await markISingImportJobSucceeded(
                 database,
                 successId,
@@ -602,7 +603,7 @@ test(
                   pages: 1,
                   dryRun: false,
                 },
-                succeededAt,
+                skewedSuccessAt,
               );
               const succeeded = await readWriterJob(sql, successId);
               assert.deepEqual(succeeded, {
@@ -618,9 +619,10 @@ test(
                 safeErrorCode: null,
                 safeErrorSummary: null,
                 error: null,
+                createdAt: startedAt.toISOString(),
                 startedAt: startedAt.toISOString(),
-                terminalAt: succeededAt.toISOString(),
-                updatedAt: succeededAt.toISOString(),
+                terminalAt: startedAt.toISOString(),
+                updatedAt: startedAt.toISOString(),
                 sourceArtifactId: null,
                 artifactUploadedAt: null,
                 artifactDeletedAt: null,
@@ -631,7 +633,7 @@ test(
                 database,
                 failedStartedAt,
               );
-              const failedAt = new Date("2026-01-03T10:15:00.000Z");
+              const skewedFailureAt = new Date("2026-01-03T09:59:59.000Z");
               const secret = "test-only-import-secret";
               const originalError = new Error(`upstream failed with ${secret}`);
 
@@ -640,7 +642,11 @@ test(
                   try {
                     throw originalError;
                   } catch (error) {
-                    await markISingImportJobFailed(database, failedId, failedAt);
+                    await markISingImportJobFailed(
+                      database,
+                      failedId,
+                      skewedFailureAt,
+                    );
                     throw error;
                   }
                 },
@@ -661,9 +667,10 @@ test(
                 safeErrorCode: ISING_IMPORT_FAILURE_ERROR,
                 safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY,
                 error: null,
+                createdAt: failedStartedAt.toISOString(),
                 startedAt: failedStartedAt.toISOString(),
-                terminalAt: failedAt.toISOString(),
-                updatedAt: failedAt.toISOString(),
+                terminalAt: failedStartedAt.toISOString(),
+                updatedAt: failedStartedAt.toISOString(),
                 sourceArtifactId: null,
                 artifactUploadedAt: null,
                 artifactDeletedAt: null,
@@ -849,6 +856,7 @@ async function readWriterJob(sql: SqlExecutor, jobId: number) {
       safe_error_code AS "safeErrorCode",
       safe_error_summary AS "safeErrorSummary",
       error,
+      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
       to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startedAt",
       CASE WHEN finished_at IS NULL THEN NULL ELSE to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END AS "terminalAt",
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt",
