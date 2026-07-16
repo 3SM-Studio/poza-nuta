@@ -50,8 +50,48 @@ export type ISingImportSummary = {
 };
 
 export const ISING_IMPORT_FAILURE_ERROR = "IMPORT_FAILED";
+export const ISING_IMPORT_FAILURE_SUMMARY =
+  "The iSing import failed. Review sanitized diagnostics before retrying.";
 
-type ImportJobDatabase = Pick<PostgresJsDatabase, "update">;
+type ImportJobDatabase = Pick<PostgresJsDatabase, "insert" | "update">;
+
+export async function createISingImportJob(
+  database: ImportJobDatabase,
+  startedAt: Date,
+) {
+  const [job] = await database
+    .insert(importJobs)
+    .values({
+      source: "ising",
+      status: "running",
+      mode: "write",
+      initiatorKind: "system",
+      startedByOperatorId: null,
+      totalCount: 0,
+      processedCount: 0,
+      importedCount: 0,
+      skippedCount: 0,
+      errorCount: 0,
+      safeErrorCode: null,
+      safeErrorSummary: null,
+      error: null,
+      startedAt,
+      terminalAt: null,
+      updatedAt: startedAt,
+      cancellationRequestedAt: null,
+      cancellationRequestedByOperatorId: null,
+      sourceArtifactId: null,
+      artifactUploadedAt: null,
+      artifactDeletedAt: null,
+    })
+    .returning({ id: importJobs.id });
+
+  if (!job) {
+    throw new Error("The iSing import job could not be created.");
+  }
+
+  return job.id;
+}
 
 export async function markISingImportJobSucceeded(
   database: ImportJobDatabase,
@@ -63,10 +103,16 @@ export async function markISingImportJobSucceeded(
     .update(importJobs)
     .set({
       status: "succeeded",
-      totalRows: summary.processed,
+      totalCount: summary.processed,
+      processedCount: summary.processed,
       importedCount: summary.inserted + summary.updated,
       skippedCount: summary.skipped,
-      finishedAt,
+      errorCount: 0,
+      safeErrorCode: null,
+      safeErrorSummary: null,
+      error: null,
+      terminalAt: finishedAt,
+      updatedAt: finishedAt,
     })
     .where(eq(importJobs.id, jobId));
 }
@@ -80,8 +126,11 @@ export async function markISingImportJobFailed(
     .update(importJobs)
     .set({
       status: "failed",
-      error: ISING_IMPORT_FAILURE_ERROR,
-      finishedAt,
+      safeErrorCode: ISING_IMPORT_FAILURE_ERROR,
+      safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY,
+      error: null,
+      terminalAt: finishedAt,
+      updatedAt: finishedAt,
     })
     .where(eq(importJobs.id, jobId));
 }
@@ -294,17 +343,7 @@ async function main() {
 
   try {
     if (db !== null && !options.dryRun) {
-      const [job] = await db
-        .insert(importJobs)
-        .values({
-          source: "ising",
-          status: "running",
-          totalRows: 0,
-          importedCount: 0,
-          skippedCount: 0,
-        })
-        .returning({ id: importJobs.id });
-      jobId = job?.id ?? null;
+      jobId = await createISingImportJob(db, new Date());
     }
 
     const summary = await runISingImport(options, {

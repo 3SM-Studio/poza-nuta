@@ -35,13 +35,17 @@ export const requestStatusValues = [
 export const requestSourceValues = ["public", "operator"] as const;
 export const importSourceValues = ["ising", "karafun"] as const;
 export const importJobStatusValues = [
-  "pending",
-  "running",
-  "done",
-  "failed",
   "queued",
+  "running",
   "succeeded",
+  "failed",
   "cancelled",
+] as const;
+export const importJobModeValues = ["validate", "dry_run", "write"] as const;
+export const importJobInitiatorKindValues = [
+  "operator",
+  "system",
+  "legacy",
 ] as const;
 export const workspaceMemberRoleValues = [
   "owner",
@@ -75,6 +79,11 @@ export const importSourceEnum = pgEnum("import_source", importSourceValues);
 export const importJobStatusEnum = pgEnum(
   "import_job_status",
   importJobStatusValues,
+);
+export const importJobModeEnum = pgEnum("import_job_mode", importJobModeValues);
+export const importJobInitiatorKindEnum = pgEnum(
+  "import_job_initiator_kind",
+  importJobInitiatorKindValues,
 );
 export const workspaceMemberRoleEnum = pgEnum(
   "workspace_member_role",
@@ -490,15 +499,33 @@ export const importJobs = pgTable(
   {
     id: idColumn(),
     source: importSourceEnum("source").notNull(),
-    status: importJobStatusEnum("status").notNull().default("pending"),
+    status: importJobStatusEnum("status").notNull().default("queued"),
+    mode: importJobModeEnum("mode").notNull().default("write"),
+    initiatorKind: importJobInitiatorKindEnum("initiator_kind")
+      .notNull()
+      .default("system"),
     startedByOperatorId: bigint("started_by_operator_id", { mode: "number" })
       .references(() => operatorUsers.id, { onDelete: "set null" }),
-    totalRows: integer("total_rows").notNull().default(0),
+    totalCount: integer("total_rows").notNull().default(0),
+    processedCount: integer("processed_count"),
     importedCount: integer("imported_count").notNull().default(0),
     skippedCount: integer("skipped_count").notNull().default(0),
+    errorCount: integer("error_count"),
+    safeErrorCode: text("safe_error_code"),
+    safeErrorSummary: text("safe_error_summary"),
     error: text("error"),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
-    finishedAt: timestampColumn("finished_at"),
+    startedAt: timestampColumn("started_at"),
+    terminalAt: timestampColumn("finished_at"),
+    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+    cancellationRequestedAt: timestampColumn("cancellation_requested_at"),
+    cancellationRequestedByOperatorId: bigint(
+      "cancellation_requested_by_operator_id",
+      { mode: "number" },
+    ).references(() => operatorUsers.id, { onDelete: "set null" }),
+    sourceArtifactId: uuid("source_artifact_id"),
+    artifactUploadedAt: timestampColumn("artifact_uploaded_at"),
+    artifactDeletedAt: timestampColumn("artifact_deleted_at"),
   },
   (table) => [
     index("import_jobs_source_status_created_at_idx").on(
@@ -509,9 +536,105 @@ export const importJobs = pgTable(
     index("import_jobs_started_by_operator_idx").on(
       table.startedByOperatorId,
     ),
+    index("import_jobs_cancellation_requested_by_operator_idx").on(
+      table.cancellationRequestedByOperatorId,
+    ),
+    index("import_jobs_terminal_at_idx")
+      .on(table.terminalAt)
+      .where(
+        sql`${table.status} in ('succeeded', 'failed', 'cancelled') and ${table.terminalAt} is not null`,
+      ),
+    index("import_jobs_artifact_uploaded_at_idx")
+      .on(table.artifactUploadedAt)
+      .where(
+        sql`${table.sourceArtifactId} is not null and ${table.artifactDeletedAt} is null`,
+      ),
+    uniqueIndex("import_jobs_one_active_per_source_idx")
+      .on(table.source)
+      .where(sql`${table.status} in ('queued', 'running')`),
     check(
       "import_jobs_counts_check",
-      sql`${table.totalRows} >= 0 and ${table.importedCount} >= 0 and ${table.skippedCount} >= 0`,
+      sql`${table.totalCount} >= 0 and ${table.importedCount} >= 0 and ${table.skippedCount} >= 0`,
+    ),
+    check(
+      "import_jobs_expand_counts_check",
+      sql`(${table.processedCount} is null or ${table.processedCount} >= 0)
+        and (${table.errorCount} is null or ${table.errorCount} >= 0)
+        and (
+          ${table.processedCount} is null
+          or ${table.errorCount} is null
+          or ${table.processedCount} = ${table.importedCount} + ${table.skippedCount} + ${table.errorCount}
+        )
+        and (
+          ${table.processedCount} is null
+          or ${table.totalCount} = 0
+          or ${table.processedCount} <= ${table.totalCount}
+        )`,
+    ),
+    check(
+      "import_jobs_safe_error_pair_check",
+      sql`(
+          ${table.safeErrorCode} is null
+          and ${table.safeErrorSummary} is null
+        ) or (
+          ${table.safeErrorCode} is not null
+          and char_length(${table.safeErrorCode}) between 1 and 100
+          and ${table.safeErrorCode} = btrim(${table.safeErrorCode})
+          and ${table.safeErrorCode} ~ '^[A-Z0-9][A-Z0-9_.-]*$'
+          and ${table.safeErrorSummary} is not null
+          and char_length(${table.safeErrorSummary}) between 1 and 500
+          and ${table.safeErrorSummary} = btrim(${table.safeErrorSummary})
+        )`,
+    ),
+    check(
+      "import_jobs_artifact_state_check",
+      sql`(
+          ${table.sourceArtifactId} is null
+          and ${table.artifactUploadedAt} is null
+          and ${table.artifactDeletedAt} is null
+        ) or (
+          ${table.sourceArtifactId} is not null
+          and ${table.artifactUploadedAt} is not null
+          and (
+            ${table.artifactDeletedAt} is null
+            or ${table.artifactDeletedAt} >= ${table.artifactUploadedAt}
+          )
+        )`,
+    ),
+    check(
+      "import_jobs_cancellation_request_check",
+      sql`${table.cancellationRequestedByOperatorId} is null or ${table.cancellationRequestedAt} is not null`,
+    ),
+  ],
+).enableRLS();
+
+export const importJobDiagnostics = pgTable(
+  "import_job_diagnostics",
+  {
+    id: idColumn(),
+    importJobId: bigint("import_job_id", { mode: "number" })
+      .notNull()
+      .references(() => importJobs.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    safeSummary: text("safe_summary").notNull(),
+    recordedAt: timestampColumn("recorded_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("import_job_diagnostics_job_recorded_at_idx").on(
+      table.importJobId,
+      table.recordedAt.desc(),
+    ),
+    index("import_job_diagnostics_recorded_at_idx").on(table.recordedAt),
+    check(
+      "import_job_diagnostics_code_check",
+      sql`char_length(${table.code}) between 1 and 100
+        and ${table.code} = btrim(${table.code})
+        and ${table.code} ~ '^[A-Z0-9][A-Z0-9_.-]*$'`,
+    ),
+    check(
+      "import_job_diagnostics_summary_check",
+      sql`char_length(${table.safeSummary}) between 1 and 500
+        and ${table.safeSummary} = btrim(${table.safeSummary})`,
     ),
   ],
 ).enableRLS();

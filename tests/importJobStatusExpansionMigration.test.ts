@@ -84,8 +84,8 @@ test("0016 follows 0015 in the migration journal", () => {
   const journal = JSON.parse(
     readFileSync("drizzle/meta/_journal.json", "utf8"),
   ) as Journal;
-  const previous = journal.entries.at(-2);
-  const current = journal.entries.at(-1);
+  const previous = journal.entries.find(({ idx }) => idx === 15);
+  const current = journal.entries.find(({ idx }) => idx === 16);
 
   assert.deepEqual(previous, {
     idx: 15,

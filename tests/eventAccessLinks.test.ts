@@ -46,11 +46,15 @@ test("event access links are stored hash-only in the schema", () => {
     new URL("../src/db/schema.ts", import.meta.url),
     "utf8",
   );
+  const eventAccessLinksSchema = schemaSource.slice(
+    schemaSource.indexOf("export const eventAccessLinks = pgTable("),
+    schemaSource.indexOf("export const songRequests = pgTable("),
+  );
 
   assert.match(migrationSource, /"code_hash" text NOT NULL/);
   assert.doesNotMatch(migrationSource, /"code"\s+text/i);
-  assert.match(schemaSource, /codeHash: text\("code_hash"\)\.notNull\(\)/);
-  assert.doesNotMatch(schemaSource, /code: text\("code"\)/);
+  assert.match(eventAccessLinksSchema, /codeHash: text\("code_hash"\)\.notNull\(\)/);
+  assert.doesNotMatch(eventAccessLinksSchema, /code: text\("code"\)/);
 });
 
 test("event access link labels are normalized and validated", () => {

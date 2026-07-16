@@ -18,8 +18,13 @@ const checkedAt = new Date("2026-07-05T12:00:00.000Z");
 test("iSing main uses the production durable writers", () => {
   const source = readFileSync("src/db/import-ising.ts", "utf8");
 
+  assert.match(source, /export async function createISingImportJob\(/);
   assert.match(source, /export async function markISingImportJobSucceeded\(/);
   assert.match(source, /export async function markISingImportJobFailed\(/);
+  assert.match(
+    source,
+    /jobId = await createISingImportJob\(db, new Date\(\)\)/,
+  );
   assert.match(
     source,
     /await markISingImportJobSucceeded\(db, jobId, summary, new Date\(\)\)/,
@@ -35,6 +40,14 @@ test("iSing main uses the production durable writers", () => {
   );
   assert.match(source, /status: "running"/);
   assert.match(source, /status: "succeeded"/);
+  assert.match(source, /mode: "write"/);
+  assert.match(source, /initiatorKind: "system"/);
+  assert.match(source, /startedByOperatorId: null/);
+  assert.match(source, /processedCount: summary\.processed/);
+  assert.match(source, /errorCount: 0/);
+  assert.match(source, /safeErrorCode: ISING_IMPORT_FAILURE_ERROR/);
+  assert.match(source, /safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY/);
+  assert.match(source, /error: null/);
   assert.doesNotMatch(source, /status: "done"/);
   assert.doesNotMatch(source, /status: "queued"/);
   assert.match(source, /if \(db !== null && !options\.dryRun\)/);

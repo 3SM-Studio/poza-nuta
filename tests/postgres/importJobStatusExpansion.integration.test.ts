@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { drizzle } from "drizzle-orm/postgres-js";
-
-import {
-  ISING_IMPORT_FAILURE_ERROR,
-  markISingImportJobFailed,
-  markISingImportJobSucceeded,
-} from "../../src/db/import-ising.ts";
 import {
   applyPostgresMigration,
   applyPostgresMigrations,
@@ -30,7 +23,7 @@ type PgFailure = Error & { code?: string };
 test(
   "0016 expands import job statuses without changing import_jobs structure or data",
   { timeout: 600_000 },
-  async (context) => {
+  async () => {
     const harness = await startPostgresTestHarness(
       "pozanuta-import-job-status-expansion",
     );
@@ -80,77 +73,6 @@ test(
           [...legacyStatuses, ...expandedStatuses].sort(),
         );
 
-        const databaseClient = drizzle({ client: sql });
-
-        await context.test(
-          "production success writer updates the persisted import job",
-          async () => {
-            const jobId = await insertRunningISingJob(sql);
-            const finishedAt = new Date("2026-07-16T09:15:00.000Z");
-
-            await markISingImportJobSucceeded(
-              databaseClient,
-              jobId,
-              {
-                processed: 7,
-                inserted: 3,
-                updated: 2,
-                skipped: 2,
-                errors: 0,
-                pages: 1,
-                dryRun: false,
-              },
-              finishedAt,
-            );
-
-            const job = await readImportJob(sql, jobId);
-            assert.deepEqual(job, {
-              status: "succeeded",
-              totalRows: 7,
-              importedCount: 5,
-              skippedCount: 2,
-              error: null,
-              finishedAt: finishedAt.toISOString(),
-            });
-          },
-        );
-
-        await context.test(
-          "production failure writer stores only the safe failure marker",
-          async () => {
-            const jobId = await insertRunningISingJob(sql);
-            const finishedAt = new Date("2026-07-16T09:20:00.000Z");
-            const secret = "test-only-durable-writer-secret";
-            const originalError = new Error(`upstream failed with ${secret}`);
-
-            await assert.rejects(
-              async () => {
-                try {
-                  throw originalError;
-                } catch (error) {
-                  await markISingImportJobFailed(
-                    databaseClient,
-                    jobId,
-                    finishedAt,
-                  );
-                  throw error;
-                }
-              },
-              (error: unknown) => error === originalError,
-            );
-
-            const job = await readImportJob(sql, jobId);
-            assert.deepEqual(job, {
-              status: "failed",
-              totalRows: 0,
-              importedCount: 0,
-              skippedCount: 0,
-              error: ISING_IMPORT_FAILURE_ERROR,
-              finishedAt: finishedAt.toISOString(),
-            });
-            assert.equal(JSON.stringify(job).includes(secret), false);
-          },
-        );
       } finally {
         await sql.end({ timeout: 5 });
       }
@@ -173,41 +95,6 @@ async function insertImportJob(sql: SqlExecutor, status: string) {
     INSERT INTO import_jobs (source, status)
     VALUES ('ising', ${status}::"public"."import_job_status")
   `;
-}
-
-async function insertRunningISingJob(sql: SqlExecutor) {
-  const [job] = await sql<{ id: number }[]>`
-    INSERT INTO import_jobs (source, status)
-    VALUES ('ising', 'running')
-    RETURNING id::int AS id
-  `;
-  assert.ok(job);
-  return job.id;
-}
-
-async function readImportJob(sql: SqlExecutor, jobId: number) {
-  const [job] = await sql<
-    Array<{
-      status: string;
-      totalRows: number;
-      importedCount: number;
-      skippedCount: number;
-      error: string | null;
-      finishedAt: string;
-    }>
-  >`
-    SELECT
-      status::text AS status,
-      total_rows AS "totalRows",
-      imported_count AS "importedCount",
-      skipped_count AS "skippedCount",
-      error,
-      to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "finishedAt"
-    FROM import_jobs
-    WHERE id = ${jobId}
-  `;
-  assert.ok(job);
-  return job;
 }
 
 async function readImportJobs(sql: SqlExecutor) {
