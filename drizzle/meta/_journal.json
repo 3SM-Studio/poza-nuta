@@ -127,6 +127,13 @@
       "when": 1784188892791,
       "tag": "0017_import_job_data_foundation_expand",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784204366417,
+      "tag": "0018_import_job_data_foundation_contract",
+      "breakpoints": true
     }
   ]
 }

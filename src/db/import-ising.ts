@@ -74,7 +74,6 @@ export async function createISingImportJob(
       errorCount: 0,
       safeErrorCode: null,
       safeErrorSummary: null,
-      error: null,
       createdAt: startedAt,
       startedAt,
       terminalAt: null,
@@ -117,7 +116,6 @@ export async function markISingImportJobSucceeded(
       errorCount: 0,
       safeErrorCode: null,
       safeErrorSummary: null,
-      error: null,
       terminalAt,
       updatedAt: terminalAt,
     })
@@ -141,7 +139,6 @@ export async function markISingImportJobFailed(
       status: "failed",
       safeErrorCode: ISING_IMPORT_FAILURE_ERROR,
       safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY,
-      error: null,
       terminalAt,
       updatedAt: terminalAt,
     })

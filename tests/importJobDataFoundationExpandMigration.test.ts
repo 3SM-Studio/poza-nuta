@@ -224,8 +224,8 @@ test("0017 follows 0016 in the migration journal", () => {
   const journal = JSON.parse(
     readFileSync("drizzle/meta/_journal.json", "utf8"),
   ) as Journal;
-  const previous = journal.entries.at(-2);
-  const current = journal.entries.at(-1);
+  const previous = journal.entries.find(({ idx }) => idx === 16);
+  const current = journal.entries.find(({ idx }) => idx === 17);
 
   assert.equal(previous?.idx, 16);
   assert.equal(previous?.tag, "0016_import_job_status_expand");

@@ -74,8 +74,10 @@ $$;
 
 export async function startPostgresTestHarness(
   namePrefix: string,
+  image = POSTGRES_TEST_IMAGE,
 ): Promise<PostgresTestHarness> {
   assert.match(namePrefix, /^[a-z0-9-]+$/);
+  assert.match(image, /^postgres:(?:15|17)-alpine$/);
   const containerName = `${namePrefix}-${randomUUID()}`;
   const passwordBytes = randomBytes(32);
   const password = passwordBytes.toString("base64url");
@@ -106,7 +108,7 @@ export async function startPostgresTestHarness(
       "3s",
       "--health-retries",
       "60",
-      POSTGRES_TEST_IMAGE,
+      image,
     ],
     environment,
   );

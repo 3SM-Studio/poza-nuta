@@ -51,7 +51,7 @@ test("iSing main uses the production durable writers", () => {
   assert.match(source, /errorCount: 0/);
   assert.match(source, /safeErrorCode: ISING_IMPORT_FAILURE_ERROR/);
   assert.match(source, /safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY/);
-  assert.match(source, /error: null/);
+  assert.doesNotMatch(source, /\berror:\s*null/);
   assert.doesNotMatch(source, /status: "done"/);
   assert.doesNotMatch(source, /status: "queued"/);
   assert.match(source, /if \(db !== null && !options\.dryRun\)/);

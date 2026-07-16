@@ -499,35 +499,41 @@ export const importJobs = pgTable(
   {
     id: idColumn(),
     source: importSourceEnum("source").notNull(),
-    status: importJobStatusEnum("status").notNull().default("queued"),
-    mode: importJobModeEnum("mode").notNull().default("write"),
-    initiatorKind: importJobInitiatorKindEnum("initiator_kind")
-      .notNull()
-      .default("system"),
-    startedByOperatorId: bigint("started_by_operator_id", { mode: "number" })
-      .references(() => operatorUsers.id, { onDelete: "set null" }),
+    status: importJobStatusEnum("status").notNull(),
+    mode: importJobModeEnum("mode").notNull(),
+    initiatorKind: importJobInitiatorKindEnum("initiator_kind").notNull(),
+    startedByOperatorId: bigint("started_by_operator_id", { mode: "number" }),
     totalCount: integer("total_rows").notNull().default(0),
-    processedCount: integer("processed_count"),
+    processedCount: integer("processed_count").notNull(),
     importedCount: integer("imported_count").notNull().default(0),
     skippedCount: integer("skipped_count").notNull().default(0),
     errorCount: integer("error_count"),
     safeErrorCode: text("safe_error_code"),
     safeErrorSummary: text("safe_error_summary"),
-    error: text("error"),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
     startedAt: timestampColumn("started_at"),
     terminalAt: timestampColumn("finished_at"),
-    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+    updatedAt: timestampColumn("updated_at").notNull(),
     cancellationRequestedAt: timestampColumn("cancellation_requested_at"),
     cancellationRequestedByOperatorId: bigint(
       "cancellation_requested_by_operator_id",
       { mode: "number" },
-    ).references(() => operatorUsers.id, { onDelete: "set null" }),
+    ),
     sourceArtifactId: uuid("source_artifact_id"),
     artifactUploadedAt: timestampColumn("artifact_uploaded_at"),
     artifactDeletedAt: timestampColumn("artifact_deleted_at"),
   },
   (table) => [
+    foreignKey({
+      name: "import_jobs_started_by_operator_fk",
+      columns: [table.startedByOperatorId],
+      foreignColumns: [operatorUsers.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "import_jobs_cancel_requested_by_operator_fk",
+      columns: [table.cancellationRequestedByOperatorId],
+      foreignColumns: [operatorUsers.id],
+    }).onDelete("set null"),
     index("import_jobs_source_status_created_at_idx").on(
       table.source,
       table.status,
@@ -557,33 +563,79 @@ export const importJobs = pgTable(
       sql`${table.totalCount} >= 0 and ${table.importedCount} >= 0 and ${table.skippedCount} >= 0`,
     ),
     check(
-      "import_jobs_expand_counts_check",
-      sql`(${table.processedCount} is null or ${table.processedCount} >= 0)
+      "import_jobs_progress_check",
+      sql`${table.processedCount} >= 0
         and (${table.errorCount} is null or ${table.errorCount} >= 0)
         and (
-          ${table.processedCount} is null
-          or ${table.errorCount} is null
-          or ${table.processedCount} = ${table.importedCount} + ${table.skippedCount} + ${table.errorCount}
+          ${table.errorCount} is not null
+          or (${table.initiatorKind} = 'legacy' and ${table.status} = 'failed')
         )
-        and (
-          ${table.processedCount} is null
-          or ${table.totalCount} = 0
-          or ${table.processedCount} <= ${table.totalCount}
-        )`,
+        and ${table.processedCount} = ${table.importedCount} + ${table.skippedCount} + coalesce(${table.errorCount}, 0)
+        and (${table.totalCount} = 0 or ${table.processedCount} <= ${table.totalCount})
+        and (${table.status} <> 'succeeded' or ${table.totalCount} = ${table.processedCount})`,
     ),
     check(
-      "import_jobs_safe_error_pair_check",
+      "import_jobs_safe_error_check",
       sql`(
-          ${table.safeErrorCode} is null
-          and ${table.safeErrorSummary} is null
-        ) or (
-          ${table.safeErrorCode} is not null
+          ${table.status} = 'failed'
+          and ${table.safeErrorCode} is not null
           and char_length(${table.safeErrorCode}) between 1 and 100
           and ${table.safeErrorCode} = btrim(${table.safeErrorCode})
           and ${table.safeErrorCode} ~ '^[A-Z0-9][A-Z0-9_.-]*$'
           and ${table.safeErrorSummary} is not null
           and char_length(${table.safeErrorSummary}) between 1 and 500
           and ${table.safeErrorSummary} = btrim(${table.safeErrorSummary})
+        ) or (
+          ${table.status} <> 'failed'
+          and ${table.safeErrorCode} is null
+          and ${table.safeErrorSummary} is null
+        )`,
+    ),
+    check(
+      "import_jobs_lifecycle_check",
+      sql`(
+          ${table.status} = 'queued'
+          and ${table.startedAt} is null
+          and ${table.terminalAt} is null
+        ) or (
+          ${table.status} = 'running'
+          and ${table.startedAt} is not null
+          and ${table.terminalAt} is null
+        ) or (
+          ${table.status} in ('succeeded', 'failed')
+          and ${table.startedAt} is not null
+          and ${table.terminalAt} is not null
+        ) or (
+          ${table.status} = 'cancelled'
+          and ${table.terminalAt} is not null
+        )`,
+    ),
+    check(
+      "import_jobs_initiator_check",
+      sql`(
+          ${table.initiatorKind} = 'operator'
+          and ${table.startedByOperatorId} is not null
+        ) or (
+          ${table.initiatorKind} in ('system', 'legacy')
+          and ${table.startedByOperatorId} is null
+        )`,
+    ),
+    check(
+      "import_jobs_timestamp_order_check",
+      sql`(${table.startedAt} is null or ${table.startedAt} >= ${table.createdAt})
+        and (
+          ${table.terminalAt} is null
+          or (
+            ${table.terminalAt} >= ${table.createdAt}
+            and (${table.startedAt} is null or ${table.terminalAt} >= ${table.startedAt})
+          )
+        )
+        and ${table.updatedAt} >= ${table.createdAt}
+        and (${table.startedAt} is null or ${table.updatedAt} >= ${table.startedAt})
+        and (${table.terminalAt} is null or ${table.updatedAt} >= ${table.terminalAt})
+        and (
+          ${table.cancellationRequestedAt} is null
+          or ${table.cancellationRequestedAt} >= ${table.createdAt}
         )`,
     ),
     check(
