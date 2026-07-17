@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { drizzle } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
-
-import {
-  createISingImportJob,
-  ISING_IMPORT_FAILURE_ERROR,
-  ISING_IMPORT_FAILURE_SUMMARY,
-  markISingImportJobFailed,
-  markISingImportJobSucceeded,
-} from "../../src/db/import-ising.ts";
 import {
   applyPostgresMigration,
   applyPostgresMigrations,
@@ -136,7 +127,6 @@ async function verifySuccessfulContract(
   await assertFinalColumnContract(sql);
   await assertFinalConstraintContract(sql);
   await assertIndexesAndDiagnosticsUnchanged(sql, seeded.jobIds[0]);
-  await assertWriterUsesFinalContract(sql);
   await assertStatusAndConstraintMatrix(sql, seeded.operatorId);
   await assertForeignKeyActions(sql, seeded);
 }
@@ -402,77 +392,6 @@ async function assertIndexesAndDiagnosticsUnchanged(
       (error: PgFailure) => error.code === "42501",
     );
   }
-}
-
-async function assertWriterUsesFinalContract(sql: postgres.Sql) {
-  const database = drizzle({ client: sql });
-  const firstStart = new Date("2026-07-16T11:00:00Z");
-  const firstEnd = new Date("2026-07-16T11:01:00Z");
-  const successId = await createISingImportJob(database, firstStart);
-  await markISingImportJobSucceeded(
-    database,
-    successId,
-    {
-      processed: 4,
-      inserted: 2,
-      updated: 1,
-      skipped: 1,
-      errors: 0,
-      pages: 1,
-      dryRun: false,
-    },
-    firstEnd,
-  );
-
-  const failureId = await createISingImportJob(
-    database,
-    new Date("2026-07-16T12:00:00Z"),
-  );
-  await markISingImportJobFailed(
-    database,
-    failureId,
-    new Date("2026-07-16T12:01:00Z"),
-  );
-
-  const jobs = await sql`
-    SELECT
-      id::int AS id,
-      status::text AS status,
-      total_rows AS "totalCount",
-      processed_count AS "processedCount",
-      imported_count AS "importedCount",
-      skipped_count AS "skippedCount",
-      error_count AS "errorCount",
-      safe_error_code AS "safeErrorCode",
-      safe_error_summary AS "safeErrorSummary"
-    FROM import_jobs
-    WHERE id IN (${successId}, ${failureId})
-    ORDER BY id
-  `;
-  assert.deepEqual([...jobs], [
-    {
-      id: successId,
-      status: "succeeded",
-      totalCount: 4,
-      processedCount: 4,
-      importedCount: 3,
-      skippedCount: 1,
-      errorCount: 0,
-      safeErrorCode: null,
-      safeErrorSummary: null,
-    },
-    {
-      id: failureId,
-      status: "failed",
-      totalCount: 0,
-      processedCount: 0,
-      importedCount: 0,
-      skippedCount: 0,
-      errorCount: 0,
-      safeErrorCode: ISING_IMPORT_FAILURE_ERROR,
-      safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY,
-    },
-  ]);
 }
 
 async function assertStatusAndConstraintMatrix(

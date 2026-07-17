@@ -13,6 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:import:karafun": "node --experimental-strip-types src/db/import-karafun-csv.ts",
     "db:import:ising": "node --experimental-strip-types src/db/import-ising.ts",
+    "import-worker": "node --experimental-strip-types src/server/platform-admin/import-worker-process.ts",
+    "import-worker:once": "node --experimental-strip-types src/server/platform-admin/import-worker-process.ts --once",
     "db:migrate": "drizzle-kit migrate",
     "db:check": "node --experimental-strip-types src/db/check-db-state.ts",
     "db:seed": "node --experimental-strip-types src/db/seed.ts",
@@ -32,6 +34,7 @@
     "test:postgres:import-job-data-foundation-expand": "node --experimental-strip-types --test tests/postgres/importJobDataFoundationExpand.integration.test.ts",
     "test:postgres:import-job-data-foundation-contract": "node --experimental-strip-types --test tests/postgres/importJobDataFoundationContract.integration.test.ts",
     "test:postgres:import-job-worker-foundation": "node --experimental-strip-types --test tests/postgres/importJobWorkerFoundation.integration.test.ts",
+    "test:postgres:import-worker-runtime": "node --experimental-strip-types --test tests/postgres/importWorkerRuntime.integration.test.ts",
     "e2e": "playwright test"
   },
   "engines": {

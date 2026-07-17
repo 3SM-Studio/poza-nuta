@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 
 import {
   importJobDiagnostics,
@@ -14,6 +14,7 @@ import type {
   ImportWorkerTransactionStore,
   UpdateImportJobProgressInput,
 } from "./import-worker-core.ts";
+import type { ImportSource } from "./import-job-core.ts";
 import {
   exhaustedImportErrorCode,
   exhaustedImportErrorSummary,
@@ -26,6 +27,11 @@ type ClaimRow = {
   attempt_count: number;
   claim_token: string;
   lease_expires_at: Date | string;
+  total_count: number;
+  processed_count: number;
+  imported_count: number;
+  skipped_count: number;
+  error_count: number;
 };
 
 type LockedJobRow = {
@@ -44,7 +50,9 @@ export function createImportWorkerTransactionStore(
   transaction: ImportJobTransaction,
 ): ImportWorkerTransactionStore {
   return {
-    claimNext: (claimToken) => claimNext(transaction, claimToken),
+    claimNext: (claimToken, supportedSources) =>
+      claimNext(transaction, claimToken, supportedSources),
+    checkpoint: (input) => checkpoint(transaction, input),
     heartbeat: (input) => heartbeat(transaction, input),
     updateProgress: (input) => updateProgress(transaction, input),
     complete: (input) => complete(transaction, input),
@@ -64,9 +72,69 @@ export function createImportWorkerTransactionStore(
   };
 }
 
+async function checkpoint(
+  transaction: ImportJobTransaction,
+  input: ClaimBoundInput,
+): Promise<"continue" | "cancelled" | "claim_lost"> {
+  const current = await lockClaimedJob(transaction, input);
+  if (!current || !current.lease_valid) return "claim_lost";
+
+  if (current.cancellation_requested) {
+    await transaction.execute(sql`
+      WITH database_time AS MATERIALIZED (
+        SELECT clock_timestamp() AS value
+      )
+      UPDATE ${importJobs}
+      SET
+        ${sql.identifier("status")} = 'cancelled'::import_job_status,
+        ${sql.identifier("finished_at")} = GREATEST(
+          ${importJobs.startedAt},
+          database_time.value
+        ),
+        ${sql.identifier("updated_at")} = GREATEST(
+          ${importJobs.updatedAt},
+          ${importJobs.startedAt},
+          database_time.value
+        ),
+        ${sql.identifier("claim_token")} = NULL,
+        ${sql.identifier("lease_expires_at")} = NULL,
+        ${sql.identifier("heartbeat_at")} = NULL
+      FROM database_time
+      WHERE ${importJobs.id} = ${input.importJobId}
+    `);
+    return "cancelled";
+  }
+
+  await transaction.execute(sql`
+    WITH database_time AS MATERIALIZED (
+      SELECT clock_timestamp() AS value
+    )
+    UPDATE ${importJobs}
+    SET
+      ${sql.identifier("heartbeat_at")} = GREATEST(
+        ${importJobs.heartbeatAt},
+        ${importJobs.startedAt},
+        database_time.value
+      ),
+      ${sql.identifier("lease_expires_at")} = GREATEST(
+        ${importJobs.heartbeatAt},
+        ${importJobs.startedAt},
+        database_time.value
+      ) + interval '60 seconds',
+      ${sql.identifier("updated_at")} = GREATEST(
+        ${importJobs.updatedAt},
+        database_time.value
+      )
+    FROM database_time
+    WHERE ${importJobs.id} = ${input.importJobId}
+  `);
+  return "continue";
+}
+
 async function claimNext(
   transaction: ImportJobTransaction,
   claimToken: string,
+  supportedSources: readonly ImportSource[],
 ): Promise<ImportJobClaim | null> {
   const rows = await transaction.execute<ClaimRow>(sql`
     WITH database_time AS MATERIALIZED (
@@ -75,11 +143,14 @@ async function claimNext(
     candidate AS MATERIALIZED (
       SELECT ${importJobs.id} AS id
       FROM ${importJobs}, database_time
-      WHERE ${importJobs.status} = 'queued'
-        OR (
-          ${importJobs.status} = 'running'
-          AND ${importJobs.leaseExpiresAt} < database_time.value
-          AND ${importJobs.attemptCount} < 3
+      WHERE ${inArray(importJobs.source, [...supportedSources])}
+        AND (
+          ${importJobs.status} = 'queued'
+          OR (
+            ${importJobs.status} = 'running'
+            AND ${importJobs.leaseExpiresAt} < database_time.value
+            AND ${importJobs.attemptCount} < 3
+          )
         )
       ORDER BY
         CASE WHEN ${importJobs.status} = 'queued' THEN 0 ELSE 1 END,
@@ -122,7 +193,12 @@ async function claimNext(
         ${importJobs.mode}::text AS mode,
         ${importJobs.attemptCount} AS attempt_count,
         ${importJobs.claimToken}::text AS claim_token,
-        ${importJobs.leaseExpiresAt} AS lease_expires_at
+        ${importJobs.leaseExpiresAt} AS lease_expires_at,
+        ${importJobs.totalCount} AS total_count,
+        ${importJobs.processedCount} AS processed_count,
+        ${importJobs.importedCount} AS imported_count,
+        ${importJobs.skippedCount} AS skipped_count,
+        ${importJobs.errorCount} AS error_count
     )
     SELECT * FROM claimed
   `);
@@ -135,6 +211,13 @@ async function claimNext(
     attemptCount: row.attempt_count,
     claimToken: row.claim_token,
     leaseExpiresAt: new Date(row.lease_expires_at),
+    progress: {
+      totalCount: row.total_count,
+      processedCount: row.processed_count,
+      importedCount: row.imported_count,
+      skippedCount: row.skipped_count,
+      errorCount: row.error_count,
+    },
   };
 }
 

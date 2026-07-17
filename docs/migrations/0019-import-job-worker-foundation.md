@@ -131,6 +131,30 @@ provision a separate server-only LOGIN and membership outside this migration,
 after a dedicated secret and grant review. Never add a password to a committed
 migration.
 
+The worker connection URL must identify that dedicated LOGIN, never a database
+owner or superuser. The LOGIN must be `NOSUPERUSER NOCREATEDB NOCREATEROLE
+NOINHERIT NOREPLICATION NOBYPASSRLS` and receive only membership in
+`import_worker`. That must be its only direct role membership, and the grant
+must not include `ADMIN OPTION`. The LOGIN must not own the current database,
+the `public`, `private` or `drizzle` schemas, or any object in those schemas.
+Every physical postgres.js session must apply
+`options=-c role=import_worker` in its PostgreSQL startup parameters. A single
+post-connect `SET ROLE` is insufficient because it does not survive reconnect.
+
+Before recovery and again before claim, the worker must verify both identities
+independently. The dedicated `session_user` must be a different LOGIN with
+`NOINHERIT`, have exactly one direct membership in `import_worker` without
+`ADMIN OPTION`, be able to set that role, have none of the administrative
+attributes listed above and own neither the current database nor any schema or
+object in `public`, `private` or `drizzle`. The effective `current_user` must be
+exactly `import_worker`, and that role must remain `NOLOGIN`, `NOINHERIT`,
+`NOSUPERUSER`, `NOBYPASSRLS`, `NOCREATEDB`, `NOCREATEROLE` and
+`NOREPLICATION`. It must own neither the current database nor any schema or
+object in those three application schemas and must not be a member of a parent
+role. A failed identity check stops the process before recovery, claim,
+diagnostics or audit writes. The same complete checks must pass after a forced
+backend disconnect and automatic reconnect.
+
 `import_worker` is a global PostgreSQL cluster role. A custom or schema-only
 dump restricted to `public`, `private` and `drizzle` records grants and policies
 that reference the role, but does not contain `CREATE ROLE`. A restore fixture
@@ -195,13 +219,24 @@ removed. Never deploy the Ticket 13A commit separately against schema 0018.
    secret.
 8. Deploy the complete 13A+13B release, including every actor-kind-compatible
    audit writer, while old instances remain stopped.
-9. Smoke the worker and audit paths with controlled data.
-10. Remove maintenance and re-enable imports only after the complete release and
+9. Verify the dedicated LOGIN and effective `import_worker` contracts,
+   including exact membership without `ADMIN OPTION`, ownership, parent-role
+   absence, `session_user`, `current_user`, safe attributes and a forced
+   reconnect before allowing recovery or claim.
+10. Smoke the worker and audit paths with controlled data.
+11. Remove maintenance and re-enable imports only after the complete release and
    smoke are green.
 
 Do not run or re-enable the legacy iSing CLI after step 5. Keep it disabled
 after migration 0019: its direct `running` insert does not own a claim and
 intentionally does not satisfy the 0019 worker contract.
+
+Validate the complete iSing configuration before opening the worker loop. In
+particular, `ISING_IMPORT_LIMIT` is forbidden in continuous polling mode so a
+long-lived worker cannot inherit a partial-import limit. A positive limit is
+allowed only for a controlled smoke started with `--once`; invalid or missing
+iSing configuration must stop the process before recovery, claim, diagnostics
+or audit writes.
 
 ## Rollback And Forward Fix
 

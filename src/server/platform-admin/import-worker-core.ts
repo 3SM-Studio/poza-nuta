@@ -21,6 +21,7 @@ export type ImportJobClaim = {
   attemptCount: number;
   claimToken: string;
   leaseExpiresAt: Date;
+  progress: ImportJobProgress;
 };
 
 export type ClaimBoundInput = {
@@ -39,7 +40,13 @@ export type FailImportJobInput = ClaimBoundInput & {
 };
 
 export type ImportWorkerTransactionStore = {
-  claimNext(claimToken: string): Promise<ImportJobClaim | null>;
+  claimNext(
+    claimToken: string,
+    supportedSources: readonly ImportSource[],
+  ): Promise<ImportJobClaim | null>;
+  checkpoint(
+    input: ClaimBoundInput,
+  ): Promise<"continue" | "cancelled" | "claim_lost">;
   heartbeat(input: ClaimBoundInput): Promise<boolean>;
   updateProgress(
     input: UpdateImportJobProgressInput,
@@ -79,10 +86,14 @@ const uuidPattern =
 
 export function claimNextImportJob(
   dependencies: ImportWorkerDependencies,
+  supportedSources: readonly ImportSource[] = ["ising", "karafun"],
 ): Promise<ImportJobClaim | null> {
   const claimToken = dependencies.randomClaimToken();
   validateClaimToken(claimToken);
-  return runWorkerTransaction(dependencies, (store) => store.claimNext(claimToken));
+  validateSupportedSources(supportedSources);
+  return runWorkerTransaction(dependencies, (store) =>
+    store.claimNext(claimToken, supportedSources),
+  );
 }
 
 export async function heartbeatImportJob(
@@ -94,6 +105,18 @@ export async function heartbeatImportJob(
     store.heartbeat(input),
   );
   if (!written) throw claimLostError();
+}
+
+export async function checkpointImportJob(
+  input: ClaimBoundInput,
+  dependencies: ImportWorkerDependencies,
+): Promise<"continue" | "cancelled"> {
+  validateClaimBoundInput(input);
+  const outcome = await runWorkerTransaction(dependencies, (store) =>
+    store.checkpoint(input),
+  );
+  if (outcome === "claim_lost") throw claimLostError();
+  return outcome;
 }
 
 export async function updateImportJobProgress(
@@ -290,6 +313,18 @@ function validateClaimBoundInput(input: ClaimBoundInput): void {
 
 function validateClaimToken(value: string): void {
   if (typeof value !== "string" || !uuidPattern.test(value)) {
+    throw invalidWorkerInputError();
+  }
+}
+
+function validateSupportedSources(
+  sources: readonly ImportSource[],
+): void {
+  if (
+    sources.length === 0 ||
+    new Set(sources).size !== sources.length ||
+    sources.some((source) => source !== "ising" && source !== "karafun")
+  ) {
     throw invalidWorkerInputError();
   }
 }

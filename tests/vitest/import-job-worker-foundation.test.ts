@@ -8,6 +8,7 @@ import {
   type ImportJobTransactionStore,
 } from "@/server/platform-admin/import-job-core";
 import {
+  checkpointImportJob,
   claimNextImportJob,
   completeImportJob,
   failImportJob,
@@ -123,12 +124,21 @@ describe("import worker transaction services", () => {
   );
 
   it.each([
+    ["checkpoint", () => checkpointImportJob({ importJobId: jobId, claimToken }, workerHarness({ checkpoint: "claim_lost" }).dependencies)],
     ["heartbeat", () => heartbeatImportJob({ importJobId: jobId, claimToken }, workerHarness({ heartbeat: false }).dependencies)],
     ["progress", () => updateImportJobProgress({ importJobId: jobId, claimToken, ...progress }, workerHarness({ progress: "claim_lost" }).dependencies)],
     ["complete", () => completeImportJob({ importJobId: jobId, claimToken, ...progress }, workerHarness({ complete: "claim_lost" }).dependencies)],
     ["fail", () => failImportJob({ importJobId: jobId, claimToken, safeErrorCode: "IMPORT_FAILED", safeErrorSummary: "The import failed safely." }, workerHarness({ fail: false }).dependencies)],
   ])("maps lost %s ownership to IMPORT_JOB_CLAIM_LOST", async (_label, execute) => {
     await expect(execute()).rejects.toMatchObject({ code: "IMPORT_JOB_CLAIM_LOST" });
+  });
+
+  it("acknowledges cancellation at a checkpoint without another audit", async () => {
+    const harness = workerHarness({ checkpoint: "cancelled" });
+    await expect(
+      checkpointImportJob({ importJobId: jobId, claimToken }, harness.dependencies),
+    ).resolves.toBe("cancelled");
+    expect(harness.committedAudits()).toEqual([]);
   });
 
   it("rejects regressing or inconsistent progress", async () => {
@@ -313,6 +323,7 @@ function platformHarness(options: {
 function workerHarness(options: {
   transactionErrors?: Error[];
   heartbeat?: boolean;
+  checkpoint?: "continue" | "cancelled" | "claim_lost";
   progress?: "updated" | "claim_lost" | "regression";
   complete?: "succeeded" | "cancelled" | "claim_lost" | "invalid_progress";
   fail?: boolean;
@@ -340,8 +351,16 @@ function workerHarness(options: {
             attemptCount: 1,
             claimToken: token,
             leaseExpiresAt: new Date("2026-07-16T12:01:00Z"),
+            progress: {
+              totalCount: 0,
+              processedCount: 0,
+              importedCount: 0,
+              skippedCount: 0,
+              errorCount: 0,
+            },
           };
         },
+        checkpoint: async () => options.checkpoint ?? "continue",
         heartbeat: async () => options.heartbeat ?? true,
         updateProgress: async () => options.progress ?? "updated",
         complete: async () => {

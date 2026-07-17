@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { getDb } from "../db.ts";
 import {
+  checkpointImportJob,
   claimNextImportJob,
   completeImportJob,
   failImportJob,
@@ -34,7 +35,10 @@ export function createImportWorkerServices(database: Database) {
   };
 
   return {
-    claimNextImportJob: () => claimNextImportJob(dependencies),
+    claimNextImportJob: (supportedSources?: readonly ("ising" | "karafun")[]) =>
+      claimNextImportJob(dependencies, supportedSources),
+    checkpointImportJob: (input: ClaimBoundInput) =>
+      checkpointImportJob(input, dependencies),
     heartbeatImportJob: (input: ClaimBoundInput) =>
       heartbeatImportJob(input, dependencies),
     updateImportJobProgress: (input: UpdateImportJobProgressInput) =>

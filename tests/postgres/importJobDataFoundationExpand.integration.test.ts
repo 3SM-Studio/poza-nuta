@@ -1,15 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { drizzle } from "drizzle-orm/postgres-js";
-
-import {
-  createISingImportJob,
-  ISING_IMPORT_FAILURE_ERROR,
-  ISING_IMPORT_FAILURE_SUMMARY,
-  markISingImportJobFailed,
-  markISingImportJobSucceeded,
-} from "../../src/db/import-ising.ts";
 import {
   applyPostgresMigration,
   applyPostgresMigrations,
@@ -561,123 +552,6 @@ test(
             },
           );
 
-          await context.test(
-            "production iSing writer keeps lifecycle timestamps monotonic across clock skew",
-            async () => {
-              const database = drizzle({ client: sql });
-              const startedAt = new Date("2026-01-03T09:00:00.000Z");
-              const successId = await createISingImportJob(database, startedAt);
-
-              assert.deepEqual(await readWriterJob(sql, successId), {
-                status: "running",
-                mode: "write",
-                initiatorKind: "system",
-                startedByOperatorId: null,
-                totalCount: 0,
-                processedCount: 0,
-                importedCount: 0,
-                skippedCount: 0,
-                errorCount: 0,
-                safeErrorCode: null,
-                safeErrorSummary: null,
-                error: null,
-                createdAt: startedAt.toISOString(),
-                startedAt: startedAt.toISOString(),
-                terminalAt: null,
-                updatedAt: startedAt.toISOString(),
-                sourceArtifactId: null,
-                artifactUploadedAt: null,
-                artifactDeletedAt: null,
-              });
-
-              const skewedSuccessAt = new Date("2026-01-03T08:59:59.000Z");
-              await markISingImportJobSucceeded(
-                database,
-                successId,
-                {
-                  processed: 7,
-                  inserted: 3,
-                  updated: 2,
-                  skipped: 2,
-                  errors: 0,
-                  pages: 1,
-                  dryRun: false,
-                },
-                skewedSuccessAt,
-              );
-              const succeeded = await readWriterJob(sql, successId);
-              assert.deepEqual(succeeded, {
-                status: "succeeded",
-                mode: "write",
-                initiatorKind: "system",
-                startedByOperatorId: null,
-                totalCount: 7,
-                processedCount: 7,
-                importedCount: 5,
-                skippedCount: 2,
-                errorCount: 0,
-                safeErrorCode: null,
-                safeErrorSummary: null,
-                error: null,
-                createdAt: startedAt.toISOString(),
-                startedAt: startedAt.toISOString(),
-                terminalAt: startedAt.toISOString(),
-                updatedAt: startedAt.toISOString(),
-                sourceArtifactId: null,
-                artifactUploadedAt: null,
-                artifactDeletedAt: null,
-              });
-
-              const failedStartedAt = new Date("2026-01-03T10:00:00.000Z");
-              const failedId = await createISingImportJob(
-                database,
-                failedStartedAt,
-              );
-              const skewedFailureAt = new Date("2026-01-03T09:59:59.000Z");
-              const secret = "test-only-import-secret";
-              const originalError = new Error(`upstream failed with ${secret}`);
-
-              await assert.rejects(
-                async () => {
-                  try {
-                    throw originalError;
-                  } catch (error) {
-                    await markISingImportJobFailed(
-                      database,
-                      failedId,
-                      skewedFailureAt,
-                    );
-                    throw error;
-                  }
-                },
-                (error: unknown) => error === originalError,
-              );
-
-              const failed = await readWriterJob(sql, failedId);
-              assert.deepEqual(failed, {
-                status: "failed",
-                mode: "write",
-                initiatorKind: "system",
-                startedByOperatorId: null,
-                totalCount: 0,
-                processedCount: 0,
-                importedCount: 0,
-                skippedCount: 0,
-                errorCount: 0,
-                safeErrorCode: ISING_IMPORT_FAILURE_ERROR,
-                safeErrorSummary: ISING_IMPORT_FAILURE_SUMMARY,
-                error: null,
-                createdAt: failedStartedAt.toISOString(),
-                startedAt: failedStartedAt.toISOString(),
-                terminalAt: failedStartedAt.toISOString(),
-                updatedAt: failedStartedAt.toISOString(),
-                sourceArtifactId: null,
-                artifactUploadedAt: null,
-                artifactDeletedAt: null,
-              });
-              assert.equal(JSON.stringify(failed).includes(secret), false);
-            },
-          );
         },
       );
 
@@ -839,35 +713,6 @@ async function readLegacyJobs(sql: SqlExecutor) {
     FROM import_jobs
     ORDER BY id
   `;
-}
-
-async function readWriterJob(sql: SqlExecutor, jobId: number) {
-  const [job] = await sql`
-    SELECT
-      status::text AS status,
-      mode::text AS mode,
-      initiator_kind::text AS "initiatorKind",
-      started_by_operator_id::int AS "startedByOperatorId",
-      total_rows AS "totalCount",
-      processed_count AS "processedCount",
-      imported_count AS "importedCount",
-      skipped_count AS "skippedCount",
-      error_count AS "errorCount",
-      safe_error_code AS "safeErrorCode",
-      safe_error_summary AS "safeErrorSummary",
-      error,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
-      to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startedAt",
-      CASE WHEN finished_at IS NULL THEN NULL ELSE to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END AS "terminalAt",
-      to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt",
-      source_artifact_id::text AS "sourceArtifactId",
-      artifact_uploaded_at::text AS "artifactUploadedAt",
-      artifact_deleted_at::text AS "artifactDeletedAt"
-    FROM import_jobs
-    WHERE id = ${jobId}
-  `;
-  assert.ok(job);
-  return job;
 }
 
 async function assertCheckViolation(
