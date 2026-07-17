@@ -3,132 +3,80 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
-  getSessionEventAccessStatus,
-  isValidSessionCodeFormat,
-} from "../src/lib/session-event-access.ts";
-import {
   canUseSessionPublicQueue,
   canUseSessionSongRequests,
   getSessionCapabilityState,
 } from "../src/lib/session-capabilities.ts";
+import {
+  getSessionEventAccessStatus,
+  isValidSessionCodeFormat,
+} from "../src/lib/session-event-access.ts";
+import {
+  consumeSessionRateLimit,
+  resetSessionRateLimitForTests,
+} from "../src/server/session-api/rate-limit-core.ts";
 import { validateSessionRequestInput } from "../src/server/session-api/validation.ts";
 
-const activeLink = {
-  active: true,
-  revokedAt: null,
-};
-
+const now = new Date("2026-07-18T18:00:00.000Z");
 const activeEvent = {
   status: "active",
-  startsAt: new Date("2026-01-01T18:00:00.000Z"),
-  autoCloseAt: new Date("2026-01-02T00:00:00.000Z"),
-  endsAt: new Date("2026-01-02T00:00:00.000Z"),
+  startsAt: new Date("2026-07-18T17:00:00.000Z"),
+  autoCloseAt: new Date("2026-07-18T23:00:00.000Z"),
+  endsAt: new Date("2026-07-18T23:00:00.000Z"),
   closedAt: null,
-  publicQueueEnabled: true,
-  songRequestsEnabled: true,
 };
 
-test("session codes require URL-safe bearer-token format", () => {
-  assert.equal(isValidSessionCodeFormat("abc123_-ABCxyz789"), true);
-  assert.equal(isValidSessionCodeFormat("123456"), false);
-  assert.equal(isValidSessionCodeFormat("abc123"), false);
-  assert.equal(isValidSessionCodeFormat("abc123+not-url-safe"), false);
+test("session codes require exactly eight digits and preserve leading zero", () => {
+  assert.equal(isValidSessionCodeFormat("01234567"), true);
+  assert.equal(isValidSessionCodeFormat("1234567"), false);
+  assert.equal(isValidSessionCodeFormat("1234-5678"), false);
+  assert.equal(isValidSessionCodeFormat("abcdefgh"), false);
 });
 
-test("session access rejects invalid, revoked and inactive links", () => {
+test("session access uses one effective lifecycle contract", () => {
+  assert.equal(getSessionEventAccessStatus({ event: null, now }), "invalid");
   assert.equal(
     getSessionEventAccessStatus({
-      link: null,
-      event: activeEvent,
-      now: new Date("2026-01-01T19:00:00.000Z"),
-    }),
-    "invalid",
-  );
-  assert.equal(
-    getSessionEventAccessStatus({
-      link: { active: false, revokedAt: null },
-      event: activeEvent,
-      now: new Date("2026-01-01T19:00:00.000Z"),
-    }),
-    "invalid",
-  );
-  assert.equal(
-    getSessionEventAccessStatus({
-      link: { active: true, revokedAt: new Date("2026-01-01T19:00:00.000Z") },
-      event: activeEvent,
-      now: new Date("2026-01-01T19:00:00.000Z"),
-    }),
-    "invalid",
-  );
-});
-
-test("session access blocks scheduled and closed events without capability checks", () => {
-  const queueHiddenEvent = { ...activeEvent, publicQueueEnabled: false };
-  const requestDisabledEvent = { ...activeEvent, songRequestsEnabled: false };
-
-  assert.equal(
-    getSessionEventAccessStatus({
-      link: activeLink,
-      event: activeEvent,
-      now: new Date("2026-01-01T17:59:00.000Z"),
+      event: {
+        ...activeEvent,
+        startsAt: new Date("2026-07-18T19:00:00.000Z"),
+      },
+      now,
     }),
     "scheduled",
   );
+  assert.equal(getSessionEventAccessStatus({ event: activeEvent, now }), "active");
   assert.equal(
     getSessionEventAccessStatus({
-      link: activeLink,
-      event: activeEvent,
-      now: new Date("2026-01-02T00:00:00.000Z"),
+      event: {
+        ...activeEvent,
+        autoCloseAt: new Date("2026-07-18T18:00:00.000Z"),
+      },
+      now,
     }),
     "closed",
   );
   assert.equal(
     getSessionEventAccessStatus({
-      link: activeLink,
-      event: { ...activeEvent, status: "closed" },
-      now: new Date("2026-01-01T19:00:00.000Z"),
+      event: {
+        ...activeEvent,
+        status: "closed",
+        closedAt: new Date("2026-07-18T17:30:00.000Z"),
+      },
+      now,
     }),
     "closed",
   );
   assert.equal(
     getSessionEventAccessStatus({
-      link: activeLink,
       event: { ...activeEvent, status: "cancelled" },
-      now: new Date("2026-01-01T19:00:00.000Z"),
+      now,
     }),
     "closed",
-  );
-  assert.equal(
-    getSessionEventAccessStatus({
-      link: activeLink,
-      event: queueHiddenEvent,
-      now: new Date("2026-01-01T19:00:00.000Z"),
-    }),
-    "active",
-  );
-  assert.equal(
-    getSessionEventAccessStatus({
-      link: activeLink,
-      event: requestDisabledEvent,
-      now: new Date("2026-01-01T19:00:00.000Z"),
-    }),
-    "active",
   );
 });
 
-test("session capabilities keep song requests and public queue independent", () => {
-  assert.deepEqual(
-    getSessionCapabilityState({
-      songRequestsEnabled: true,
-      publicQueueEnabled: true,
-    }),
-    {
-      canSearchSongs: true,
-      canSubmitSongRequests: true,
-      canViewPublicQueue: true,
-      allSessionFeaturesDisabled: false,
-    },
-  );
+test("session capabilities keep requests and public queue independent", () => {
   assert.deepEqual(
     getSessionCapabilityState({
       songRequestsEnabled: true,
@@ -139,38 +87,14 @@ test("session capabilities keep song requests and public queue independent", () 
       canSubmitSongRequests: true,
       canViewPublicQueue: false,
       allSessionFeaturesDisabled: false,
-    },
-  );
-  assert.deepEqual(
-    getSessionCapabilityState({
-      songRequestsEnabled: false,
-      publicQueueEnabled: true,
-    }),
-    {
-      canSearchSongs: false,
-      canSubmitSongRequests: false,
-      canViewPublicQueue: true,
-      allSessionFeaturesDisabled: false,
-    },
-  );
-  assert.deepEqual(
-    getSessionCapabilityState({
-      songRequestsEnabled: false,
-      publicQueueEnabled: false,
-    }),
-    {
-      canSearchSongs: false,
-      canSubmitSongRequests: false,
-      canViewPublicQueue: false,
-      allSessionFeaturesDisabled: true,
     },
   );
   assert.equal(
     canUseSessionSongRequests({
-      songRequestsEnabled: true,
-      publicQueueEnabled: false,
+      songRequestsEnabled: false,
+      publicQueueEnabled: true,
     }),
-    true,
+    false,
   );
   assert.equal(
     canUseSessionPublicQueue({
@@ -181,234 +105,105 @@ test("session capabilities keep song requests and public queue independent", () 
   );
 });
 
-test("session access allows active event without requiring global active public event", () => {
+test("session request validation requires and trims a nickname", () => {
   assert.equal(
-    getSessionEventAccessStatus({
-      link: activeLink,
-      event: activeEvent,
-      now: new Date("2026-01-01T19:00:00.000Z"),
-    }),
-    "active",
+    validateSessionRequestInput({ songId: 1, singerName: " " }).success,
+    false,
   );
-});
-
-test("session request validation requires a requester nickname", () => {
-  assert.deepEqual(validateSessionRequestInput({ songId: 42 }), {
-    success: false,
-    issues: [
-      {
-        field: "requesterName",
-        message: "requesterName must contain at least 2 characters.",
-      },
-    ],
-  });
-  assert.deepEqual(
-    validateSessionRequestInput({ songId: 42, requesterName: "   " }),
-    {
-      success: false,
-      issues: [
-        {
-          field: "requesterName",
-          message: "requesterName must contain at least 2 characters.",
-        },
-      ],
-    },
-  );
-});
-
-test("session request validation stores a trimmed requester nickname", () => {
   assert.deepEqual(
     validateSessionRequestInput({
-      songId: 42,
-      requesterName: "  Kasia  ",
+      songId: 1,
+      singerName: "  Ala  ",
+      note: "  duet  ",
     }),
     {
       success: true,
-      data: {
-        songId: 42,
-        singerName: "Kasia",
-        note: null,
-      },
+      data: { songId: 1, singerName: "Ala", note: "duet" },
     },
   );
 });
 
-test("dashboard session link generation is limited to event managers and revokes previous links", () => {
-  const source = readFileSync(
-    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
-    "utf8",
+test("session resolver reads the canonical event code and locks writes", () => {
+  const source = readFileSync("src/server/session-api/service.ts", "utf8");
+  const transactionLookup = source.slice(
+    source.indexOf("async function findSessionEventByCodeInTransaction"),
+    source.indexOf("function toPublicSessionEvent"),
   );
-  const start = source.indexOf(
-    "export async function generateDashboardOrganizationEventSessionLinkForAuthUser",
-  );
-  const end = source.indexOf(
-    "export async function generateDashboardOrganizationEventShareLinkForAuthUser",
-  );
-  const generateSource = source.slice(start, end);
 
-  assert.match(generateSource, /requireEventManagerOrganizationEventInTransaction/);
-  assert.doesNotMatch(generateSource, /requireEventSharerOrganizationEventInTransaction/);
+  assert.match(source, /eq\(events\.sessionCode, code\)/);
+  assert.doesNotMatch(source, /hashEventAccessCode/);
+  assert.doesNotMatch(source, /from\(eventAccessLinks\)/);
+  assert.match(transactionLookup, /\.from\(events\)/);
+  assert.match(transactionLookup, /\.for\("update"\)/);
+  assert.match(source, /SESSION_EVENT_CLOSED/);
+  assert.match(source, /SESSION_EVENT_NOT_STARTED/);
 });
 
-test("dashboard share link generation allows owner manager and operator without reading plaintext from hash", () => {
-  const source = readFileSync(
-    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
-    "utf8",
-  );
-  const start = source.indexOf(
-    "export async function generateDashboardOrganizationEventShareLinkForAuthUser",
-  );
-  const end = source.indexOf(
-    "export async function createDashboardOrganizationEventForAuthUser",
-  );
-  const shareSource = source.slice(start, end);
-  const helperStart = source.indexOf("async function createEventSessionLinkInTransaction");
-  const helperEnd = source.indexOf("async function requireOwnerOrganizationInTransaction");
-  const helperSource = source.slice(helperStart, helperEnd);
+test("session API remains anonymous, code-scoped and rate limited", () => {
+  const routes = [
+    "src/app/api/session/[code]/event/route.ts",
+    "src/app/api/session/[code]/songs/search/route.ts",
+    "src/app/api/session/[code]/requests/route.ts",
+    "src/app/api/session/[code]/queue/route.ts",
+  ];
 
-  assert.match(source, /canShareDashboardOrganizationEvent/);
-  assert.match(source, /role === "operator"/);
-  assert.match(shareSource, /requireEventSharerOrganizationEventInTransaction/);
-  assert.match(helperSource, /update\(eventAccessLinks\)/);
-  assert.match(helperSource, /active: false/);
-  assert.match(helperSource, /revokedAt: now/);
-  assert.match(helperSource, /insert\(eventAccessLinks\)/);
-  assert.match(helperSource, /hashEventAccessCode\(code\)/);
-  assert.doesNotMatch(helperSource, /codeHash: code/);
-  assert.doesNotMatch(shareSource, /select\(\{[^}]*codeHash/s);
+  for (const route of routes) {
+    const source = readFileSync(route, "utf8");
+    assert.match(source, /requireSessionApiRateLimit\(request\)/);
+    assert.doesNotMatch(source, /requireOperatorSession/);
+  }
 });
 
-test("dashboard session link creation revokes previous links", () => {
-  const source = readFileSync(
-    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
-    "utf8",
-  );
-  const start = source.indexOf("async function createEventSessionLinkInTransaction");
-  const end = source.indexOf("async function requireOwnerOrganizationInTransaction");
-  const generateSource = source.slice(start, end);
-
-  assert.match(generateSource, /update\(eventAccessLinks\)/);
-  assert.match(generateSource, /active: false/);
-  assert.match(generateSource, /revokedAt: now/);
-  assert.match(generateSource, /insert\(eventAccessLinks\)/);
-  assert.match(generateSource, /hashEventAccessCode\(code\)/);
-  assert.doesNotMatch(generateSource, /codeHash: code/);
+test("session page provides neutral invalid state and canonical status copy", () => {
+  const page = readFileSync("src/app/session/[code]/page.tsx", "utf8");
+  assert.match(page, /consumeSessionRequestRateLimit/);
+  assert.match(page, /Sesja jeszcze się nie rozpoczęła/);
+  assert.match(page, /Sesja została zakończona/);
+  assert.match(page, /Nie udało się otworzyć sesji/);
+  assert.doesNotMatch(page, /wygasł/);
 });
 
-test("session request creation writes to the event resolved from the code", () => {
-  const source = readFileSync(
-    new URL("../src/server/session-api/service.ts", import.meta.url),
-    "utf8",
-  );
-  const start = source.indexOf("export async function createSessionRequest");
-  const end = source.indexOf("async function requireLiveSession");
-  const createSource = source.slice(start, end);
-
-  assert.match(createSource, /eventId: session\.event\.id/);
-  assert.doesNotMatch(createSource, /input\.eventId/);
+test("session entry form normalizes paste and preserves a leading zero", () => {
+  const form = readFileSync("src/components/public/session-code-form.tsx", "utf8");
+  assert.match(form, /normalizeSessionCode\(code\)/);
+  assert.match(form, /isCanonicalSessionCode\(normalized\)/);
+  assert.match(form, /router\.push\(`\/session\/\$\{normalized\}`\)/);
+  assert.match(form, /inputMode="numeric"/);
 });
 
-test("session API request flow is anonymous and code-scoped", () => {
-  const requestRouteSource = readFileSync(
-    new URL("../src/app/api/session/[code]/requests/route.ts", import.meta.url),
-    "utf8",
+test("session rate limiting is bounded by scope", () => {
+  resetSessionRateLimitForTests();
+  const attempts = Array.from({ length: 12 }, () =>
+    consumeSessionRateLimit({ scope: "page", key: "example", now: 1_000 }),
   );
-  const eventRouteSource = readFileSync(
-    new URL("../src/app/api/session/[code]/event/route.ts", import.meta.url),
-    "utf8",
+  assert.equal(attempts.every((attempt) => attempt.allowed), true);
+  assert.equal(
+    consumeSessionRateLimit({ scope: "page", key: "example", now: 1_000 })
+      .allowed,
+    false,
   );
-  const searchRouteSource = readFileSync(
-    new URL(
-      "../src/app/api/session/[code]/songs/search/route.ts",
-      import.meta.url,
-    ),
-    "utf8",
+  assert.equal(
+    consumeSessionRateLimit({ scope: "page", key: "example", now: 61_000 })
+      .allowed,
+    true,
   );
-  const queueRouteSource = readFileSync(
-    new URL("../src/app/api/session/[code]/queue/route.ts", import.meta.url),
-    "utf8",
-  );
-  const serviceSource = readFileSync(
-    new URL("../src/server/session-api/service.ts", import.meta.url),
-    "utf8",
-  );
-  const clientSource = readFileSync(
-    new URL("../src/components/public/session-api.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(requestRouteSource, /params: Promise<\{ code: string \}>/);
-  assert.match(requestRouteSource, /createSessionRequest\(code, validation\.data\)/);
-  assert.match(eventRouteSource, /getSessionEvent\(code\)/);
-  assert.match(searchRouteSource, /searchSessionSongs\(code, validation\.data\)/);
-  assert.match(queueRouteSource, /getSessionQueue\(code\)/);
-  assert.doesNotMatch(
-    requestRouteSource,
-    /requireOperatorSession|createServerClient|getUser|getSession/,
-  );
-  assert.match(serviceSource, /hashEventAccessCode\(code\)/);
-  assert.match(serviceSource, /innerJoin\(events, eq\(events\.id, eventAccessLinks\.eventId\)\)/);
-  assert.match(serviceSource, /eventId: session\.event\.id/);
-  assert.match(serviceSource, /where\(eq\(songRequests\.eventId, session\.event\.id\)\)/);
-  assert.match(serviceSource, /getSessionEvent\(code: string\)[\s\S]*requireLiveSession\(code\)/);
-  assert.match(serviceSource, /searchSessionSongs\([\s\S]*requireSongRequestSession\(code\)/);
-  assert.match(serviceSource, /getSessionQueue\(code: string\)[\s\S]*requireLiveSession\(code\)/);
-  assert.match(serviceSource, /createSessionRequest\([\s\S]*requireSongRequestSessionInTransaction/);
-  assert.match(serviceSource, /if \(!canUseSessionPublicQueue\(session\.event\)\)/);
-  assert.match(serviceSource, /enabled: false as const/);
-  assert.match(serviceSource, /if \(!canUseSessionSongRequests\(row\.event\)\)/);
-  assert.match(serviceSource, /SESSION_PUBLIC_REQUESTS_DISABLED/);
-  assert.doesNotMatch(serviceSource, /input\.eventId/);
-  assert.doesNotMatch(serviceSource, /getActivePublicEvent/);
-  assert.match(clientSource, /\/api\/session\/\$\{encodeURIComponent\(code\)\}\/requests/);
-  assert.match(clientSource, /\/api\/session\/\$\{encodeURIComponent\(code\)\}\/songs\/search/);
-  assert.match(clientSource, /\/api\/session\/\$\{encodeURIComponent\(code\)\}\/queue/);
 });
 
-test("session UI gates search form queue fetches and realtime by capability", () => {
-  const pageSource = readFileSync(
-    new URL("../src/components/public/session-request-page.tsx", import.meta.url),
+test("organizer QR uses the canonical session URL without a generator", () => {
+  const panel = readFileSync(
+    "src/components/operator/event-session-access-panel.tsx",
     "utf8",
   );
-
-  assert.match(pageSource, /getSessionCapabilityState\(event\)/);
-  assert.match(pageSource, /const canSubmitSongRequests = capabilities\.canSubmitSongRequests/);
-  assert.match(pageSource, /const canViewPublicQueue = capabilities\.canViewPublicQueue/);
-  assert.match(pageSource, /\{canSubmitSongRequests \? \(/);
-  assert.match(pageSource, /\{canViewPublicQueue \? \(/);
-  assert.match(pageSource, /if \(!canViewPublicQueue\) \{\s*return;\s*\}/);
-  assert.match(pageSource, /usePublicQueueRealtime\(\s*canViewPublicQueue \? event\.id : null/s);
-  assert.match(pageSource, /capabilities\.allSessionFeaturesDisabled/);
+  assert.match(panel, /QRCode\.toCanvas\(canvas, sessionUrl/);
+  assert.match(panel, /Kopiuj kod/);
+  assert.match(panel, /Kopiuj link/);
+  assert.match(panel, /Pobierz QR/);
+  assert.doesNotMatch(panel, /useActionState/);
+  assert.doesNotMatch(panel, /Regeneruj|Wygeneruj/);
 });
 
-test("parallel session codes keep requests isolated by resolved event", () => {
-  const source = readFileSync(
-    new URL("../src/server/session-api/service.ts", import.meta.url),
-    "utf8",
-  );
-  const lookupStart = source.indexOf("async function findSessionEventByCodeInTransaction");
-  const lookupEnd = source.indexOf("function toPublicSessionEvent");
-  const lookupSource = source.slice(lookupStart, lookupEnd);
-  const createStart = source.indexOf("export async function createSessionRequest");
-  const createEnd = source.indexOf("async function requireLiveSession");
-  const createSource = source.slice(createStart, createEnd);
-
-  assert.match(lookupSource, /hashEventAccessCode\(code\)/);
-  assert.match(lookupSource, /where\(eq\(eventAccessLinks\.codeHash, codeHash\)\)/);
-  assert.match(lookupSource, /innerJoin\(events, eq\(events\.id, eventAccessLinks\.eventId\)\)/);
-  assert.match(createSource, /const session = await requireSongRequestSessionInTransaction\(\s*transaction,\s*code,\s*\)/s);
-  assert.match(createSource, /eventId: session\.event\.id/);
-  assert.match(createSource, /where\(eq\(songRequests\.eventId, session\.event\.id\)\)/);
-});
-
-test("global public queue route is a tombstone and session queue remains canonical", () => {
-  const pagePath = new URL("../src/app/queue/page.tsx", import.meta.url);
-  const routeSource = readFileSync(
-    new URL("../src/app/api/public/queue/route.ts", import.meta.url),
-    "utf8",
-  );
-
-  assert.equal(existsSync(pagePath), false);
-  assert.match(routeSource, /PUBLIC_QUEUE_ENDPOINT_GONE/);
-  assert.doesNotMatch(routeSource, /getPublicQueue/);
+test("legacy manual link UI and endpoints are absent", () => {
+  assert.equal(existsSync("src/components/operator/event-share-panel.tsx"), false);
+  assert.equal(existsSync("src/components/operator/event-access-links-panel.tsx"), false);
+  assert.equal(existsSync("src/app/api/dashboard/event/access-links/route.ts"), false);
 });

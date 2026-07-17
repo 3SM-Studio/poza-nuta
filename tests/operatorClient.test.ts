@@ -6,7 +6,6 @@ import {
   dashboardApiPaths,
   formatDuration,
   getCurrentOperator,
-  getDashboardEventAccessLinkRevokePath,
   getDashboardRequestActionPath,
 } from "../src/components/operator/api.ts";
 import {
@@ -34,15 +33,10 @@ test("operator UI client uses canonical dashboard API paths", () => {
     extendEvent: "/api/dashboard/event/extend",
     closeEvent: "/api/dashboard/event/close",
     startEvent: "/api/dashboard/event/start",
-    accessLinks: "/api/dashboard/event/access-links",
   });
   assert.equal(
     getDashboardRequestActionPath(42, "approve"),
     "/api/dashboard/requests/42/approve",
-  );
-  assert.equal(
-    getDashboardEventAccessLinkRevokePath(42),
-    "/api/dashboard/event/access-links/42/revoke",
   );
 });
 

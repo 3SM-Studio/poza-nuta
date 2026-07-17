@@ -26,6 +26,7 @@ export type PublicEventContractInput = {
   venue: string | null;
   city: string | null;
   startsAt: Date;
+  autoCloseAt?: Date | null;
   endsAt: Date;
   closedAt: Date | null;
   status: string;

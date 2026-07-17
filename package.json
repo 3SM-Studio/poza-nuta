@@ -36,6 +36,7 @@
     "test:postgres:import-job-data-foundation-contract": "node --experimental-strip-types --test tests/postgres/importJobDataFoundationContract.integration.test.ts",
     "test:postgres:import-job-worker-foundation": "node --experimental-strip-types --test tests/postgres/importJobWorkerFoundation.integration.test.ts",
     "test:postgres:import-worker-runtime": "node --experimental-strip-types --test tests/postgres/importWorkerRuntime.integration.test.ts",
+    "test:postgres:canonical-session-access": "node --experimental-strip-types --test tests/postgres/canonicalSessionAccess.integration.test.ts",
     "e2e": "playwright test"
   },
   "engines": {

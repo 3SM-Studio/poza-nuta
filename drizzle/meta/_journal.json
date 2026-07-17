@@ -141,6 +141,13 @@
       "when": 1784224352535,
       "tag": "0019_import_job_worker_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784316785661,
+      "tag": "0020_canonical_session_access",
+      "breakpoints": true
     }
   ]
 }

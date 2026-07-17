@@ -1,10 +1,9 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 
 import {
-  eventAccessLinks,
   events,
   operatorAuditLog,
   operatorUsers,
@@ -31,10 +30,9 @@ import {
   isValidEventSlug,
 } from "../../lib/event-slug";
 import { isEventSlugUniqueViolation } from "../../lib/event-slug-db-error";
-import {
-  generateEventAccessCode,
-  hashEventAccessCode,
-} from "./crypto";
+import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
+import { withSessionCodeCollisionRetry } from "../../lib/session-code";
+import { isSessionCodeUniqueViolation } from "../../lib/session-code-db-error";
 import { OperatorApiError } from "./errors";
 import type {
   CreateDashboardEventInput,
@@ -64,6 +62,7 @@ export type DashboardOrganizationEvent = {
   slug: string | null;
   venue: string | null;
   city: string | null;
+  sessionCode: string;
   startsAt: Date;
   facebookUrl: string | null;
   status: "draft" | "active" | "closed" | "cancelled";
@@ -78,18 +77,6 @@ export type DashboardOrganizationEvent = {
   closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-};
-
-export type DashboardOrganizationEventSessionLink = {
-  id: number;
-  eventId: number;
-  label: string | null;
-  active: boolean;
-  createdAt: Date;
-  revokedAt: Date | null;
-  lastUsedAt: Date | null;
-  useCount: number;
-  createdByOperatorId: number | null;
 };
 
 export type DashboardOrganizationMember = {
@@ -124,6 +111,7 @@ const dashboardEventSelection = {
   slug: events.slug,
   venue: events.venue,
   city: events.city,
+  sessionCode: events.sessionCode,
   startsAt: events.startsAt,
   facebookUrl: events.facebookUrl,
   status: events.status,
@@ -138,18 +126,6 @@ const dashboardEventSelection = {
   closedAt: events.closedAt,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
-};
-
-const dashboardEventSessionLinkSelection = {
-  id: eventAccessLinks.id,
-  eventId: eventAccessLinks.eventId,
-  label: eventAccessLinks.label,
-  active: eventAccessLinks.active,
-  createdAt: eventAccessLinks.createdAt,
-  revokedAt: eventAccessLinks.revokedAt,
-  lastUsedAt: eventAccessLinks.lastUsedAt,
-  useCount: eventAccessLinks.useCount,
-  createdByOperatorId: eventAccessLinks.createdByOperatorId,
 };
 
 const ownerOrganizationSelection = {
@@ -242,7 +218,10 @@ export async function listDashboardOrganizationEventsForAuthUser(
 
   return {
     organization,
-    events: organizationEvents,
+    events: organizationEvents.map((event) => ({
+      ...event,
+      effectiveStatus: getEffectiveEventLifecycleStatus(event),
+    })),
   };
 }
 
@@ -290,11 +269,14 @@ export async function getDashboardOrganizationEventForAuthUser(input: {
 
   return {
     organization,
-    event,
+    event: {
+      ...event,
+      effectiveStatus: getEffectiveEventLifecycleStatus(event),
+    },
   };
 }
 
-export async function getDashboardOrganizationEventSessionLinkForAuthUser(input: {
+export async function getDashboardOrganizationEventSessionAccessForAuthUser(input: {
   authUserId: string;
   organizationId: string;
   eventId: number;
@@ -305,59 +287,7 @@ export async function getDashboardOrganizationEventSessionLinkForAuthUser(input:
     return null;
   }
 
-  const [link] = await getDb()
-    .select(dashboardEventSessionLinkSelection)
-    .from(eventAccessLinks)
-    .where(
-      and(
-        eq(eventAccessLinks.eventId, result.event.id),
-        eq(eventAccessLinks.active, true),
-        isNull(eventAccessLinks.revokedAt),
-      ),
-    )
-    .orderBy(desc(eventAccessLinks.createdAt), desc(eventAccessLinks.id))
-    .limit(1);
-
-  return {
-    ...result,
-    sessionLink: link ?? null,
-  };
-}
-
-export async function generateDashboardOrganizationEventSessionLinkForAuthUser(input: {
-  authUserId: string;
-  organizationId: string;
-  eventId: number;
-}) {
-  return getDb().transaction(async (transaction) => {
-    const { organization, event } =
-      await requireEventManagerOrganizationEventInTransaction(
-        transaction,
-        input.authUserId,
-        input.organizationId,
-        input.eventId,
-      );
-
-    return createEventSessionLinkInTransaction(transaction, organization, event);
-  });
-}
-
-export async function generateDashboardOrganizationEventShareLinkForAuthUser(input: {
-  authUserId: string;
-  organizationId: string;
-  eventId: number;
-}) {
-  return getDb().transaction(async (transaction) => {
-    const { organization, event } =
-      await requireEventSharerOrganizationEventInTransaction(
-        transaction,
-        input.authUserId,
-        input.organizationId,
-        input.eventId,
-      );
-
-    return createEventSessionLinkInTransaction(transaction, organization, event);
-  });
+  return result;
 }
 
 export async function createDashboardOrganizationEventForAuthUser(input: {
@@ -365,13 +295,16 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
   organizationId: string;
   event: CreateDashboardEventInput;
 }) {
-  return getDb().transaction(async (transaction) => {
-    const organization = await requireEventCreatorOrganizationInTransaction(
-      transaction,
-      input.authUserId,
-      input.organizationId,
-    );
-    const now = new Date();
+  return withSessionCodeCollisionRetry(
+    (sessionCode) =>
+      getDb().transaction(async (transaction) => {
+        const organization =
+          await requireEventCreatorOrganizationInTransaction(
+            transaction,
+            input.authUserId,
+            input.organizationId,
+          );
+        const now = new Date();
 
     await assertNoActivePublicEventConflictInTransaction(transaction, {
       workspaceId: organization.id,
@@ -385,6 +318,7 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
         name: input.event.title,
         venue: input.event.venue,
         city: input.event.city,
+        sessionCode,
         startsAt: input.event.startsAt,
         autoCloseAt: input.event.autoCloseAt,
         endsAt: input.event.autoCloseAt,
@@ -449,11 +383,13 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       },
     });
 
-    return {
-      organization,
-      event,
-    };
-  });
+        return {
+          organization,
+          event,
+        };
+      }),
+    isSessionCodeUniqueViolation,
+  );
 }
 
 export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(input: {
@@ -962,10 +898,6 @@ type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
 >[0];
 
-type DashboardOrganizationEventActionOrganization = DashboardOrganization & {
-  operatorId: number;
-};
-
 type DashboardEventCatalogInput = Pick<
   CreateDashboardEventInput | UpdateDashboardEventDetailsInput,
   "city" | "slug" | "title" | "visibility"
@@ -1074,78 +1006,6 @@ async function mapEventSlugUniqueViolation<T>(action: () => Promise<T>) {
 
     throw error;
   }
-}
-
-async function createEventSessionLinkInTransaction(
-  transaction: DatabaseTransaction,
-  organization: DashboardOrganizationEventActionOrganization,
-  event: DashboardOrganizationEvent,
-) {
-  const now = new Date();
-  const code = generateEventAccessCode();
-  const codeHash = hashEventAccessCode(code);
-
-  const activeLinks = await transaction
-    .select({ id: eventAccessLinks.id })
-    .from(eventAccessLinks)
-    .where(
-      and(
-        eq(eventAccessLinks.eventId, event.id),
-        eq(eventAccessLinks.active, true),
-        isNull(eventAccessLinks.revokedAt),
-      ),
-    )
-    .for("update");
-
-  if (activeLinks.length > 0) {
-    await transaction
-      .update(eventAccessLinks)
-      .set({
-        active: false,
-        revokedAt: now,
-      })
-      .where(
-        and(
-          eq(eventAccessLinks.eventId, event.id),
-          eq(eventAccessLinks.active, true),
-          isNull(eventAccessLinks.revokedAt),
-        ),
-      );
-  }
-
-  const [link] = await transaction
-    .insert(eventAccessLinks)
-    .values({
-      eventId: event.id,
-      codeHash,
-      label: "Link sesji",
-      createdByOperatorId: organization.operatorId,
-    })
-    .returning(dashboardEventSessionLinkSelection);
-
-  if (!link) {
-    throw new Error("Session link could not be created.");
-  }
-
-  await transaction.insert(operatorAuditLog).values({
-    actorKind: "operator",
-    operatorId: organization.operatorId,
-    eventId: event.id,
-    action: "generate_event_session_link",
-    entityId: String(link.id),
-    payload: {
-      active: link.active,
-      revokedPreviousLinks: activeLinks.length,
-    },
-  });
-
-  return {
-    organization,
-    event,
-    link,
-    code,
-    sessionPath: `/session/${encodeURIComponent(code)}`,
-  };
 }
 
 async function requireOwnerOrganizationInTransaction(
@@ -1295,79 +1155,6 @@ async function requireEventManagerOrganizationEventInTransaction(
       403,
       "WORKSPACE_EVENT_MANAGE_FORBIDDEN",
       "Only an owner or manager can manage events.",
-    );
-  }
-
-  const [event] = await transaction
-    .select(dashboardEventSelection)
-    .from(events)
-    .where(and(eq(events.workspaceId, organization.id), eq(events.id, eventId)))
-    .for("update")
-    .limit(1);
-
-  if (!event) {
-    throw new OperatorApiError(
-      404,
-      "EVENT_NOT_FOUND",
-      "Event was not found.",
-    );
-  }
-
-  return {
-    organization,
-    event,
-  };
-}
-
-async function requireEventSharerOrganizationEventInTransaction(
-  transaction: DatabaseTransaction,
-  authUserId: string,
-  organizationId: string,
-  eventId: number,
-) {
-  if (!isOrganizationPublicId(organizationId)) {
-    throw new OperatorApiError(
-      404,
-      "WORKSPACE_NOT_FOUND",
-      "Organization was not found.",
-    );
-  }
-
-  const [organization] = await transaction
-    .select({
-      id: workspaces.id,
-      publicId: workspaces.publicId,
-      name: workspaces.name,
-      handle: workspaces.handle,
-      active: workspaces.active,
-      role: workspaceMembers.role,
-      operatorId: operatorUsers.id,
-    })
-    .from(workspaces)
-    .innerJoin(
-      workspaceMembers,
-      eq(workspaceMembers.workspaceId, workspaces.id),
-    )
-    .innerJoin(
-      operatorUsers,
-      eq(operatorUsers.id, workspaceMembers.operatorUserId),
-    )
-    .where(
-      and(
-        eq(workspaces.publicId, organizationId),
-        eq(workspaces.active, true),
-        eq(operatorUsers.authUserId, authUserId),
-        eq(operatorUsers.active, true),
-        eq(workspaceMembers.active, true),
-      ),
-    )
-    .limit(1);
-
-  if (!organization || !canShareDashboardOrganizationEvent(organization.role)) {
-    throw new OperatorApiError(
-      403,
-      "WORKSPACE_EVENT_SHARE_FORBIDDEN",
-      "Only an owner, manager, or operator can share events.",
     );
   }
 

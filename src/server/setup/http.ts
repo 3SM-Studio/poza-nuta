@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
 
+import {
+  CanonicalSiteOriginConfigurationError,
+  parseCanonicalSiteOrigin,
+} from "../../lib/canonical-site-origin.ts";
 import { OperatorApiError } from "../operator-api/errors.ts";
 
 export function requireSameOriginRequest(request: NextRequest) {
@@ -30,24 +34,12 @@ export function requireSameOriginRequest(request: NextRequest) {
 }
 
 export function getConfiguredSiteOrigin() {
-  const siteUrl = process.env.SITE_URL?.trim();
-
-  if (!siteUrl) {
-    throw new OperatorApiError(
-      503,
-      "SETUP_CONFIGURATION_ERROR",
-      "Setup is not configured.",
-    );
-  }
-
   try {
-    const url = new URL(siteUrl);
-
-    if (url.protocol === "http:" || url.protocol === "https:") {
-      return url.origin;
+    return parseCanonicalSiteOrigin(process.env.SITE_URL);
+  } catch (error) {
+    if (!(error instanceof CanonicalSiteOriginConfigurationError)) {
+      throw error;
     }
-  } catch {
-    // Handled below with the same safe error.
   }
 
   throw new OperatorApiError(

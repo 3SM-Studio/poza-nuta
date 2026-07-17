@@ -144,6 +144,11 @@ export const events = pgTable(
     slug: text("slug"),
     venue: text("venue"),
     city: text("city"),
+    sessionCode: text("session_code")
+      .notNull()
+      .default(
+        sql`lpad((mod((('x' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))::bit(32)::bigint), 100000000))::text, 8, '0')`,
+      ),
     startsAt: timestampColumn("starts_at").notNull(),
     facebookUrl: text("facebook_url"),
     status: eventStatusEnum("status").notNull().default("draft"),
@@ -174,6 +179,7 @@ export const events = pgTable(
     uniqueIndex("events_slug_idx")
       .on(table.slug)
       .where(sql`${table.slug} is not null`),
+    uniqueIndex("events_session_code_idx").on(table.sessionCode),
     index("events_public_catalog_idx")
       .on(table.visibility, table.publishedAt, table.status, table.startsAt)
       .where(
@@ -203,6 +209,10 @@ export const events = pgTable(
     check(
       "events_ends_after_starts_check",
       sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+    check(
+      "events_session_code_format_check",
+      sql`${table.sessionCode} ~ '^[0-9]{8}$'`,
     ),
   ],
 ).enableRLS();

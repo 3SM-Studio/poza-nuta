@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { headers } from "next/headers";
 
 import { SessionRequestPage } from "@/components/public/session-request-page";
 import type { SessionEvent } from "@/components/public/session-api";
 import styles from "@/components/public/public.module.css";
 import { resolveSessionEventAccess } from "@/server/session-api/service";
+import { consumeSessionRequestRateLimit } from "@/server/session-api/rate-limit";
 import type { PublicSessionEvent } from "@/server/session-api/service";
 
 export const metadata: Metadata = {
@@ -22,7 +24,10 @@ type SessionPageProps = {
 
 export default async function SessionPage({ params }: SessionPageProps) {
   const { code } = await params;
-  const access = await resolveSessionEventAccess(code);
+  const rateLimit = consumeSessionRequestRateLimit(await headers(), "page");
+  const access = rateLimit.allowed
+    ? await resolveSessionEventAccess(code)
+    : ({ status: "invalid" } as const);
   const event = access.status === "invalid" ? null : access.event;
 
   return (
@@ -54,7 +59,7 @@ export default async function SessionPage({ params }: SessionPageProps) {
           />
         ) : (
           <section className={styles.publicSection}>
-            <h2>Link sesji</h2>
+            <h2>Sesja karaoke</h2>
             <div className={styles.errorMessage} role="alert">
               {getSessionAccessMessage(access.status)}
             </div>
@@ -68,11 +73,11 @@ export default async function SessionPage({ params }: SessionPageProps) {
 function getSessionAccessMessage(status: ResolveStatus) {
   switch (status) {
     case "scheduled":
-      return "Wydarzenie jeszcze się nie rozpoczęło.";
+      return "Sesja jeszcze się nie rozpoczęła.";
     case "closed":
-      return "Zgłoszenia są już zamknięte.";
+      return "Sesja została zakończona.";
     default:
-      return "Link sesji jest nieprawidłowy albo wygasł.";
+      return "Nie udało się otworzyć sesji. Sprawdź kod i spróbuj ponownie.";
   }
 }
 

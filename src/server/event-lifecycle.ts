@@ -4,6 +4,8 @@ import { and, eq, gt, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 
 import { events, operatorAuditLog, workspaces } from "../db/schema";
 import { calculateAutoCloseAt } from "../lib/event-lifecycle";
+import { withSessionCodeCollisionRetry } from "../lib/session-code";
+import { isSessionCodeUniqueViolation } from "../lib/session-code-db-error";
 import { DEFAULT_WORKSPACE_HANDLE } from "../lib/workspace";
 import { getDb } from "./db";
 import { OperatorApiError } from "./operator-api/errors";
@@ -273,7 +275,8 @@ export async function startEvent(
   input: StartEventInput,
   operatorId: number,
 ) {
-  return getDb().transaction(async (transaction) => {
+  return withSessionCodeCollisionRetry(
+    (sessionCode) => getDb().transaction(async (transaction) => {
     await acquireEventLifecycleLock(transaction);
     const now = new Date();
     const workspaceId = await requireDefaultWorkspaceIdInTransaction(
@@ -300,6 +303,7 @@ export async function startEvent(
       .insert(events)
       .values({
         workspaceId,
+        sessionCode,
         name: input.name,
         venue: input.venue,
         startsAt: now,
@@ -326,7 +330,9 @@ export async function startEvent(
     });
 
     return createdEvent;
-  });
+    }),
+    isSessionCodeUniqueViolation,
+  );
 }
 
 async function requireActiveEventForUpdate(

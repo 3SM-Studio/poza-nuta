@@ -20,6 +20,7 @@ import {
   workspaces,
 } from "../../db/schema";
 import { isOrganizationPublicId } from "../../lib/organization-public-id";
+import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
 import { getDb } from "../db";
 import {
   getDashboardOrganizationEventForAuthUser,
@@ -505,6 +506,11 @@ async function requireEventQueueManagerContext(
     .select({
       id: events.id,
       name: events.name,
+      status: events.status,
+      startsAt: events.startsAt,
+      autoCloseAt: events.autoCloseAt,
+      endsAt: events.endsAt,
+      closedAt: events.closedAt,
     })
     .from(events)
     .where(
@@ -518,6 +524,14 @@ async function requireEventQueueManagerContext(
       404,
       "EVENT_NOT_FOUND",
       "Event was not found.",
+    );
+  }
+
+  if (getEffectiveEventLifecycleStatus(event) !== "active") {
+    throw new OperatorApiError(
+      409,
+      "EVENT_QUEUE_CLOSED",
+      "The event queue is closed.",
     );
   }
 

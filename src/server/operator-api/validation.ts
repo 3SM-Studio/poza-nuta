@@ -17,7 +17,6 @@ export const MAX_EVENT_NAME_LENGTH = 120;
 export const MAX_EVENT_VENUE_LENGTH = 120;
 export const MAX_EVENT_CITY_LENGTH = 120;
 export const MAX_EVENT_FACEBOOK_URL_LENGTH = 2_048;
-export const MAX_EVENT_ACCESS_LINK_LABEL_LENGTH = 120;
 export const DEFAULT_DASHBOARD_EVENT_DURATION_HOURS = 6;
 
 export type LoginInput = {
@@ -89,10 +88,6 @@ export type ExtendEventInput = {
   hours: 1 | 2;
 };
 
-export type CreateEventAccessLinkInput = {
-  label: string | null;
-};
-
 export type ValidationIssue = {
   field: string;
   message: string;
@@ -154,64 +149,8 @@ export function validateRequestId(value: string): ValidationResult<number> {
   return validatePositiveSafeInteger(value, "requestId");
 }
 
-export function validateAccessLinkId(
-  value: string,
-): ValidationResult<number> {
-  return validatePositiveSafeInteger(value, "linkId");
-}
-
 export function validateEventId(value: string): ValidationResult<number> {
   return validatePositiveSafeInteger(value, "eventId");
-}
-
-export function normalizeEventAccessLinkLabel(value: string) {
-  return value.trim() || null;
-}
-
-export function validateCreateEventAccessLinkInput(
-  input: unknown,
-): ValidationResult<CreateEventAccessLinkInput> {
-  if (!isRecord(input)) {
-    return invalidBodyResult();
-  }
-
-  if (input.label === undefined || input.label === null) {
-    return {
-      success: true,
-      data: { label: null },
-    };
-  }
-
-  if (typeof input.label !== "string") {
-    return {
-      success: false,
-      issues: [
-        {
-          field: "label",
-          message: "label must be a string or null.",
-        },
-      ],
-    };
-  }
-
-  const label = normalizeEventAccessLinkLabel(input.label);
-
-  if (label && label.length > MAX_EVENT_ACCESS_LINK_LABEL_LENGTH) {
-    return {
-      success: false,
-      issues: [
-        {
-          field: "label",
-          message: `label must contain at most ${MAX_EVENT_ACCESS_LINK_LABEL_LENGTH} characters.`,
-        },
-      ],
-    };
-  }
-
-  return {
-    success: true,
-    data: { label },
-  };
 }
 
 function validatePositiveSafeInteger(

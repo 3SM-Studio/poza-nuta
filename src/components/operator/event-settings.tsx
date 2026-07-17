@@ -33,7 +33,6 @@ import {
   updateDashboardEventSettings,
 } from "./api";
 import { CloseEventConfirmation } from "./close-event-confirmation";
-import { EventAccessLinksPanel } from "./event-access-links-panel";
 import styles from "./operator.module.css";
 
 export function DashboardEventSettings() {
@@ -232,7 +231,6 @@ export function DashboardEventSettings() {
             </CardContent>
           </Card>
 
-          <EventAccessLinksPanel key={event.id} />
 
           <Card className={styles.settingsCard}>
             <CardHeader>

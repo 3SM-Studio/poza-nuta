@@ -1,18 +1,11 @@
-import { getEventPhase } from "./event-phase.ts";
-
-export const SESSION_CODE_MIN_LENGTH = 16;
-export const SESSION_CODE_PATTERN = /^[A-Za-z0-9_-]+$/;
+import { getEffectiveEventLifecycleStatus } from "./effective-event-lifecycle.ts";
+import { isCanonicalSessionCode } from "./session-code.ts";
 
 export type SessionEventAccessStatus =
   | "invalid"
   | "scheduled"
   | "closed"
   | "active";
-
-export type SessionEventAccessLinkInput = {
-  active: boolean;
-  revokedAt: Date | null;
-} | null;
 
 export type SessionEventAccessEventInput = {
   status: string;
@@ -23,31 +16,27 @@ export type SessionEventAccessEventInput = {
 } | null;
 
 export function isValidSessionCodeFormat(code: string) {
-  return (
-    code.length >= SESSION_CODE_MIN_LENGTH && SESSION_CODE_PATTERN.test(code)
-  );
+  return isCanonicalSessionCode(code);
 }
 
 export function getSessionEventAccessStatus({
-  link,
   event,
   now = new Date(),
 }: {
-  link: SessionEventAccessLinkInput;
   event: SessionEventAccessEventInput;
   now?: Date;
 }): SessionEventAccessStatus {
-  if (!link || !link.active || link.revokedAt || !event) {
+  if (!event) {
     return "invalid";
   }
 
-  const phase = getEventPhase(event, now);
+  const phase = getEffectiveEventLifecycleStatus(event, now);
 
-  if (phase === "cancelled" || phase === "ended") {
+  if (phase === "cancelled" || phase === "closed") {
     return "closed";
   }
 
-  if (phase === "upcoming") {
+  if (phase === "scheduled") {
     return "scheduled";
   }
 

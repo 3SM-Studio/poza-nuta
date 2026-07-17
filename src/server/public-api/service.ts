@@ -36,6 +36,7 @@ const publicEventSelection = {
   venue: events.venue,
   city: events.city,
   startsAt: events.startsAt,
+  autoCloseAt: events.autoCloseAt,
   endsAt: events.endsAt,
   closedAt: events.closedAt,
   status: events.status,

@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { EventManagementPanel } from "@/components/operator/event-management-panel";
 import type { EventManagementActionState } from "@/components/operator/event-management-panel";
-import { EventSessionLinkPanel } from "@/components/operator/event-session-link-panel";
-import type { EventSessionLinkActionState } from "@/components/operator/event-session-link-panel";
+import { EventSessionAccessPanel } from "@/components/operator/event-session-access-panel";
 import styles from "@/components/operator/operator.module.css";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -40,8 +38,7 @@ import {
   canManageDashboardOrganizationEvent,
   closeDashboardOrganizationEventForAuthUser,
   extendDashboardOrganizationEventForAuthUser,
-  generateDashboardOrganizationEventSessionLinkForAuthUser,
-  getDashboardOrganizationEventSessionLinkForAuthUser,
+  getDashboardOrganizationEventSessionAccessForAuthUser,
   updateDashboardOrganizationEventDetailsForAuthUser,
 } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
@@ -50,6 +47,7 @@ import {
   validateExtendDashboardEventInput,
   validateUpdateDashboardEventDetailsInput,
 } from "@/server/operator-api/validation";
+import { tryBuildCanonicalSiteUrl } from "@/server/canonical-site-origin";
 
 export const metadata: Metadata = {
   title: "Wydarzenie | Poza Nutą",
@@ -84,7 +82,7 @@ export default async function OrganizationEventDetailPage({
   }
 
   const session = await requireOperatorSession();
-  const result = await getDashboardOrganizationEventSessionLinkForAuthUser({
+  const result = await getDashboardOrganizationEventSessionAccessForAuthUser({
     authUserId: session.authUser.id,
     organizationId,
     eventId: eventIdValidation.data,
@@ -118,6 +116,9 @@ export default async function OrganizationEventDetailPage({
   );
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const actionMessage = getActionMessage(resolvedSearchParams.eventAction);
+  const sessionUrl = tryBuildCanonicalSiteUrl(
+    `/session/${result.event.sessionCode}`,
+  );
 
   return (
     <main className={styles.queuePage}>
@@ -224,23 +225,12 @@ export default async function OrganizationEventDetailPage({
             </CardContent>
           </Card>
 
-          <EventSessionLinkPanel
-            canManage={roleCanManage}
-            activeLink={
-              result.sessionLink
-                ? {
-                    createdAt: result.sessionLink.createdAt.toISOString(),
-                    lastUsedAt:
-                      result.sessionLink.lastUsedAt?.toISOString() ?? null,
-                    useCount: result.sessionLink.useCount,
-                  }
-                : null
+          <EventSessionAccessPanel
+            sessionCode={result.event.sessionCode}
+            sessionUrl={sessionUrl}
+            isClosed={
+              lifecycleStatus === "closed" || lifecycleStatus === "cancelled"
             }
-            action={generateSessionLink.bind(
-              null,
-              result.organization.publicId,
-              result.event.id,
-            )}
           />
           <EventManagementPanel
             canManage={canManage}
@@ -336,7 +326,7 @@ async function updateEventDetails(
       result.event.id,
     );
 
-    revalidatePath(path);
+    revalidateManagedEventPaths(result);
     redirect(`${path}?eventAction=details-updated`);
   } catch (error) {
     return mapEventManagementActionError(error);
@@ -376,7 +366,7 @@ async function extendEvent(
       result.event.id,
     );
 
-    revalidatePath(path);
+    revalidateManagedEventPaths(result);
     redirect(`${path}?eventAction=extended`);
   } catch (error) {
     return mapEventManagementActionError(error);
@@ -402,66 +392,33 @@ async function closeEvent(
       result.event.id,
     );
 
-    revalidatePath(path);
+    revalidateManagedEventPaths(result);
     redirect(`${path}?eventAction=closed`);
   } catch (error) {
     return mapEventManagementActionError(error);
   }
 }
 
-async function generateSessionLink(
-  organizationId: string,
-  eventId: number,
-  _state: EventSessionLinkActionState,
-  _formData: FormData,
-): Promise<EventSessionLinkActionState> {
-  "use server";
+function revalidateManagedEventPaths(input: {
+  organization: { publicId: string };
+  event: { id: number; sessionCode: string; slug: string | null };
+}) {
+  const { event, organization } = input;
 
-  void _state;
-  void _formData;
+  revalidatePath(getDashboardOrganizationEventsPath(organization.publicId));
+  revalidatePath(
+    getDashboardOrganizationEventPath(organization.publicId, event.id),
+  );
+  revalidatePath(
+    getDashboardOrganizationEventQueuePath(organization.publicId, event.id),
+  );
+  revalidatePath(
+    getDashboardOrganizationEventSharePath(organization.publicId, event.id),
+  );
+  revalidatePath(`/session/${event.sessionCode}`);
 
-  const session = await requireOperatorSession();
-
-  try {
-    const result =
-      await generateDashboardOrganizationEventSessionLinkForAuthUser({
-        authUserId: session.authUser.id,
-        organizationId,
-        eventId,
-      });
-    const eventPath = getDashboardOrganizationEventPath(
-      result.organization.publicId,
-      result.event.id,
-    );
-
-    revalidatePath(eventPath);
-
-    return {
-      success: true,
-      message:
-        "Link sesji został wygenerowany. Poprzedni aktywny link, jeśli istniał, został unieważniony.",
-      sessionUrl: await buildSessionUrl(result.sessionPath),
-    };
-  } catch (error) {
-    if (error instanceof OperatorApiError) {
-      if (error.status === 403) {
-        return {
-          success: false,
-          message: "Nie masz uprawnień do generowania linku sesji.",
-          sessionUrl: null,
-        };
-      }
-
-      if (error.status === 404) {
-        return {
-          success: false,
-          message: "Nie znaleziono wydarzenia albo organizacji.",
-          sessionUrl: null,
-        };
-      }
-    }
-
-    throw error;
+  if (event.slug) {
+    revalidatePath(`/events/${event.slug}`);
   }
 }
 
@@ -601,23 +558,6 @@ function getActionMessage(value: string | string[] | undefined) {
     default:
       return null;
   }
-}
-
-async function buildSessionUrl(sessionPath: string) {
-  const headerList = await headers();
-  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
-
-  if (!host) {
-    return sessionPath;
-  }
-
-  const protocol =
-    headerList.get("x-forwarded-proto") ??
-    (host.startsWith("localhost") || host.startsWith("127.0.0.1")
-      ? "http"
-      : "https");
-
-  return `${protocol}://${host}${sessionPath}`;
 }
 
 function formatDateTime(date: Date | null) {

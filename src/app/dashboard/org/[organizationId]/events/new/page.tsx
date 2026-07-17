@@ -70,8 +70,7 @@ export default async function NewOrganizationEventPage({
             <CardHeader>
               <CardTitle>Dane wydarzenia</CardTitle>
               <CardDescription>
-                Czas zamknięcia zapisujemy jako auto_close_at. Link sesji
-                zostanie dodany w kolejnym etapie.
+                Kod sesji zostanie utworzony automatycznie razem z wydarzeniem.
               </CardDescription>
             </CardHeader>
             <CardContent>

@@ -5,6 +5,7 @@ export type PublicRequestEligibilityInput = {
   visibility: string;
   publishedAt: Date | null;
   startsAt: Date;
+  autoCloseAt?: Date | null;
   endsAt: Date;
   closedAt: Date | null;
   songRequestsEnabled: boolean;

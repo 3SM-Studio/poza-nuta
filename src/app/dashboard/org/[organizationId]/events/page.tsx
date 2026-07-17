@@ -88,8 +88,8 @@ export default async function OrganizationEventsPage({
                     <div>
                       <dt>Status</dt>
                       <dd>
-                        <Badge variant={getStatusBadgeVariant(event.status)}>
-                          {formatEventStatus(event.status)}
+                        <Badge variant={getStatusBadgeVariant(event.effectiveStatus)}>
+                          {formatEventStatus(event.effectiveStatus)}
                         </Badge>
                       </dd>
                     </div>
@@ -164,6 +164,10 @@ function formatEventStatus(status: string) {
   switch (status) {
     case "active":
       return "Aktywny";
+    case "scheduled":
+      return "Zaplanowany";
+    case "cancelled":
+      return "Anulowany";
     case "closed":
       return "Zamknięty";
     case "draft":

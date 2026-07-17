@@ -31,6 +31,10 @@ import {
   isDashboardNavigationLinkActive,
   resolveDashboardHomeRedirect,
 } from "../src/lib/dashboard-routes.ts";
+import {
+  CanonicalSiteOriginConfigurationError,
+  parseCanonicalSiteOrigin,
+} from "../src/lib/canonical-site-origin.ts";
 import { sanitizeAuthIdentities } from "../src/server/operator-api/account.ts";
 
 const exampleOrganizationId = "kgbgnpwpbcaebdytjmbx";
@@ -845,11 +849,8 @@ test("organization events support owner and manager create flow", () => {
   assert.match(newPageSource, /formData\.has\("publicShowSongTitles"\)/);
   assert.match(newPageSource, /formData\.has\("isActivePublicEvent"\)/);
   assert.match(newPageSource, /redirect\(/);
-  assert.match(detailPageSource, /EventSessionLinkPanel/);
-  assert.match(
-    detailPageSource,
-    /generateDashboardOrganizationEventSessionLinkForAuthUser/,
-  );
+  assert.match(detailPageSource, /EventSessionAccessPanel/);
+  assert.match(detailPageSource, /result\.event\.sessionCode/);
   assert.match(detailPageSource, /result\.event\.autoCloseAt/);
   assert.match(detailPageSource, /result\.event\.songRequestsEnabled/);
   assert.match(detailPageSource, /result\.event\.facebookUrl/);
@@ -901,9 +902,11 @@ test("organization event create persists scheduling and public visibility fields
     /isActivePublicEvent: input\.event\.isActivePublicEvent/,
   );
   assert.match(organizationsSource, /ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS/);
+  assert.match(organizationsSource, /withSessionCodeCollisionRetry/);
+  assert.match(organizationsSource, /sessionCode/);
 });
 
-test("organization event detail exposes managed event and session link panels", () => {
+test("organization event detail exposes management and canonical session access", () => {
   const detailPageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
     "utf8",
@@ -917,11 +920,11 @@ test("organization event detail exposes managed event and session link panels", 
   assert.match(detailPageSource, /areDashboardEventRequestsOpen/);
   assert.match(detailPageSource, /shouldShowDashboardEventClosingWarning/);
   assert.match(detailPageSource, /EventManagementPanel/);
-  assert.match(detailPageSource, /EventSessionLinkPanel/);
+  assert.match(detailPageSource, /EventSessionAccessPanel/);
   assert.match(detailPageSource, /detailsAction=\{updateEventDetails\.bind/);
   assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
-  assert.match(detailPageSource, /generateSessionLink\.bind/);
-  assert.match(detailPageSource, /buildSessionUrl/);
+  assert.doesNotMatch(detailPageSource, /generateSessionLink/);
+  assert.match(detailPageSource, /tryBuildCanonicalSiteUrl/);
   assert.match(panelSource, /Wydarzenie kończy się za mniej niż 30 minut/);
   assert.match(panelSource, /name="title"/);
   assert.match(panelSource, /name="venue"/);
@@ -933,7 +936,80 @@ test("organization event detail exposes managed event and session link panels", 
   assert.match(panelSource, /name="publicShowSongTitles"/);
   assert.match(panelSource, /name="isActivePublicEvent"/);
   assert.match(panelSource, /Zamknij wydarzenie teraz/);
-  assert.match(detailPageSource, /sessionPath/);
+  assert.match(detailPageSource, /result\.event\.sessionCode/);
+});
+
+test("canonical site origin accepts configured HTTP origins and normalizes trailing slashes", () => {
+  assert.equal(
+    parseCanonicalSiteOrigin("https://app.example.test"),
+    "https://app.example.test",
+  );
+  assert.equal(
+    parseCanonicalSiteOrigin("http://localhost:3000"),
+    "http://localhost:3000",
+  );
+  assert.equal(
+    parseCanonicalSiteOrigin("https://app.example.test/"),
+    "https://app.example.test",
+  );
+});
+
+test("canonical site origin rejects unsafe or ambiguous configuration", () => {
+  for (const configuredValue of [
+    "ftp://app.example.test",
+    "https://user:password@app.example.test",
+    "https://app.example.test?redirect=evil",
+    "https://app.example.test#fragment",
+  ]) {
+    assert.throws(
+      () => parseCanonicalSiteOrigin(configuredValue),
+      (error) =>
+        error instanceof CanonicalSiteOriginConfigurationError &&
+        !error.message.includes(configuredValue),
+    );
+  }
+});
+
+test("canonical site origin fails safely when configuration is missing", () => {
+  assert.throws(
+    () => parseCanonicalSiteOrigin(undefined),
+    (error) =>
+      error instanceof CanonicalSiteOriginConfigurationError &&
+      error.message === "Canonical site URL is not configured correctly.",
+  );
+});
+
+test("canonical session views share one server-only origin helper", () => {
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const sharePageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+    "utf8",
+  );
+  const helperSource = readFileSync(
+    "src/server/canonical-site-origin.ts",
+    "utf8",
+  );
+  const panelSource = readFileSync(
+    "src/components/operator/event-session-access-panel.tsx",
+    "utf8",
+  );
+
+  for (const source of [detailPageSource, sharePageSource]) {
+    assert.match(source, /tryBuildCanonicalSiteUrl/);
+    assert.doesNotMatch(source, /process\.env\.SITE_URL|buildSessionUrl/);
+    assert.doesNotMatch(source, /headers\(\)|x-forwarded-host|host\.startsWith/);
+  }
+
+  assert.match(helperSource, /import "server-only"/);
+  assert.match(helperSource, /process\.env\.SITE_URL/);
+  assert.doesNotMatch(
+    helperSource,
+    /headers\(\)|x-forwarded-host|request\.headers|host\.startsWith/,
+  );
+  assert.match(panelSource, /Adres sesji jest chwilowo niedostępny/);
 });
 
 test("organization event management is limited to owner and manager roles", () => {
@@ -998,6 +1074,40 @@ test("organization event management updates auto_close_at and closes without del
   assert.equal(manageSource.includes("ends_at"), false);
 });
 
+test("event management revalidates every lifecycle-dependent view", () => {
+  const detailPageSource = readFileSync(
+    new URL(
+      "../src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    detailPageSource,
+    /revalidatePath\(getDashboardOrganizationEventsPath\(/,
+  );
+  assert.match(
+    detailPageSource,
+    /revalidatePath\([\s\S]*getDashboardOrganizationEventPath\(/,
+  );
+  assert.match(
+    detailPageSource,
+    /revalidatePath\([\s\S]*getDashboardOrganizationEventQueuePath\(/,
+  );
+  assert.match(
+    detailPageSource,
+    /revalidatePath\([\s\S]*getDashboardOrganizationEventSharePath\(/,
+  );
+  assert.match(detailPageSource, /revalidatePath\(`\/session\/\$\{event\.sessionCode\}`\)/);
+  assert.match(detailPageSource, /revalidatePath\(`\/events\/\$\{event\.slug\}`\)/);
+  assert.equal(
+    (detailPageSource.match(/revalidateManagedEventPaths\(result\)/g) ?? [])
+      .length,
+    3,
+  );
+});
+
 test("organization event queue route renders the event-scoped management panel", () => {
   const queuePageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
@@ -1017,7 +1127,7 @@ test("organization event queue route renders the event-scoped management panel",
   assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
 });
 
-test("organization event share route renders session link and QR controls", () => {
+test("organization event share route renders canonical code and QR controls", () => {
   const sharePagePath =
     "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx";
   const sharePageSource = readFileSync(sharePagePath, "utf8");
@@ -1030,7 +1140,7 @@ test("organization event share route renders session link and QR controls", () =
     "utf8",
   );
   const sharePanelSource = readFileSync(
-    "src/components/operator/event-share-panel.tsx",
+    "src/components/operator/event-session-access-panel.tsx",
     "utf8",
   );
   const organizationsSource = readFileSync(
@@ -1044,11 +1154,11 @@ test("organization event share route renders session link and QR controls", () =
     `/dashboard/org/${exampleOrganizationId}/events/42/share`,
   );
   assert.match(sharePageSource, /Udostępnij wydarzenie/);
-  assert.match(sharePageSource, /getDashboardOrganizationEventSessionLinkForAuthUser/);
+  assert.match(sharePageSource, /getDashboardOrganizationEventSessionAccessForAuthUser/);
   assert.match(sharePageSource, /canShareDashboardOrganizationEvent/);
-  assert.match(sharePageSource, /generateDashboardOrganizationEventShareLinkForAuthUser/);
+  assert.doesNotMatch(sharePageSource, /generateDashboardOrganizationEventShareLinkForAuthUser/);
   assert.match(sharePageSource, /notFound\(\)/);
-  assert.match(sharePageSource, /buildSessionUrl\(result\.sessionPath\)/);
+  assert.match(sharePageSource, /result\.event\.sessionCode/);
   assert.match(detailPageSource, /getDashboardOrganizationEventSharePath/);
   assert.match(detailPageSource, /Link i QR/);
   assert.match(queuePageSource, /getDashboardOrganizationEventSharePath/);
@@ -1057,7 +1167,8 @@ test("organization event share route renders session link and QR controls", () =
   assert.match(sharePanelSource, /errorCorrectionLevel: "H"/);
   assert.match(sharePanelSource, /margin: 4/);
   assert.match(sharePanelSource, /Pobierz QR/);
-  assert.match(sharePanelSource, /Kod QR pojawi się dopiero po wygenerowaniu linku sesji/);
+  assert.match(sharePanelSource, /Kopiuj kod/);
+  assert.doesNotMatch(sharePanelSource, /Wygeneruj|Regeneruj/);
   assert.match(organizationsSource, /canShareDashboardOrganizationEvent/);
   assert.match(organizationsSource, /role === "operator"/);
   assert.equal(sharePageSource.includes("codeHash"), false);

@@ -1,4 +1,4 @@
-export type PublicApiErrorStatus = 403 | 404;
+export type PublicApiErrorStatus = 403 | 404 | 429;
 
 export class PublicApiError extends Error {
   readonly status: PublicApiErrorStatus;

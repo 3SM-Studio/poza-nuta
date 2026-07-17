@@ -246,6 +246,20 @@ test("event queue reads and writes are scoped to the resolved event", () => {
   );
 });
 
+test("event queue mutations recheck the effective lifecycle while holding the event lock", () => {
+  const serviceSource = readFileSync(
+    new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(serviceSource, /for\("update"\)/);
+  assert.match(
+    serviceSource,
+    /getEffectiveEventLifecycleStatus\(event\) !== "active"/,
+  );
+  assert.match(serviceSource, /"EVENT_QUEUE_CLOSED"/);
+});
+
 test("event queue isolation returns safe 404 before mutating a request from another event", () => {
   const serviceSource = readFileSync(
     new URL("../src/server/operator-api/event-queue.ts", import.meta.url),

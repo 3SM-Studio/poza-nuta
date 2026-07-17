@@ -1,8 +1,8 @@
 import "server-only";
 
-import { and, eq, ilike, inArray, max, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, max } from "drizzle-orm";
 
-import { eventAccessLinks, events, songRequests, songs } from "../../db/schema";
+import { events, songRequests, songs } from "../../db/schema";
 import {
   canUseSessionPublicQueue,
   canUseSessionSongRequests,
@@ -13,7 +13,6 @@ import {
   type SessionEventAccessStatus,
 } from "../../lib/session-event-access";
 import { getDb } from "../db";
-import { hashEventAccessCode } from "../operator-api/crypto";
 import { PublicApiError } from "../public-api/errors";
 import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "../public-api/queue-policy";
 import { PUBLIC_SONG_SEARCH_LIMIT } from "../public-api/service";
@@ -37,20 +36,7 @@ const sessionEventSelection = {
   closedAt: events.closedAt,
 };
 
-const sessionLinkSelection = {
-  id: eventAccessLinks.id,
-  active: eventAccessLinks.active,
-  revokedAt: eventAccessLinks.revokedAt,
-};
-
-type SessionLinkRow = {
-  id: number;
-  active: boolean;
-  revokedAt: Date | null;
-};
-
 type SessionEventRow = {
-  link: SessionLinkRow;
   event: PublicSessionEvent;
 };
 
@@ -81,7 +67,6 @@ export async function resolveSessionEventAccess(
 ): Promise<SessionEventAccess> {
   const row = await findSessionEventByCode(code);
   const status = getSessionEventAccessStatus({
-    link: row?.link ?? null,
     event: row?.event ?? null,
     now,
   });
@@ -253,14 +238,6 @@ export async function createSessionRequest(
         createdAt: songRequests.createdAt,
       });
 
-    await transaction
-      .update(eventAccessLinks)
-      .set({
-        lastUsedAt: now,
-        useCount: sql`${eventAccessLinks.useCount} + 1`,
-      })
-      .where(eq(eventAccessLinks.id, session.link.id));
-
     return request;
   });
 }
@@ -285,7 +262,6 @@ async function requireSongRequestSessionInTransaction(
 
 function requireLiveSessionRow(row: SessionEventRow | null) {
   const status = getSessionEventAccessStatus({
-    link: row?.link ?? null,
     event: row?.event ?? null,
   });
 
@@ -333,15 +309,12 @@ async function findSessionEventByCode(code: string) {
     return null;
   }
 
-  const codeHash = hashEventAccessCode(code);
   const [row] = await getDb()
     .select({
-      link: sessionLinkSelection,
       event: sessionEventSelection,
     })
-    .from(eventAccessLinks)
-    .innerJoin(events, eq(events.id, eventAccessLinks.eventId))
-    .where(eq(eventAccessLinks.codeHash, codeHash))
+    .from(events)
+    .where(eq(events.sessionCode, code))
     .limit(1);
 
   return row ?? null;
@@ -355,15 +328,12 @@ async function findSessionEventByCodeInTransaction(
     return null;
   }
 
-  const codeHash = hashEventAccessCode(code);
   const [row] = await transaction
     .select({
-      link: sessionLinkSelection,
       event: sessionEventSelection,
     })
-    .from(eventAccessLinks)
-    .innerJoin(events, eq(events.id, eventAccessLinks.eventId))
-    .where(eq(eventAccessLinks.codeHash, codeHash))
+    .from(events)
+    .where(eq(events.sessionCode, code))
     .for("update")
     .limit(1);
 

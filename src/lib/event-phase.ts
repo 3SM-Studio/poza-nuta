@@ -1,8 +1,11 @@
+import { getEffectiveEventLifecycleStatus } from "./effective-event-lifecycle.ts";
+
 export type EventPhase = "upcoming" | "live" | "ended" | "cancelled";
 
 export type EventPhaseInput = {
   status: string;
   startsAt: Date;
+  autoCloseAt?: Date | null;
   endsAt: Date;
   closedAt: Date | null;
 };
@@ -11,21 +14,10 @@ export function getEventPhase(
   event: EventPhaseInput,
   referenceNow = new Date(),
 ): EventPhase {
-  if (event.status === "cancelled") {
-    return "cancelled";
-  }
+  const status = getEffectiveEventLifecycleStatus(event, referenceNow);
 
-  if (event.closedAt || event.status === "closed") {
-    return "ended";
-  }
-
-  if (referenceNow.getTime() < event.startsAt.getTime()) {
-    return "upcoming";
-  }
-
-  if (referenceNow.getTime() < event.endsAt.getTime()) {
-    return "live";
-  }
-
+  if (status === "scheduled") return "upcoming";
+  if (status === "active") return "live";
+  if (status === "cancelled") return "cancelled";
   return "ended";
 }

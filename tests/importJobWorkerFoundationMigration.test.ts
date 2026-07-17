@@ -115,12 +115,13 @@ test("0019 snapshot adds only the declared public schema contract", () => {
   ]);
 });
 
-test("journal and package expose exactly the 0019 migration test", () => {
+test("journal and package retain the 0019 migration test", () => {
   const journal = JSON.parse(
     readFileSync("drizzle/meta/_journal.json", "utf8"),
   ) as { entries: Array<{ idx: number; tag: string }> };
-  assert.deepEqual(journal.entries.at(-1), {
-    ...journal.entries.at(-1),
+  const entry = journal.entries.find(({ idx }) => idx === 19);
+  assert.deepEqual(entry, {
+    ...entry,
     idx: 19,
     tag: "0019_import_job_worker_foundation",
   });

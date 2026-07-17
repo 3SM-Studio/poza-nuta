@@ -5,6 +5,7 @@ import {
   validationErrorResponse,
 } from "../../../../../server/public-api/responses";
 import { createSessionRequest } from "../../../../../server/session-api/service";
+import { requireSessionApiRateLimit } from "../../../../../server/session-api/rate-limit";
 import { validateSessionRequestInput } from "../../../../../server/session-api/validation";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function POST(
   }
 
   try {
+    requireSessionApiRateLimit(request);
     const { code } = await context.params;
     const createdRequest = await createSessionRequest(code, validation.data);
 

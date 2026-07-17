@@ -5,6 +5,7 @@ import {
 } from "../../../../../../server/public-api/responses";
 import { validateSearchQuery } from "../../../../../../server/public-api/validation";
 import { searchSessionSongs } from "../../../../../../server/session-api/service";
+import { requireSessionApiRateLimit } from "../../../../../../server/session-api/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +22,7 @@ export async function GET(
   }
 
   try {
+    requireSessionApiRateLimit(request);
     const { code } = await context.params;
     const songs = await searchSessionSongs(code, validation.data);
 
