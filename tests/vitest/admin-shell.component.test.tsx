@@ -2,9 +2,11 @@
 
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AnchorHTMLAttributes } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminLayoutView } from "@/components/platform-admin/admin-layout-view";
+
+let pathname = "/admin";
 
 vi.mock("next-themes", () => ({
   useTheme: () => ({ theme: "dark", setTheme: vi.fn() }),
@@ -26,6 +28,14 @@ vi.mock("next/link", () => ({
     />
   ),
 }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => pathname,
+}));
+
+afterEach(() => {
+  pathname = "/admin";
+});
 
 describe("AdminShell", () => {
   it.each([
@@ -50,6 +60,31 @@ describe("AdminShell", () => {
     for (const link of overviewLinks) {
       expect(link).toHaveAttribute("aria-current", "page");
     }
+
+    const importLinks = screen.getAllByRole("link", { name: "Importy" });
+    expect(new Set(importLinks.map((link) => link.getAttribute("href")))).toEqual(
+      new Set(["/admin/imports"]),
+    );
+    for (const link of importLinks) {
+      expect(link).not.toHaveAttribute("aria-current");
+    }
+  });
+
+  it("marks Imports as the current admin destination", () => {
+    pathname = "/admin/imports";
+    renderAllowed("platform_admin");
+
+    for (const link of screen.getAllByRole("link", { name: "Importy" })) {
+      expect(link).toHaveAttribute("aria-current", "page");
+    }
+    for (const link of screen.getAllByRole("link", { name: "Overview" })) {
+      expect(link).not.toHaveAttribute("aria-current");
+    }
+    expect(
+      screen.getByText("Importy", {
+        selector: "[data-slot='breadcrumb-page']",
+      }),
+    ).toBeVisible();
   });
 
   it("does not render the shell, actor or metrics after denial", () => {

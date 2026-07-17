@@ -2,8 +2,10 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ArrowLeftIcon,
+  DatabaseIcon,
   LayoutDashboardIcon,
   MenuIcon,
 } from "lucide-react";
@@ -43,6 +45,9 @@ const roleLabels = {
 } as const;
 
 export function AdminShell({ actor, children }: AdminShellProps) {
+  const pathname = usePathname();
+  const currentPage = pathname === "/admin/imports" ? "Importy" : "Overview";
+
   return (
     <div
       data-admin-shell="true"
@@ -65,7 +70,7 @@ export function AdminShell({ actor, children }: AdminShellProps) {
             <span className="text-base font-semibold">Poza Nutą</span>
             <span className="text-xs text-muted-foreground">Administracja</span>
           </div>
-          <AdminNavigation />
+          <AdminNavigation pathname={pathname} />
           <div className="mt-auto p-4">
             <ActorSummary actor={actor} />
             <Separator className="my-4" />
@@ -85,7 +90,7 @@ export function AdminShell({ actor, children }: AdminShellProps) {
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem>
-                    <BreadcrumbPage>Overview</BreadcrumbPage>
+                    <BreadcrumbPage>{currentPage}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
@@ -108,31 +113,58 @@ export function AdminShell({ actor, children }: AdminShellProps) {
   );
 }
 
-function AdminNavigation({ mobile = false }: { mobile?: boolean }) {
-  const link = (
-    <Button
-      variant="ghost"
-      className="h-11 w-full justify-start bg-sidebar-accent text-sidebar-accent-foreground"
-      asChild
-    >
-      <Link href="/admin" aria-current="page">
-        <LayoutDashboardIcon />
-        Overview
-      </Link>
-    </Button>
-  );
+const adminNavigationItems = [
+  { href: "/admin", label: "Overview", icon: LayoutDashboardIcon },
+  { href: "/admin/imports", label: "Importy", icon: DatabaseIcon },
+] as const;
+
+function AdminNavigation({
+  mobile = false,
+  pathname,
+}: {
+  mobile?: boolean;
+  pathname: string;
+}) {
 
   return (
     <nav
-      className="p-4"
+      className="grid gap-1 p-4"
       aria-label={mobile ? "Mobilna administracja platformą" : "Administracja platformą"}
     >
-      {mobile ? <SheetClose asChild>{link}</SheetClose> : link}
+      {adminNavigationItems.map(({ href, label, icon: Icon }) => {
+        const active = pathname === href;
+        const link = (
+          <Button
+            variant="ghost"
+            className={`h-11 w-full justify-start ${
+              active
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground"
+            }`}
+            asChild
+          >
+            <Link href={href} aria-current={active ? "page" : undefined}>
+              <Icon />
+              {label}
+            </Link>
+          </Button>
+        );
+
+        return mobile ? (
+          <SheetClose asChild key={href}>
+            {link}
+          </SheetClose>
+        ) : (
+          <div key={href}>{link}</div>
+        );
+      })}
     </nav>
   );
 }
 
 function MobileNavigation({ actor }: { actor: AdminActorViewModel }) {
+  const pathname = usePathname();
+
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -151,7 +183,7 @@ function MobileNavigation({ actor }: { actor: AdminActorViewModel }) {
           <SheetTitle>Poza Nutą</SheetTitle>
           <SheetDescription>Administracja platformą</SheetDescription>
         </SheetHeader>
-        <AdminNavigation mobile />
+        <AdminNavigation mobile pathname={pathname} />
         <div className="mt-auto">
           <ActorSummary actor={actor} />
           <Separator className="my-4" />

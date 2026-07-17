@@ -30,6 +30,7 @@
     "test:postgres:platform-role-mutations": "node --experimental-strip-types --test tests/postgres/platformRoleMutations.integration.test.ts",
     "test:postgres:platform-suspensions": "node --experimental-strip-types --test tests/postgres/platformSuspensions.integration.test.ts",
     "test:postgres:platform-admin-overview": "node --experimental-strip-types --test tests/postgres/platformAdminOverview.integration.test.ts",
+    "test:postgres:platform-admin-imports": "node --experimental-strip-types --test tests/postgres/platformAdminImports.integration.test.ts",
     "test:postgres:import-job-status-expansion": "node --experimental-strip-types --test tests/postgres/importJobStatusExpansion.integration.test.ts",
     "test:postgres:import-job-data-foundation-expand": "node --experimental-strip-types --test tests/postgres/importJobDataFoundationExpand.integration.test.ts",
     "test:postgres:import-job-data-foundation-contract": "node --experimental-strip-types --test tests/postgres/importJobDataFoundationContract.integration.test.ts",
