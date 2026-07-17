@@ -163,13 +163,13 @@ function getStatusBadgeVariant(status: string) {
 function formatEventStatus(status: string) {
   switch (status) {
     case "active":
-      return "Aktywny";
+      return "Aktywne";
     case "scheduled":
-      return "Zaplanowany";
+      return "Zaplanowane";
     case "cancelled":
-      return "Anulowany";
+      return "Anulowane";
     case "closed":
-      return "Zamknięty";
+      return "Zamknięte";
     case "draft":
       return "Szkic";
     default:

@@ -865,6 +865,46 @@ test("organization events support owner and manager create flow", () => {
   );
 });
 
+test("organization event list and detail present the same effective closed status", () => {
+  const listPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/page.tsx",
+    "utf8",
+  );
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const organizationsSource = readFileSync(
+    "src/server/operator-api/organizations.ts",
+    "utf8",
+  );
+  const dashboardLifecycleSource = readFileSync(
+    "src/lib/dashboard-event-lifecycle.ts",
+    "utf8",
+  );
+
+  assert.match(
+    listPageSource,
+    /formatEventStatus\(event\.effectiveStatus\)/,
+  );
+  assert.match(
+    organizationsSource,
+    /effectiveStatus: getEffectiveEventLifecycleStatus\(event\)/,
+  );
+  assert.match(
+    detailPageSource,
+    /const lifecycleStatus = getDashboardEventLifecycleStatus\(result\.event, now\)/,
+  );
+  assert.match(
+    dashboardLifecycleSource,
+    /return getEffectiveEventLifecycleStatus\(/,
+  );
+  assert.match(listPageSource, /case "closed":\s+return "Zamknięte";/);
+  assert.match(detailPageSource, /case "closed":\s+return "Zamknięte";/);
+  assert.equal(listPageSource.includes('return "Zamknięty";'), false);
+  assert.equal(detailPageSource.includes('return "Zamknięty";'), false);
+});
+
 test("organization event create persists scheduling and public visibility fields", () => {
   const schemaSource = readFileSync("src/db/schema.ts", "utf8");
   const migrationSource = readFileSync(
