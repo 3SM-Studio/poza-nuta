@@ -3,19 +3,22 @@
 import type { ComponentProps } from "react";
 import { ThemeProvider } from "next-themes";
 
-export function AdminThemeProvider({
+import { TooltipProvider } from "@/components/ui/tooltip";
+
+export const APP_THEME_STORAGE_KEY = "pozanuta-admin-theme";
+
+export function AppThemeProvider({
   children,
 }: Pick<ComponentProps<typeof ThemeProvider>, "children">) {
   return (
     <ThemeProvider
-      attribute="data-admin-theme"
+      attribute="class"
       defaultTheme="dark"
       enableSystem
-      enableColorScheme={false}
-      storageKey="pozanuta-admin-theme"
+      storageKey={APP_THEME_STORAGE_KEY}
       disableTransitionOnChange
     >
-      {children}
+      <TooltipProvider>{children}</TooltipProvider>
     </ThemeProvider>
   );
 }

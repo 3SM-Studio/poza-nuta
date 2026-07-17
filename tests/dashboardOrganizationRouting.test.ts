@@ -220,8 +220,8 @@ test("organization general settings page redirects to canonical settings", () =>
 });
 
 test("dashboard organization links use settings canonical path", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
   const overviewSource = readFileSync(
@@ -229,10 +229,10 @@ test("dashboard organization links use settings canonical path", () => {
     "utf8",
   );
 
-  assert.match(shellSource, /getDashboardOrganizationSettingsPath/);
+  assert.match(sidebarSource, /getDashboardOrganizationSettingsPath/);
   assert.match(overviewSource, /getDashboardOrganizationSettingsPath/);
   assert.equal(
-    shellSource.includes("getDashboardOrganizationGeneralSettingsPath"),
+    sidebarSource.includes("getDashboardOrganizationGeneralSettingsPath"),
     false,
   );
   assert.equal(
@@ -377,17 +377,18 @@ test("dashboard shell uses separate simple organization and account layouts", ()
     "utf8",
   );
 
-  assert.match(shellSource, /data-dashboard-layout=\{layout\}/);
-  assert.match(shellSource, /data-dashboard-topbar="true"/);
-  assert.match(shellSource, /data-dashboard-body="true"/);
+  assert.match(shellSource, /<AppShell/);
+  assert.match(shellSource, /kind="dashboard"/);
+  assert.match(shellSource, /layout=\{layout\}/);
+  assert.match(shellSource, /<OrganizerSidebar/);
   assert.match(shellSource, /organizationId\s+\?\s+"organization"/);
   assert.match(shellSource, /:\s+isAccountRoute\s+\?\s+"account"/);
   assert.match(shellSource, /:\s+"simple"/);
-  assert.match(shellSource, /pathname\.startsWith\("\/dashboard\/account"\)/);
+  assert.match(shellSource, /pathname\.startsWith\("\/account"\)/);
   assert.match(shellSource, /getSelectedOrganizationId\(pathname\)/);
 });
 
-test("dashboard theme exposes dark shadcn and sidebar tokens", () => {
+test("global theme exposes light and dark shadcn and sidebar tokens", () => {
   const globalsSource = readFileSync("src/app/globals.css", "utf8");
   const operatorStyles = readFileSync(
     "src/components/operator/operator.module.css",
@@ -426,6 +427,9 @@ test("dashboard theme exposes dark shadcn and sidebar tokens", () => {
   }
 
   assert.match(globalsSource, /color-scheme: dark/);
+  assert.match(globalsSource, /html\.light\s*\{/);
+  assert.match(globalsSource, /color-scheme: light/);
+  assert.match(globalsSource, /html\.dark\s*\{/);
   assert.match(globalsSource, /oklch\(/);
   assert.match(operatorStyles, /background: var\(--sidebar\)/);
   assert.match(operatorStyles, /background: var\(--topbar-bg\)/);
@@ -434,80 +438,66 @@ test("dashboard theme exposes dark shadcn and sidebar tokens", () => {
   assert.match(cardSource, /shadow-\[var\(--shadow-card\)\]/);
 });
 
-test("dashboard topbar is global and renders breadcrumbs with organization switcher", () => {
+test("dashboard uses the shared header without duplicating the organization switcher", () => {
   const shellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
-  const topbarStart = shellSource.indexOf('data-dashboard-topbar="true"');
-  const topbarEnd = shellSource.indexOf('data-dashboard-body="true"');
-  const topbarSource = shellSource.slice(topbarStart, topbarEnd);
-
-  assert.match(topbarSource, /<DashboardLogo \/>/);
-  assert.match(topbarSource, /<DashboardHeaderBreadcrumbs/);
-  assert.match(topbarSource, /organizations=\{organizations\}/);
-  assert.match(topbarSource, /<DashboardUserMenu/);
-  assert.equal(topbarSource.includes("dashboardHeaderLabel"), false);
-  assert.equal(topbarSource.includes("<strong>Dashboard</strong>"), false);
+  assert.match(shellSource, /section="Panel organizatora"/);
+  assert.match(shellSource, /title=\{title\}/);
+  assert.match(shellSource, /organizations=\{organizations\}/);
+  assert.equal(shellSource.includes("headerContext="), false);
+  assert.equal(shellSource.includes("DashboardOrganizationSwitcher"), false);
+  assert.equal(shellSource.includes("DashboardUserMenu"), false);
 });
 
-test("simple dashboard routes do not render organization sidebar", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+test("simple dashboard routes keep the organizer sidebar with real destinations", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
 
-  assert.match(shellSource, /sidebar\s+\?\s+styles\.dashboardBody/);
-  assert.match(shellSource, /styles\.dashboardBodySimple/);
-  assert.match(shellSource, /getDashboardNewOrganizationPath\(\)/);
-  assert.match(shellSource, /getDashboardOrganizationsPath\(\)/);
+  assert.match(sidebarSource, /return \[panelGroup\]/);
+  assert.match(sidebarSource, /getDashboardNewOrganizationPath\(\)/);
+  assert.match(sidebarSource, /getDashboardOrganizationsPath\(\)/);
+  assert.equal(sidebarSource.includes('href: "#"'), false);
 });
 
-test("organization routes render org sidebar navigation without org switcher", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+test("organization routes use a dedicated typed organizer navigation", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
-  const sidebarStart = shellSource.indexOf("function OrganizationSidebar");
-  const sidebarEnd = shellSource.indexOf("function AccountSidebar");
-  const sidebarSource = shellSource.slice(sidebarStart, sidebarEnd);
 
-  assert.match(shellSource, /function OrganizationSidebar/);
-  assert.match(sidebarSource, /data-dashboard-org-sidebar="true"/);
+  assert.match(sidebarSource, /export function getOrganizerNavigationGroups/);
   assert.match(sidebarSource, /label: "Przegl/);
   assert.match(sidebarSource, /label: "Wydarzenia"/);
   assert.match(sidebarSource, /label: "Zesp/);
   assert.match(sidebarSource, /label: "Ustawienia"/);
-  assert.match(sidebarSource, /Wszystkie organizacje/);
-  assert.match(sidebarSource, /Utw/);
-  assert.equal(sidebarSource.includes("DashboardOrganizationSwitcher"), false);
-  assert.equal(/label: "(Overview|Events|Team|Settings)"/.test(shellSource), false);
+  assert.match(sidebarSource, /<DashboardOrganizationSwitcher/);
+  assert.match(sidebarSource, /header=\{/);
+  assert.equal(/label: "(Overview|Events|Team|Settings)"/.test(sidebarSource), false);
 });
 
-test("account routes render account sidebar without organization switcher", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+test("account routes contain only real profile and security destinations", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
-  const accountStart = shellSource.indexOf("function AccountSidebar");
-  const accountEnd = shellSource.indexOf("function DashboardLogo");
-  const accountSource = shellSource.slice(accountStart, accountEnd);
 
-  assert.match(accountSource, /data-dashboard-account-sidebar="true"/);
-  assert.match(accountSource, /Wr/);
-  assert.match(accountSource, /Profil/);
-  assert.match(accountSource, /Bezpiecze/);
-  assert.match(accountSource, /Dziennik audytu/);
-  assert.match(accountSource, /Wkr/);
-  assert.equal(/Back to dashboard|Profile|Security|Audit logs/.test(accountSource), false);
-  assert.equal(accountSource.includes("DashboardOrganizationSwitcher"), false);
-  assert.equal(accountSource.includes("data-dashboard-org-sidebar"), false);
-  assert.match(shellSource, /\/dashboard\/account\/security/);
+  assert.match(sidebarSource, /label: "Konto"/);
+  assert.match(sidebarSource, /label: "Profil"/);
+  assert.match(sidebarSource, /label: "Bezpiecze/);
+  assert.match(sidebarSource, /href: "\/account"/);
+  assert.match(sidebarSource, /href: "\/account\/security"/);
+  assert.equal(sidebarSource.includes("Dziennik audytu"), false);
+  assert.equal(sidebarSource.includes("Wkrótce"), false);
+  assert.equal(/Back to dashboard|Profile|Security|Audit logs/.test(sidebarSource), false);
 });
 
 test("account profile page renders read-only Polish profile labels", () => {
   const source = readFileSync(
-    "src/app/dashboard/account/me/page.tsx",
+    "src/app/account/page.tsx",
     "utf8",
   );
 
@@ -526,7 +516,7 @@ test("account profile page renders read-only Polish profile labels", () => {
 
 test("account security page renders login methods as read-only placeholders", () => {
   const source = readFileSync(
-    "src/app/dashboard/account/security/page.tsx",
+    "src/app/account/security/page.tsx",
     "utf8",
   );
 
@@ -545,87 +535,55 @@ test("account security page renders login methods as read-only placeholders", ()
   assert.equal(source.includes("DashboardOrganizationSwitcher"), false);
 });
 
-test("dashboard shell renders breadcrumbs in the global header", () => {
+test("dashboard shell resolves titles for the shared site header", () => {
   const shellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
+  const headerSource = readFileSync(
+    "src/components/app-shell/site-header.tsx",
+    "utf8",
+  );
 
-  assert.match(shellSource, /function DashboardHeaderBreadcrumbs/);
-  assert.match(shellSource, /data-dashboard-header-breadcrumbs="true"/);
-  assert.match(shellSource, /<Breadcrumb>/);
-  assert.match(shellSource, /getBreadcrumbItems/);
-  assert.match(shellSource, /kind: "organizationSwitcher"/);
-  assert.match(shellSource, /label: "Organizacje"/);
-  assert.match(shellSource, /label: "Ustawienia"/);
-  assert.match(shellSource, /label: "Konto"/);
-  assert.match(shellSource, /label: "Profil"/);
-  assert.match(shellSource, /label: "Bezpiecze/);
-  assert.match(shellSource, /label: "Nowa organizacja"/);
+  assert.match(shellSource, /getDashboardPageTitle/);
+  assert.match(shellSource, /return "Ustawienia"/);
+  assert.match(shellSource, /return "Konto"/);
+  assert.match(shellSource, /return "Bezpiecze/);
+  assert.match(shellSource, /return "Nowa organizacja"/);
+  assert.match(headerSource, /data-site-header="true"/);
+  assert.match(headerSource, /<Breadcrumb>/);
+  assert.match(headerSource, /<BreadcrumbSeparator/);
+  assert.match(headerSource, /<BreadcrumbPage/);
   assert.equal(shellSource.includes("DashboardContentHeader"), false);
   assert.equal(shellSource.includes("dashboardContentHeader"), false);
 });
 
-test("organization dropdown is only used for organization breadcrumbs", () => {
+test("organization switcher is rendered once in the organizer sidebar header", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
+    "utf8",
+  );
   const shellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
-  const organizationBranchStart = shellSource.indexOf("if (input.organizationId)");
-  const accountBranchStart = shellSource.indexOf(
-    'if (input.pathname.startsWith("/dashboard/account"))',
-  );
-  const newOrganizationBranchStart = shellSource.indexOf(
-    "if (input.pathname === getDashboardNewOrganizationPath())",
-  );
-  const organizationsBranchStart = shellSource.indexOf(
-    "if (input.pathname === getDashboardOrganizationsPath())",
-  );
-  const fallbackStart = shellSource.indexOf('label: "Panel"', organizationsBranchStart);
-  const organizationBranch = shellSource.slice(
-    organizationBranchStart,
-    accountBranchStart,
-  );
-  const accountBranch = shellSource.slice(
-    accountBranchStart,
-    newOrganizationBranchStart,
-  );
-  const newOrganizationBranch = shellSource.slice(
-    newOrganizationBranchStart,
-    organizationsBranchStart,
-  );
-  const organizationsBranch = shellSource.slice(
-    organizationsBranchStart,
-    fallbackStart,
-  );
 
-  assert.match(organizationBranch, /kind: "organizationSwitcher"/);
-  assert.equal(accountBranch.includes('kind: "organizationSwitcher"'), false);
-  assert.equal(
-    newOrganizationBranch.includes('kind: "organizationSwitcher"'),
-    false,
-  );
-  assert.equal(
-    organizationsBranch.includes('kind: "organizationSwitcher"'),
-    false,
-  );
+  assert.match(sidebarSource, /<DashboardOrganizationSwitcher/);
+  assert.match(sidebarSource, /header=\{/);
+  assert.equal(shellSource.includes("DashboardOrganizationSwitcher"), false);
 });
 
 test("dashboard breadcrumbs render separator as a BreadcrumbList sibling", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+  const headerSource = readFileSync(
+    "src/components/app-shell/site-header.tsx",
     "utf8",
   );
-  const headerStart = shellSource.indexOf("function DashboardHeaderBreadcrumbs");
-  const headerEnd = shellSource.indexOf("function OrganizationSidebar");
-  const headerSource = shellSource.slice(headerStart, headerEnd);
   const itemBlocks = headerSource.match(
     /<BreadcrumbItem[\s\S]*?<\/BreadcrumbItem>/g,
   ) ?? [];
 
   assert.ok(itemBlocks.length > 0);
-  assert.match(headerSource, /<Fragment key=/);
-  assert.match(headerSource, /<\/BreadcrumbItem>\s+\{!isLast \? <BreadcrumbSeparator \/> : null\}/);
+  assert.match(headerSource, /<BreadcrumbSeparator/);
   assert.equal(
     itemBlocks.some((block) => block.includes("BreadcrumbSeparator")),
     false,
@@ -634,20 +592,48 @@ test("dashboard breadcrumbs render separator as a BreadcrumbList sibling", () =>
 
 test("account is in avatar menu and not a main header nav link", () => {
   const userMenuSource = readFileSync(
-    "src/components/operator/dashboard-user-menu.tsx",
+    "src/components/app-shell/app-sidebar-user.tsx",
     "utf8",
   );
 
-  assert.match(userMenuSource, /href="\/dashboard\/account\/me"/);
-  assert.match(userMenuSource, /href="\/dashboard\/account\/security"/);
-  assert.match(userMenuSource, /Moje konto/);
-  assert.match(userMenuSource, /Bezpieczeństwo/);
+  assert.match(userMenuSource, /href="\/account"/);
+  assert.match(userMenuSource, /label="Konto"/);
   assert.match(userMenuSource, /Wyloguj/);
 });
 
+test("legacy dashboard account routes redirect to the global account", () => {
+  const accountRedirect = readFileSync(
+    "src/app/dashboard/account/page.tsx",
+    "utf8",
+  );
+  const profileRedirect = readFileSync(
+    "src/app/dashboard/account/me/page.tsx",
+    "utf8",
+  );
+  const securityRedirect = readFileSync(
+    "src/app/dashboard/account/security/page.tsx",
+    "utf8",
+  );
+  const proxySource = readFileSync("src/proxy.ts", "utf8");
+
+  assert.match(accountRedirect, /redirect\("\/account"\)/);
+  assert.match(profileRedirect, /redirect\("\/account"\)/);
+  assert.match(securityRedirect, /redirect\("\/account\/security"\)/);
+  assert.match(proxySource, /"\/account\/:path\*"/);
+});
+
+test("sidebar inset owns its border and clips the sticky header to its radius", () => {
+  const sidebarSource = readFileSync("src/components/ui/sidebar.tsx", "utf8");
+
+  assert.match(sidebarSource, /md:overflow-clip/);
+  assert.match(sidebarSource, /md:border md:border-border/);
+  assert.equal(sidebarSource.includes("md:ring-1 md:ring-border"), false);
+  assert.match(sidebarSource, /data-slot="sidebar-content"[\s\S]*?overflow-y-auto/);
+});
+
 test("dashboard logo links to dashboard while the public request logo links home", () => {
-  const dashboardShellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+  const appSidebarSource = readFileSync(
+    "src/components/app-shell/app-sidebar.tsx",
     "utf8",
   );
   const publicRequestSource = readFileSync(
@@ -655,8 +641,8 @@ test("dashboard logo links to dashboard while the public request logo links home
     "utf8",
   );
   assert.match(
-    dashboardShellSource,
-    /className=\{styles\.dashboardBrand\}[\s\S]*?href="\/dashboard"/,
+    appSidebarSource,
+    /homeHref[\s\S]*?<Link href=\{homeHref\}/,
   );
   assert.match(
     publicRequestSource,
@@ -1132,8 +1118,8 @@ test("dashboard routes expose skeleton loading fallbacks", () => {
     "src/app/dashboard/loading.tsx",
     "src/app/dashboard/organizations/loading.tsx",
     "src/app/dashboard/new/loading.tsx",
-    "src/app/dashboard/account/me/loading.tsx",
-    "src/app/dashboard/account/security/loading.tsx",
+    "src/app/account/loading.tsx",
+    "src/app/account/security/loading.tsx",
     "src/app/dashboard/org/[organizationId]/loading.tsx",
     "src/app/dashboard/org/[organizationId]/events/loading.tsx",
     "src/app/dashboard/org/[organizationId]/team/loading.tsx",

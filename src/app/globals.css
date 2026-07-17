@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   color-scheme: dark;
   font-family:
@@ -62,6 +64,67 @@
   --shadow-accent-subtle: 0 0 24px oklch(0.72 0.25 350 / 14%);
   --focus-ring: 0 0 0 3px oklch(0.72 0.25 350 / 22%);
   --radius: 0.625rem;
+}
+
+html.light {
+  color-scheme: light;
+  --background: oklch(0.985 0.004 286);
+  --foreground: oklch(0.16 0.012 286);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.525 0.223 3.958);
+  --primary-hover: oklch(0.47 0.2 3.958);
+  --primary-strong: oklch(0.43 0.19 3.958);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.955 0.006 286);
+  --secondary-foreground: oklch(0.21 0.012 286);
+  --muted: oklch(0.95 0.007 286);
+  --muted-foreground: oklch(0.45 0.018 286);
+  --accent: oklch(0.94 0.025 350);
+  --accent-foreground: oklch(0.25 0.05 350);
+  --destructive: oklch(0.55 0.22 25);
+  --border: oklch(0.88 0.012 286);
+  --input: var(--border);
+  --ring: oklch(0.525 0.223 3.958);
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.56 0.16 158);
+  --chart-3: oklch(0.67 0.16 79);
+  --chart-4: oklch(0.58 0.18 276);
+  --chart-5: var(--destructive);
+  --sidebar: oklch(0.97 0.006 286);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --surface-1: var(--card);
+  --surface-2: var(--secondary);
+  --surface-3: var(--muted);
+  --text-secondary: oklch(0.38 0.018 286);
+  --text-muted: var(--muted-foreground);
+  --accent-soft: var(--accent);
+  --accent-soft-border: oklch(0.78 0.08 350);
+  --success: var(--chart-2);
+  --warning: var(--chart-3);
+  --info: var(--chart-4);
+  --danger-soft: color-mix(in oklch, var(--destructive) 10%, transparent);
+  --danger-border: color-mix(in oklch, var(--destructive) 38%, var(--border));
+  --topbar-bg: color-mix(in oklch, var(--card) 94%, transparent);
+  --selection-bg: color-mix(in oklch, var(--primary) 25%, transparent);
+  --shadow-card: 0 12px 30px oklch(0 0 0 / 8%);
+  --shadow-panel: 0 18px 48px oklch(0 0 0 / 12%);
+  --shadow-accent: 0 0 24px oklch(0.525 0.223 3.958 / 20%);
+  --shadow-accent-soft: 0 0 18px oklch(0.525 0.223 3.958 / 12%);
+  --shadow-accent-subtle: 0 0 18px oklch(0.525 0.223 3.958 / 10%);
+  --focus-ring: 0 0 0 3px oklch(0.525 0.223 3.958 / 20%);
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 * {

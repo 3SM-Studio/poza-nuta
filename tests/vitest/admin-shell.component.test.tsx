@@ -5,8 +5,13 @@ import type { AnchorHTMLAttributes } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminLayoutView } from "@/components/platform-admin/admin-layout-view";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 let pathname = "/admin";
+const navigationMocks = vi.hoisted(() => ({
+  replace: vi.fn(),
+  refresh: vi.fn(),
+}));
 
 vi.mock("next-themes", () => ({
   useTheme: () => ({ theme: "dark", setTheme: vi.fn() }),
@@ -31,10 +36,14 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname,
+  useRouter: () => navigationMocks,
 }));
 
 afterEach(() => {
   pathname = "/admin";
+  window.innerWidth = 1024;
+  navigationMocks.replace.mockReset();
+  navigationMocks.refresh.mockReset();
 });
 
 describe("AdminShell", () => {
@@ -48,43 +57,51 @@ describe("AdminShell", () => {
     expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getByRole("complementary")).toBeInTheDocument();
     expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getAllByText(roleLabel).length).toBeGreaterThan(0);
+    expect(screen.getByText(roleLabel)).toBeVisible();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Overview test",
     );
 
-    const overviewLinks = screen.getAllByRole("link", { name: "Overview" });
-    expect(new Set(overviewLinks.map((link) => link.getAttribute("href")))).toEqual(
-      new Set(["/admin"]),
-    );
-    for (const link of overviewLinks) {
-      expect(link).toHaveAttribute("aria-current", "page");
-    }
+    const overviewLink = screen.getByRole("link", { name: "Overview" });
+    expect(overviewLink).toHaveAttribute("href", "/admin");
+    expect(overviewLink).toHaveAttribute("aria-current", "page");
 
-    const importLinks = screen.getAllByRole("link", { name: "Importy" });
-    expect(new Set(importLinks.map((link) => link.getAttribute("href")))).toEqual(
-      new Set(["/admin/imports"]),
-    );
-    for (const link of importLinks) {
-      expect(link).not.toHaveAttribute("aria-current");
-    }
+    const importLink = screen.getByRole("link", { name: "Importy" });
+    expect(importLink).toHaveAttribute("href", "/admin/imports");
+    expect(importLink).not.toHaveAttribute("aria-current");
+    expect(screen.queryByText("Billing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dziennik audytu")).not.toBeInTheDocument();
   });
 
   it("marks Imports as the current admin destination", () => {
     pathname = "/admin/imports";
     renderAllowed("platform_admin");
 
-    for (const link of screen.getAllByRole("link", { name: "Importy" })) {
-      expect(link).toHaveAttribute("aria-current", "page");
-    }
-    for (const link of screen.getAllByRole("link", { name: "Overview" })) {
-      expect(link).not.toHaveAttribute("aria-current");
-    }
+    expect(screen.getByRole("link", { name: "Importy" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Overview" })).not.toHaveAttribute(
+      "aria-current",
+    );
     expect(
       screen.getByText("Importy", {
         selector: "[data-slot='breadcrumb-page']",
       }),
     ).toBeVisible();
+  });
+
+  it("links the shared user menu to the global account", async () => {
+    renderAllowed("platform_owner");
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Menu użytkownika: Anna Kowalska" }),
+      { button: 0, ctrlKey: false, pointerType: "mouse" },
+    );
+
+    expect(await screen.findByRole("menuitem", { name: "Konto" })).toHaveAttribute(
+      "href",
+      "/account",
+    );
   });
 
   it("does not render the shell, actor or metrics after denial", () => {
@@ -101,9 +118,10 @@ describe("AdminShell", () => {
   });
 
   it("opens the mobile Sheet, closes on Escape and restores trigger focus", async () => {
+    window.innerWidth = 390;
     renderAllowed("support");
     const trigger = screen.getByRole("button", {
-      name: "Otwórz menu administratora",
+      name: "Otwórz menu",
     });
 
     trigger.focus();
@@ -122,9 +140,10 @@ describe("AdminShell", () => {
   });
 
   it("closes the mobile Sheet after navigating to Overview", async () => {
+    window.innerWidth = 390;
     renderAllowed("platform_admin");
     fireEvent.click(
-      screen.getByRole("button", { name: "Otwórz menu administratora" }),
+      screen.getByRole("button", { name: "Otwórz menu" }),
     );
 
     const dialog = await screen.findByRole("dialog");
@@ -140,17 +159,22 @@ function renderAllowed(
   role: "platform_owner" | "platform_admin" | "support",
 ) {
   return render(
-    <AdminLayoutView
-      access={{
-        kind: "allowed",
-        actor: {
-          displayName: "Anna Kowalska",
-          initials: "AK",
-          role,
-        },
-      }}
+    <SidebarProvider
+      data-management-theme="true"
+      className="bg-sidebar text-foreground"
     >
-      <h1>Overview test</h1>
-    </AdminLayoutView>,
+      <AdminLayoutView
+        access={{
+          kind: "allowed",
+          actor: {
+            displayName: "Anna Kowalska",
+            initials: "AK",
+            role,
+          },
+        }}
+      >
+        <h1>Overview test</h1>
+      </AdminLayoutView>
+    </SidebarProvider>,
   );
 }

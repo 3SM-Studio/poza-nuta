@@ -1,4 +1,8 @@
 .siteHeader {
+  --foreground: oklch(0.985 0.008 255);
+  --surface-1: oklch(0.125 0.012 286);
+  --surface-2: oklch(0.2 0.02 286);
+  --primary: oklch(0.76 0.22 350);
   position: relative;
   z-index: 1;
   border-bottom: 1px solid var(--border);

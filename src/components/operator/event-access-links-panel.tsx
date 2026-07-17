@@ -359,7 +359,7 @@ export function EventAccessLinksPanel() {
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent data-management-theme="true">
           <AlertDialogHeader>
             <AlertDialogTitle>Unieważnić link dostępu?</AlertDialogTitle>
             <AlertDialogDescription>

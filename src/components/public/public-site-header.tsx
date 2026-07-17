@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { ThemeSwitcher } from "@/components/theme-switcher";
+
 import styles from "./public-site-layout.module.css";
 
 export function PublicSiteHeader() {
@@ -20,6 +22,7 @@ export function PublicSiteHeader() {
         <nav className={styles.siteNav} aria-label="Nawigacja publiczna">
           <Link href="/events">Wydarzenia</Link>
           <Link href="/dashboard">Panel organizatora</Link>
+          <ThemeSwitcher />
         </nav>
       </div>
     </header>

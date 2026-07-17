@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function LegacyDashboardAccountProfilePage() {
+export default function LegacyDashboardAccountPage() {
   redirect("/account");
 }

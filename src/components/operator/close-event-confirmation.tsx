@@ -35,7 +35,7 @@ export function CloseEventConfirmation({
         }
       }}
     >
-      <AlertDialogContent id={id}>
+      <AlertDialogContent id={id} data-management-theme="true">
         <AlertDialogHeader>
           <AlertDialogTitle>Potwierdź zamknięcie eventu</AlertDialogTitle>
           <AlertDialogDescription>

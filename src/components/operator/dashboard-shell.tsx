@@ -1,53 +1,30 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
-import Image from "next/image";
-import Link from "next/link";
+import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { AppShell } from "@/components/app-shell/app-shell";
 import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
   getDashboardOrganizationEventsPath,
-  getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
   getDashboardOrganizationTeamPath,
   getDashboardProfileOnboardingPath,
   isDashboardNavigationLinkActive,
 } from "@/lib/dashboard-routes";
 
-import { DashboardOrganizationSwitcher } from "./dashboard-organization-switcher";
-import { DashboardUserMenu } from "./dashboard-user-menu";
-import styles from "./operator.module.css";
-
-type DashboardShellOrganization = {
-  id: number;
-  name: string;
-  organizationId: string;
-  role: string;
-};
+import {
+  OrganizerSidebar,
+  type OrganizerSidebarOrganization,
+} from "./organizer-sidebar";
 
 type DashboardShellProps = {
   children: ReactNode;
-  organizations: DashboardShellOrganization[];
+  organizations: OrganizerSidebarOrganization[];
   operatorName: string;
   email: string | null;
-};
-
-type BreadcrumbItemConfig = {
-  label: string;
-  href?: string;
-  kind?: "organizationSwitcher";
+  canAccessAdmin: boolean;
 };
 
 export function DashboardShell({
@@ -55,304 +32,60 @@ export function DashboardShell({
   organizations,
   operatorName,
   email,
+  canAccessAdmin,
 }: DashboardShellProps) {
   const pathname = usePathname();
   const organizationId = getSelectedOrganizationId(pathname);
-  const currentOrganization = organizations.find(
-    (organization) => organization.organizationId === organizationId,
-  );
-  const isAccountRoute = pathname.startsWith("/dashboard/account");
-  const sidebar = organizationId ? (
-    <OrganizationSidebar
-      organizationId={organizationId}
-      pathname={pathname}
-    />
-  ) : isAccountRoute ? (
-    <AccountSidebar pathname={pathname} />
-  ) : null;
+  const currentOrganization =
+    organizations.find(
+      (organization) => organization.organizationId === organizationId,
+    ) ?? null;
+  const isAccountRoute = pathname.startsWith("/account");
   const layout = organizationId
     ? "organization"
     : isAccountRoute
       ? "account"
       : "simple";
+  const title = getDashboardPageTitle(pathname, organizationId);
 
   return (
-    <div className={styles.dashboardShell} data-dashboard-layout={layout}>
-      <header className={styles.dashboardTopbar} data-dashboard-topbar="true">
-        <DashboardLogo />
-        <DashboardHeaderBreadcrumbs
-          items={getBreadcrumbItems({
-            pathname,
-            organizationId,
-            organizationName: currentOrganization?.name,
-          })}
+    <AppShell
+      kind="dashboard"
+      layout={layout}
+      sidebar={
+        <OrganizerSidebar
+          pathname={pathname}
+          organization={currentOrganization}
           organizations={organizations}
+          operatorName={operatorName}
+          email={email}
+          canAccessAdmin={canAccessAdmin}
         />
-        <DashboardUserMenu operatorName={operatorName} email={email} />
-      </header>
-
-      <div
-        className={
-          sidebar
-            ? styles.dashboardBody
-            : `${styles.dashboardBody} ${styles.dashboardBodySimple}`
-        }
-        data-dashboard-body="true"
-      >
-        {sidebar}
-        <div className={styles.dashboardMainColumn}>
-          <div className={styles.dashboardContent}>{children}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DashboardHeaderBreadcrumbs({
-  items,
-  organizations,
-}: {
-  items: BreadcrumbItemConfig[];
-  organizations: DashboardShellOrganization[];
-}) {
-  return (
-    <div
-      className={styles.dashboardTopbarBreadcrumbs}
-      data-dashboard-header-breadcrumbs="true"
+      }
+      section="Panel organizatora"
+      title={title}
     >
-      <Breadcrumb>
-        <BreadcrumbList>
-          {items.map((item, index) => {
-            const isLast = index === items.length - 1;
-
-            return (
-              <Fragment key={`${item.label}-${index}`}>
-                <BreadcrumbItem>
-                  {item.kind === "organizationSwitcher" ? (
-                    <DashboardOrganizationSwitcher organizations={organizations} />
-                  ) : item.href && !isLast ? (
-                    <BreadcrumbLink asChild>
-                      <Link href={item.href}>{item.label}</Link>
-                    </BreadcrumbLink>
-                  ) : (
-                    <BreadcrumbPage>{item.label}</BreadcrumbPage>
-                  )}
-                </BreadcrumbItem>
-                {!isLast ? <BreadcrumbSeparator /> : null}
-              </Fragment>
-            );
-          })}
-        </BreadcrumbList>
-      </Breadcrumb>
-    </div>
+      {children}
+    </AppShell>
   );
 }
 
-function OrganizationSidebar({
-  organizationId,
-  pathname,
-}: {
-  organizationId: string;
-  pathname: string;
-}) {
-  const links = [
-    {
-      href: getDashboardOrganizationPath(organizationId),
-      label: "Przegląd",
-    },
-    {
-      href: getDashboardOrganizationEventsPath(organizationId),
-      label: "Wydarzenia",
-    },
-    {
-      href: getDashboardOrganizationTeamPath(organizationId),
-      label: "Zespół",
-    },
-    {
-      href: getDashboardOrganizationSettingsPath(organizationId),
-      label: "Ustawienia",
-    },
-  ];
-
-  return (
-    <aside
-      className={styles.dashboardSidebar}
-      aria-label="Nawigacja organizacji"
-      data-dashboard-org-sidebar="true"
-    >
-      <nav className={styles.dashboardSidebarNav} aria-label="Organizacja">
-        {links.map((link) => {
-          const isActive = isDashboardNavigationLinkActive(pathname, link.href);
-
-          return (
-            <Button
-              key={link.href}
-              variant="ghost"
-              className={styles.dashboardSidebarLink}
-              data-active={isActive}
-              asChild
-            >
-              <Link
-                href={link.href}
-                aria-current={isActive ? "page" : undefined}
-              >
-                {link.label}
-              </Link>
-            </Button>
-          );
-        })}
-      </nav>
-
-      <Separator />
-
-      <div className={styles.dashboardSidebarFooter}>
-        <Link href={getDashboardOrganizationsPath()}>Wszystkie organizacje</Link>
-        <Link href={getDashboardNewOrganizationPath()}>Utwórz organizację</Link>
-      </div>
-    </aside>
-  );
-}
-
-function AccountSidebar({ pathname }: { pathname: string }) {
-  const links = [
-    {
-      href: "/dashboard/account/me",
-      label: "Profil",
-    },
-    {
-      href: "/dashboard/account/security",
-      label: "Bezpieczeństwo",
-    },
-  ];
-
-  return (
-    <aside
-      className={styles.dashboardSidebar}
-      aria-label="Nawigacja konta"
-      data-dashboard-account-sidebar="true"
-    >
-      <div className={styles.dashboardSidebarSection}>
-        <Button variant="outline" className={styles.dashboardSidebarLink} asChild>
-          <Link href="/dashboard">Wróć do panelu</Link>
-        </Button>
-      </div>
-
-      <nav className={styles.dashboardSidebarNav} aria-label="Konto">
-        {links.map((link) => {
-          const isActive = isDashboardNavigationLinkActive(pathname, link.href);
-
-          return (
-            <Button
-              key={link.href}
-              variant="ghost"
-              className={styles.dashboardSidebarLink}
-              data-active={isActive}
-              asChild
-            >
-              <Link
-                href={link.href}
-                aria-current={isActive ? "page" : undefined}
-              >
-                {link.label}
-              </Link>
-            </Button>
-          );
-        })}
-        <span className={styles.dashboardSidebarDisabled}>
-          Dziennik audytu · Wkrótce
-        </span>
-      </nav>
-    </aside>
-  );
-}
-
-function DashboardLogo() {
-  return (
-    <Link
-      className={styles.dashboardBrand}
-      href="/dashboard"
-      aria-label="Przejdź do dashboardu"
-    >
-      <Image
-        className={styles.dashboardBrandLogo}
-        src="/brand/poza_nuta_logo-white.png"
-        alt="Poza Nutą"
-        width={1254}
-        height={1254}
-      />
-    </Link>
-  );
-}
-
-function getBreadcrumbItems(input: {
-  pathname: string;
-  organizationId: string | null;
-  organizationName?: string;
-}): BreadcrumbItemConfig[] {
-  if (input.organizationId) {
-    return [
-      {
-        label: "Organizacje",
-        href: getDashboardOrganizationsPath(),
-      },
-      {
-        label: input.organizationName ?? input.organizationId,
-        href: getDashboardOrganizationPath(input.organizationId),
-        kind: "organizationSwitcher",
-      },
-      {
-        label: getOrganizationSectionLabel(input.pathname, input.organizationId),
-      },
-    ];
+export function getDashboardPageTitle(
+  pathname: string,
+  organizationId: string | null,
+) {
+  if (organizationId) {
+    return getOrganizationSectionLabel(pathname, organizationId);
   }
 
-  if (input.pathname.startsWith("/dashboard/account")) {
-    return [
-      {
-        label: "Konto",
-        href: "/dashboard/account/me",
-      },
-      {
-        label: input.pathname.startsWith("/dashboard/account/security")
-          ? "Bezpieczeństwo"
-          : "Profil",
-      },
-    ];
-  }
+  if (pathname.startsWith("/account/security")) return "Bezpieczeństwo";
+  if (pathname.startsWith("/account")) return "Konto";
+  if (pathname === getDashboardNewOrganizationPath()) return "Nowa organizacja";
+  if (pathname === getDashboardProfileOnboardingPath()) return "Profil";
+  if (pathname.startsWith(getDashboardOrganizationsPath())) return "Organizacje";
+  if (pathname.startsWith("/dashboard/settings")) return "Ustawienia wydarzenia";
 
-  if (input.pathname === getDashboardNewOrganizationPath()) {
-    return [
-      {
-        label: "Organizacje",
-        href: getDashboardOrganizationsPath(),
-      },
-      {
-        label: "Nowa organizacja",
-      },
-    ];
-  }
-
-  if (input.pathname === getDashboardProfileOnboardingPath()) {
-    return [
-      {
-        label: "Profil",
-      },
-    ];
-  }
-
-  if (input.pathname === getDashboardOrganizationsPath()) {
-    return [
-      {
-        label: "Organizacje",
-      },
-    ];
-  }
-
-  return [
-    {
-      label: "Panel",
-    },
-  ];
+  return "Panel";
 }
 
 function getOrganizationSectionLabel(pathname: string, organizationId: string) {
@@ -389,9 +122,6 @@ function getOrganizationSectionLabel(pathname: string, organizationId: string) {
 function getSelectedOrganizationId(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
 
-  if (segments[0] !== "dashboard" || segments[1] !== "org") {
-    return null;
-  }
-
+  if (segments[0] !== "dashboard" || segments[1] !== "org") return null;
   return segments[2] ? decodeURIComponent(segments[2]) : null;
 }

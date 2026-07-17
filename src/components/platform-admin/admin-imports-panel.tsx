@@ -32,19 +32,13 @@ import {
   type ImportJobViewModel,
 } from "@/server/platform-admin/import-admin-core";
 
+import { getImportJobStatusPresentation } from "./import-job-status";
+
 type AdminImportsPanelProps = {
   data: ImportAdminPageData;
   startDryRun: () => Promise<ImportAdminActionResult>;
   startWrite: () => Promise<ImportAdminActionResult>;
   cancelJob: (importJobId: number) => Promise<ImportAdminActionResult>;
-};
-
-const statusLabels: Record<ImportJobViewModel["status"], string> = {
-  queued: "Oczekuje",
-  running: "W toku",
-  succeeded: "Zakończony",
-  failed: "Błąd",
-  cancelled: "Anulowany",
 };
 
 export function AdminImportsPanel({
@@ -331,10 +325,10 @@ function ImportJobRow({
             <h3 className="m-0 text-base font-semibold">
               {sourceLabel(job.source)} · {modeLabel(job.mode)}
             </h3>
-            <StatusBadge status={job.status} />
-            {job.cancellationRequested ? (
-              <Badge variant="outline">Anulowanie zażądane</Badge>
-            ) : null}
+            <StatusBadge
+              status={job.status}
+              cancellationRequestedAt={job.cancellationRequestedAt}
+            />
           </div>
           <p className="mt-1 mb-0 text-sm text-muted-foreground">
             Inicjator: {initiatorLabel(job.initiatorKind)} · utworzono{" "}
@@ -439,16 +433,33 @@ function ImportProgress({
   );
 }
 
-function StatusBadge({ status }: { status: ImportJobViewModel["status"] }) {
-  const variant =
-    status === "failed"
-      ? "destructive"
-      : status === "succeeded"
-        ? "default"
-        : status === "cancelled"
-          ? "outline"
-          : "secondary";
-  return <Badge variant={variant}>{statusLabels[status]}</Badge>;
+function StatusBadge({
+  status,
+  cancellationRequestedAt,
+}: {
+  status: ImportJobViewModel["status"];
+  cancellationRequestedAt: string | null;
+}) {
+  const presentation = getImportJobStatusPresentation(
+    status,
+    cancellationRequestedAt,
+  );
+  const Icon = presentation.icon;
+
+  return (
+    <Badge
+      variant="outline"
+      className={presentation.className}
+      data-status-tone={presentation.tone}
+      aria-label={`Status: ${presentation.label}`}
+    >
+      <Icon
+        className={status === "running" ? "animate-spin" : undefined}
+        aria-hidden="true"
+      />
+      {presentation.label}
+    </Badge>
+  );
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {

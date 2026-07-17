@@ -55,7 +55,7 @@
   --focus-ring: 0 0 0 3px color-mix(in oklch, var(--ring) 35%, transparent);
 }
 
-html[data-admin-theme="dark"] [data-management-theme] {
+html.dark [data-management-theme] {
   color-scheme: dark;
   --background: oklch(0.145 0.008 326);
   --foreground: oklch(0.985 0 0);

@@ -1,60 +1,32 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import { renderToString } from "react-dom/server";
-import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { AdminThemeProvider } from "@/components/platform-admin/admin-theme-provider";
-import { AdminThemeSwitcher } from "@/components/platform-admin/admin-theme-switcher";
+import {
+  APP_THEME_STORAGE_KEY,
+  AppThemeProvider,
+} from "@/components/theme-provider";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
-const themeMock = vi.hoisted(() => ({
-  theme: "dark" as string | undefined,
-  setTheme: vi.fn(),
-  throwOnRead: false,
-  providerProps: null as Record<string, unknown> | null,
-}));
-
-vi.mock("next-themes", async () => {
-  const React = await import("react");
-
-  return {
-    useTheme: () => ({
-      get theme() {
-        if (themeMock.throwOnRead) {
-          throw new Error("theme read before mount");
-        }
-        return themeMock.theme;
-      },
-      setTheme: themeMock.setTheme,
-    }),
-    ThemeProvider: (props: Record<string, unknown>) => {
-      themeMock.providerProps = props;
-      return React.createElement(
-        React.Fragment,
-        null,
-        props.children as ReactNode,
-      );
-    },
-  };
-});
-
-describe("admin theme", () => {
+describe("global application theme", () => {
   beforeEach(() => {
-    themeMock.theme = "dark";
-    themeMock.throwOnRead = false;
-    themeMock.setTheme.mockReset();
-    themeMock.providerProps = null;
+    window.localStorage.clear();
+    document.documentElement.className = "";
+  });
+
+  afterEach(() => {
+    document.documentElement.className = "";
   });
 
   it("does not read the selected theme during server rendering", () => {
-    themeMock.throwOnRead = true;
-
-    expect(() => renderToString(<AdminThemeSwitcher />)).not.toThrow();
+    expect(() => renderToString(<ThemeSwitcher managementTheme />)).not.toThrow();
   });
 
-  it("offers dark, light and system choices after mount", async () => {
-    render(<AdminThemeSwitcher />);
+  it("offers global dark, light and system choices", async () => {
+    renderTheme();
 
     const trigger = await screen.findByRole("button", { name: "Wybierz motyw" });
     await waitFor(() => expect(trigger).not.toBeDisabled());
@@ -69,9 +41,12 @@ describe("admin theme", () => {
       ["Jasny", "light"],
       ["Systemowy", "system"],
     ] as const) {
-      const option = await screen.findByRole("menuitemradio", { name: label });
-      fireEvent.click(option);
-      expect(themeMock.setTheme).toHaveBeenLastCalledWith(value);
+      fireEvent.click(
+        await screen.findByRole("menuitemradio", { name: label }),
+      );
+      await waitFor(() =>
+        expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(value),
+      );
 
       if (value !== "system") {
         openThemeMenu(
@@ -81,24 +56,78 @@ describe("admin theme", () => {
     }
   });
 
-  it("uses the accepted admin-only next-themes contract", () => {
-    render(
-      <AdminThemeProvider>
-        <span>content</span>
-      </AdminThemeProvider>,
+  it("restores the saved global preference after remount", async () => {
+    const firstRender = renderTheme();
+    const trigger = await screen.findByRole("button", { name: "Wybierz motyw" });
+    await waitFor(() => expect(trigger).not.toBeDisabled());
+    openThemeMenu(trigger);
+    fireEvent.click(
+      await screen.findByRole("menuitemradio", { name: "Jasny" }),
+    );
+    await waitFor(() =>
+      expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe("light"),
     );
 
-    expect(themeMock.providerProps).toMatchObject({
-      attribute: "data-admin-theme",
-      defaultTheme: "dark",
-      enableSystem: true,
-      enableColorScheme: false,
-      storageKey: "pozanuta-admin-theme",
-      disableTransitionOnChange: true,
-    });
+    firstRender.unmount();
+    document.documentElement.className = "";
+    renderTheme();
+    openThemeMenu(
+      await screen.findByRole("button", { name: "Wybierz motyw" }),
+    );
+
+    expect(
+      await screen.findByRole("menuitemradio", { name: "Jasny" }),
+    ).toHaveAttribute("data-state", "checked");
+    expect(document.documentElement).toHaveClass("light");
+  });
+
+  it("mounts one class-based provider at the root and none in route layouts", () => {
+    const rootLayout = readSource("src/app/layout.tsx");
+    const adminLayout = readSource("src/app/(platform-admin)/admin/layout.tsx");
+    const dashboardLayout = readSource("src/app/dashboard/layout.tsx");
+    const accountLayout = readSource("src/app/account/layout.tsx");
+    const operatorLayout = readSource(
+      "src/components/operator/operator-app-layout.tsx",
+    );
+    const provider = readSource("src/components/theme-provider.tsx");
+    const publicHeader = readSource(
+      "src/components/public/public-site-header.tsx",
+    );
+    const siteHeader = readSource("src/components/app-shell/site-header.tsx");
+
+    expect(rootLayout.match(/<AppThemeProvider>/g)).toHaveLength(1);
+    expect(adminLayout).not.toContain("ThemeProvider");
+    expect(dashboardLayout).not.toContain("ThemeProvider");
+    expect(accountLayout).not.toContain("ThemeProvider");
+    expect(provider).toContain('attribute="class"');
+    expect(provider).toContain('defaultTheme="dark"');
+    expect(provider).toContain("enableSystem");
+    expect(provider).toContain("disableTransitionOnChange");
+    expect(provider).toContain('"pozanuta-admin-theme"');
+    expect(rootLayout).toContain("suppressHydrationWarning");
+    expect(publicHeader.match(/<ThemeSwitcher/g)).toHaveLength(1);
+    expect(siteHeader.match(/<ThemeSwitcher/g)).toHaveLength(1);
+    expect(adminLayout).toContain('data-management-theme="true"');
+    expect(operatorLayout).toContain('data-management-theme="true"');
+    expect(adminLayout).toContain('className="bg-sidebar text-foreground"');
+    expect(operatorLayout).toContain(
+      'className="bg-sidebar text-foreground"',
+    );
   });
 });
 
+function renderTheme() {
+  return render(
+    <AppThemeProvider>
+      <ThemeSwitcher managementTheme />
+    </AppThemeProvider>,
+  );
+}
+
 function openThemeMenu(trigger: HTMLElement) {
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+}
+
+function readSource(relativePath: string) {
+  return readFileSync(`${process.cwd()}/${relativePath}`, "utf8");
 }

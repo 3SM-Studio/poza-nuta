@@ -140,6 +140,37 @@ describe("AdminImportsPanel", () => {
     expect(screen.getByText("Zaimportowane")).toBeVisible();
     expect(screen.queryByText("Poprawne")).not.toBeInTheDocument();
   });
+
+  it("renders every status with a readable label, icon and semantic tone", () => {
+    renderPanel({
+      jobs: [
+        statusJob(31, "queued"),
+        statusJob(32, "running"),
+        statusJob(33, "succeeded"),
+        statusJob(34, "failed"),
+        statusJob(35, "cancelled"),
+        {
+          ...statusJob(36, "running"),
+          cancellationRequestedAt: "2026-07-17T10:02:00.000Z",
+          cancellationRequested: true,
+        },
+      ],
+    });
+
+    for (const [label, tone] of [
+      ["W kolejce", "queued"],
+      ["W trakcie", "running"],
+      ["Zakończony", "succeeded"],
+      ["Nieudany", "failed"],
+      ["Anulowany", "cancelled"],
+      ["Anulowanie…", "cancelling"],
+    ] as const) {
+      const badge = screen.getByLabelText(`Status: ${label}`);
+      expect(badge).toHaveTextContent(label);
+      expect(badge).toHaveAttribute("data-status-tone", tone);
+      expect(badge.querySelector("svg")).not.toBeNull();
+    }
+  });
 });
 
 const activeJob = {
@@ -161,6 +192,21 @@ const activeJob = {
   cancellationRequestedAt: null,
   cancellationRequested: false,
 };
+
+function statusJob(
+  id: number,
+  status: ImportAdminPageData["jobs"][number]["status"],
+) {
+  return {
+    ...activeJob,
+    id,
+    status,
+    terminalAt:
+      status === "succeeded" || status === "failed" || status === "cancelled"
+        ? "2026-07-17T10:03:00.000Z"
+        : null,
+  };
+}
 
 function pageData(overrides: Partial<ImportAdminPageData> = {}): ImportAdminPageData {
   return {

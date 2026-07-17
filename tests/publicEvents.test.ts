@@ -562,6 +562,7 @@ test("public route group uses shared public layout and header", () => {
   assert.match(headerSource, /Wydarzenia/);
   assert.match(headerSource, /href="\/dashboard"/);
   assert.match(headerSource, /Panel organizatora/);
+  assert.match(headerSource, /<ThemeSwitcher/);
   assert.equal(existsSync("src/app/(public)/session"), false);
   assert.equal(existsSync("src/app/(public)/dashboard"), false);
   assert.equal(existsSync("src/app/page.tsx"), false);
