@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { drizzle } from "drizzle-orm/postgres-js";
-import type postgres from "postgres";
+import postgres from "postgres";
 
 import {
   classifyISingImportFailure,
@@ -63,6 +63,7 @@ async function verifyOnImage(image: (typeof images)[number]) {
       await applyPostgresMigrations(sql, 19);
 
       await assertDedicatedLoginReconnect(harness, databaseName, sql);
+      await assertServerSideDefaultRoleReconnect(harness, databaseName, sql);
       await assertProcessPreflight(harness, databaseName, sql);
       await assertIdentityContractIsFailClosed(harness, databaseName, sql);
       await assertWriteLifecycle(harness, databaseName, sql);
@@ -135,6 +136,118 @@ async function assertDedicatedLoginReconnect(
   } finally {
     await worker.end({ timeout: 5 });
     await dropDedicatedWorkerLogin(admin, login.name);
+  }
+}
+
+async function assertServerSideDefaultRoleReconnect(
+  harness: Harness,
+  databaseName: string,
+  admin: postgres.Sql,
+) {
+  const jobId = await insertQueuedJob(admin, "ising", "write");
+  const [evidenceBefore] = await admin<
+    Array<{ diagnostics: number; audits: number }>
+  >`
+    SELECT
+      (SELECT count(*)::int FROM import_job_diagnostics) AS diagnostics,
+      (SELECT count(*)::int FROM operator_audit_log) AS audits
+  `;
+  const login = await createDedicatedWorkerLogin(harness, databaseName, admin);
+  assert.match(databaseName, /^[a-z0-9_]+$/);
+  const roleSetting = `ALTER ROLE "${login.name}" IN DATABASE "${databaseName}"`;
+  let worker: postgres.Sql | undefined;
+
+  try {
+    await admin.unsafe(`${roleSetting} SET role TO import_worker`);
+    worker = postgres(login.databaseUrl, {
+      max: 1,
+      connect_timeout: 10,
+      idle_timeout: 0,
+      prepare: false,
+    });
+
+    await assertImportWorkerIdentity(worker);
+    const [firstSession] = await worker<
+      Array<{
+        backendPid: number;
+        expectedSessionUser: boolean;
+        expectedCurrentUser: boolean;
+        exactRoleSetting: boolean;
+      }>
+    >`
+      SELECT
+        pg_backend_pid() AS "backendPid",
+        session_user = ${login.name} AS "expectedSessionUser",
+        current_user = 'import_worker' AS "expectedCurrentUser",
+        (
+          SELECT count(*) = 1
+            AND bool_and(setting = 'role=import_worker')
+          FROM pg_catalog.pg_db_role_setting AS role_setting
+          CROSS JOIN LATERAL unnest(role_setting.setconfig) AS setting
+          WHERE role_setting.setrole = (
+            SELECT oid FROM pg_catalog.pg_roles WHERE rolname = ${login.name}
+          )
+            AND role_setting.setdatabase = (
+              SELECT oid FROM pg_catalog.pg_database
+              WHERE datname = current_database()
+            )
+        ) AS "exactRoleSetting"
+    `;
+    assert.ok(firstSession?.expectedSessionUser);
+    assert.ok(firstSession.expectedCurrentUser);
+    assert.ok(firstSession.exactRoleSetting);
+
+    await worker`RESET ROLE`;
+    await assertImportWorkerIdentity(worker);
+    const [afterReset] = await worker<
+      Array<{ expectedCurrentUser: boolean }>
+    >`
+      SELECT current_user = 'import_worker' AS "expectedCurrentUser"
+    `;
+    assert.ok(afterReset?.expectedCurrentUser);
+
+    const [termination] = await admin<{ terminated: boolean }[]>`
+      SELECT pg_terminate_backend(${firstSession.backendPid}) AS terminated
+    `;
+    assert.equal(termination?.terminated, true);
+
+    await waitForWorkerReconnect(worker);
+    const [secondSession] = await worker<
+      Array<{
+        backendPid: number;
+        expectedSessionUser: boolean;
+        expectedCurrentUser: boolean;
+      }>
+    >`
+      SELECT
+        pg_backend_pid() AS "backendPid",
+        session_user = ${login.name} AS "expectedSessionUser",
+        current_user = 'import_worker' AS "expectedCurrentUser"
+    `;
+    assert.ok(secondSession?.expectedSessionUser);
+    assert.ok(secondSession.expectedCurrentUser);
+    assert.notEqual(secondSession.backendPid, firstSession.backendPid);
+    await assertQueuedJobRemainsUntouched(admin, jobId);
+    const [evidenceAfter] = await admin<
+      Array<{ diagnostics: number; audits: number }>
+    >`
+      SELECT
+        (SELECT count(*)::int FROM import_job_diagnostics) AS diagnostics,
+        (SELECT count(*)::int FROM operator_audit_log) AS audits
+    `;
+    assert.deepEqual(evidenceAfter, evidenceBefore);
+  } finally {
+    if (worker) await worker.end({ timeout: 5 });
+    try {
+      await admin.unsafe(`${roleSetting} RESET role`);
+    } finally {
+      try {
+        await admin.unsafe(`REVOKE import_worker FROM "${login.name}"`);
+      } finally {
+        await dropDedicatedWorkerLogin(admin, login.name);
+        await admin`DELETE FROM import_jobs WHERE id = ${jobId}`;
+      }
+    }
   }
 }
 

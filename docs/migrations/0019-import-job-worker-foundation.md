@@ -137,9 +137,29 @@ NOINHERIT NOREPLICATION NOBYPASSRLS` and receive only membership in
 `import_worker`. That must be its only direct role membership, and the grant
 must not include `ADMIN OPTION`. The LOGIN must not own the current database,
 the `public`, `private` or `drizzle` schemas, or any object in those schemas.
-Every physical postgres.js session must apply
-`options=-c role=import_worker` in its PostgreSQL startup parameters. A single
-post-connect `SET ROLE` is insufficient because it does not survive reconnect.
+
+Two mechanisms are supported for making `import_worker` the effective role on
+every physical connection:
+
+1. **Direct PostgreSQL.** postgres.js supplies
+   `options=-c role=import_worker` in the startup parameters. Prefer the direct
+   endpoint when the worker host has working IPv6 connectivity or an approved
+   Supabase IPv4 Add-On.
+2. **Supabase Session Pooler.** The pooler can ignore client startup options.
+   Configure only the dedicated LOGIN, and only for the target database:
+
+   ```sql
+   ALTER ROLE <worker_login>
+   IN DATABASE postgres
+   SET role TO import_worker;
+   ```
+
+Never use `ALTER DATABASE ... SET role`, never set a global role default, and
+never configure another LOGIN. The dedicated LOGIN remains `NOINHERIT`, has
+exactly one direct membership in `import_worker` without `ADMIN OPTION`, and
+`pg_db_role_setting` must contain exactly `role=import_worker` for that LOGIN
+and target database. A one-time post-connect `SET ROLE` is not supported
+because it does not establish a reconnect-safe connection default.
 
 Before recovery and again before claim, the worker must verify both identities
 independently. The dedicated `session_user` must be a different LOGIN with
@@ -153,7 +173,10 @@ exactly `import_worker`, and that role must remain `NOLOGIN`, `NOINHERIT`,
 object in those three application schemas and must not be a member of a parent
 role. A failed identity check stops the process before recovery, claim,
 diagnostics or audit writes. The same complete checks must pass after a forced
-backend disconnect and automatic reconnect.
+backend disconnect and automatic reconnect. `RESET ROLE` must return to the
+connection-time default `import_worker`, including when the Session Pooler
+mechanism is used. An owner, admin or superuser database URL remains forbidden
+even if it can set `import_worker` manually.
 
 `import_worker` is a global PostgreSQL cluster role. A custom or schema-only
 dump restricted to `public`, `private` and `drizzle` records grants and policies
@@ -168,10 +191,19 @@ NOINHERIT NOREPLICATION NOBYPASSRLS;
 ```
 
 Do not restore a password, LOGIN attribute or worker secret from the repository
-or backup fixture. After post-data, verify the policies and grants and confirm
-that `rolcanlogin`, `rolinherit` and `rolbypassrls` are all false, together with
-the remaining safe role attributes. A complete restore of a post-0019 backup,
-including this role choreography, is mandatory before deployment approval.
+or backup fixture. The backup also does not provision the dedicated LOGIN or
+its per-database role setting; recreate and verify both separately after a
+restore. Before removing a provisioned LOGIN, clear the setting first:
+
+```sql
+ALTER ROLE <worker_login> IN DATABASE postgres RESET role;
+```
+
+Then revoke `import_worker` and remove the LOGIN. After post-data, verify the
+policies and grants and confirm that `rolcanlogin`, `rolinherit` and
+`rolbypassrls` are all false, together with the remaining safe role attributes.
+A complete restore of a post-0019 backup, including this role choreography, is
+mandatory before deployment approval.
 
 The group role can read import job metadata and update only active import jobs,
 insert safe diagnostics and system completion/failure audit rows, and
@@ -221,8 +253,10 @@ removed. Never deploy the Ticket 13A commit separately against schema 0018.
    audit writer, while old instances remain stopped.
 9. Verify the dedicated LOGIN and effective `import_worker` contracts,
    including exact membership without `ADMIN OPTION`, ownership, parent-role
-   absence, `session_user`, `current_user`, safe attributes and a forced
-   reconnect before allowing recovery or claim.
+   absence, `session_user`, `current_user`, safe attributes, the selected direct
+   or Session Pooler role mechanism, and a forced reconnect before allowing
+   recovery or claim. Production `assertImportWorkerIdentity` must pass before
+   both recovery and claim.
 10. Smoke the worker and audit paths with controlled data.
 11. Remove maintenance and re-enable imports only after the complete release and
    smoke are green.
