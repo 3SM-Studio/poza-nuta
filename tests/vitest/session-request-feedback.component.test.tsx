@@ -19,8 +19,13 @@ vi.mock("@/components/public/session-api", () => ({
   getSessionQueue: vi.fn(),
   searchSessionSongs: searchSongs,
   SessionClientError: class SessionClientError extends Error {
-    status = 500;
-    code = "REQUEST_FAILED";
+    constructor(
+      readonly status: number,
+      readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
   },
 }));
 
@@ -80,7 +85,7 @@ describe("session request feedback", () => {
     expect(createRequest).not.toHaveBeenCalled();
   });
 
-  it("shows a success toast after a completed request write", async () => {
+  it("shows a success toast and a durable pending request state", async () => {
     createRequest.mockResolvedValue({});
     render(<SessionRequestPage code="01234567" event={event} />);
     await completeRequestForm();
@@ -89,6 +94,45 @@ describe("session request feedback", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Dodano zgłoszenie", {
       description: "Operator musi je zatwierdzić.",
     });
+    expect(screen.getByText("Twoje ostatnie zgłoszenie")).toBeVisible();
+    expect(screen.getByText("Oczekujące")).toBeVisible();
+    expect(screen.getByText(/Test Song/)).toBeVisible();
+    expect(screen.getByText(/Zgłaszający: Ala/)).toBeVisible();
+  });
+
+  it("shows a persistent duplicate alert without duplicating it in Sonner", async () => {
+    const { SessionClientError } = await import(
+      "@/components/public/session-api"
+    );
+    createRequest.mockRejectedValue(
+      new SessionClientError(
+        409,
+        "SESSION_REQUEST_DUPLICATE",
+        "safe duplicate",
+      ),
+    );
+    render(<SessionRequestPage code="01234567" event={event} />);
+    await completeRequestForm();
+
+    expect(
+      await screen.findByText("To zgłoszenie już czeka"),
+    ).toBeVisible();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("shows rate limiting as a persistent alert", async () => {
+    const { SessionClientError } = await import(
+      "@/components/public/session-api"
+    );
+    createRequest.mockRejectedValue(
+      new SessionClientError(429, "SESSION_RATE_LIMITED", "safe rate limit"),
+    );
+    render(<SessionRequestPage code="01234567" event={event} />);
+    await completeRequestForm();
+
+    expect(await screen.findByText("Zbyt wiele prób")).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("shows a transient error toast for a non-persistent write failure", async () => {

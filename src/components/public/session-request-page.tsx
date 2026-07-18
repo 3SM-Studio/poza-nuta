@@ -7,6 +7,10 @@ import {
   SessionStateAlert,
   type SessionStateAlertKind,
 } from "@/components/public/session-state-alert";
+import { RequestStatusBadge } from "@/components/request-status-badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 import { getSessionCapabilityState } from "@/lib/session-capabilities";
 import {
@@ -34,6 +38,12 @@ type SessionRequestFormErrors = Partial<
   Record<"songId" | "requesterName", string>
 >;
 
+type SubmittedRequestSummary = {
+  title: string;
+  artist: string;
+  requesterName: string;
+};
+
 export function SessionRequestPage({
   code,
   event,
@@ -51,6 +61,8 @@ export function SessionRequestPage({
   const [submitAlert, setSubmitAlert] =
     useState<SessionStateAlertKind | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedRequest, setSubmittedRequest] =
+    useState<SubmittedRequestSummary | null>(null);
   const [queue, setQueue] = useState<PublicQueueResponse | null>(null);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [isRefreshingQueue, setIsRefreshingQueue] = useState(false);
@@ -152,11 +164,20 @@ export function SessionRequestPage({
       return;
     }
 
+    if (!selectedSong) {
+      return;
+    }
+
     setFormErrors({});
     setIsSubmitting(true);
 
     try {
       await createSessionRequest(code, validation.data);
+      setSubmittedRequest({
+        title: selectedSong.title,
+        artist: selectedSong.artist,
+        requesterName: validation.data.requesterName,
+      });
       setSelectedSong(null);
       setSearchTerm("");
       setSearchResults([]);
@@ -212,7 +233,7 @@ export function SessionRequestPage({
           <label className={styles.visuallyHidden} htmlFor="session-song-search">
             Tytuł lub wykonawca
           </label>
-          <input
+          <Input
             id="session-song-search"
             type="search"
             value={searchTerm}
@@ -220,15 +241,14 @@ export function SessionRequestPage({
             placeholder="Tytuł lub wykonawca"
             disabled={isSearching || isSubmitting}
           />
-          <button
-            className={styles.primaryButton}
+          <Button
             type="submit"
             disabled={
               isSearching || isSubmitting || !canSearchPublicSongs(searchTerm)
             }
           >
             {isSearching ? "Szukam..." : "Szukaj"}
-          </button>
+          </Button>
         </form>
 
         {searchMessage ? (
@@ -292,7 +312,7 @@ export function SessionRequestPage({
             <label htmlFor="session-requester-name">
               Imię lub ksywka
             </label>
-            <input
+            <Input
               id="session-requester-name"
               type="text"
               required
@@ -304,6 +324,7 @@ export function SessionRequestPage({
                   ...current,
                   requesterName: undefined,
                 }));
+                setSubmitAlert(null);
               }}
               maxLength={SESSION_REQUESTER_NAME_MAX_LENGTH}
               placeholder="Imię lub ksywka"
@@ -320,16 +341,34 @@ export function SessionRequestPage({
             ) : null}
           </div>
 
-          <button
-            className={`${styles.primaryButton} ${styles.submitButton}`}
+          <Button
+            className={styles.submitButton}
             type="submit"
             disabled={isSubmitting}
           >
             {isSubmitting ? "Dodaję..." : "Dodaj do kolejki"}
-          </button>
+          </Button>
         </form>
 
         {submitAlert ? <SessionStateAlert kind={submitAlert} /> : null}
+        {submittedRequest ? (
+          <Card data-submitted-request>
+            <CardHeader>
+              <CardTitle>Twoje ostatnie zgłoszenie</CardTitle>
+              <RequestStatusBadge status="pending" />
+            </CardHeader>
+            <CardContent>
+              <p>
+                <strong>{submittedRequest.title}</strong> -{" "}
+                {submittedRequest.artist}
+              </p>
+              <p className={styles.inlineMessage}>
+                Zgłaszający: {submittedRequest.requesterName}. Zgłoszenie czeka
+                na decyzję operatora.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
       </section>
         </>
       ) : null}
@@ -367,11 +406,7 @@ export function SessionRequestPage({
                 }`}
               >
                 <div>
-                  <span className={styles.queueStatus}>
-                    {item.status === "now"
-                      ? "Aktualnie śpiewane"
-                      : "Zaakceptowane"}
-                  </span>
+                  <RequestStatusBadge status={item.status} />
                   <h2>{item.singerName}</h2>
                   {queue.showSongTitles && item.title ? (
                     <p>
@@ -476,6 +511,10 @@ function getSubmitAlertKind(
 
   if (error.status === 429 || error.code === "SESSION_RATE_LIMITED") {
     return "rate_limited";
+  }
+
+  if (error.code === "SESSION_REQUEST_DUPLICATE") {
+    return "duplicate_request";
   }
 
   if (error.code === "SESSION_EVENT_NOT_STARTED") return "scheduled";

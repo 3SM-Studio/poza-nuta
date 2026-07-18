@@ -12,7 +12,9 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
+import { RequestStatusBadge } from "@/components/request-status-badge";
 import {
   Alert,
   AlertDescription,
@@ -20,6 +22,17 @@ import {
 } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardAction,
@@ -76,15 +89,6 @@ const filterLabels: Record<DashboardEventQueueFilter, string> = {
   closed: "Zagrane / zamknięte",
 };
 
-const statusLabels: Record<DashboardEventQueueRequestStatus, string> = {
-  pending: "Oczekujące",
-  approved: "Zaakceptowane",
-  now: "W trakcie",
-  done: "Zagrane",
-  skipped: "Zamknięte",
-  rejected: "Odrzucone",
-};
-
 const actionLabels: Record<DashboardEventQueueAction, string> = {
   approve: "Zaakceptuj",
   start: "Ustaw jako aktualnie śpiewane",
@@ -123,7 +127,6 @@ export function EventQueuePanel({
   >(() => new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const filteredItems = useMemo(() => {
     const statuses = getDashboardEventQueueFilterStatuses(activeFilter);
@@ -159,7 +162,6 @@ export function EventQueuePanel({
         );
 
         setItems(response.items);
-        setMessage("Kolejka zaktualizowana.");
         setError(null);
       } catch (caughtError) {
         if (signal.aborted || isAbortError(caughtError)) {
@@ -195,7 +197,7 @@ export function EventQueuePanel({
       const response = await getDashboardEventQueue(organizationId, eventId);
 
       setItems(response.items);
-      setMessage("Kolejka zaktualizowana.");
+      toast.success("Kolejka zaktualizowana");
     } catch (caughtError) {
       if (!handleAuthenticationError(caughtError)) {
         setError(getClientErrorMessage(caughtError));
@@ -229,7 +231,6 @@ export function EventQueuePanel({
 
     markOperationPending(operationKey);
     setItems(optimisticItems);
-    setMessage(null);
     setError(null);
 
     try {
@@ -243,7 +244,9 @@ export function EventQueuePanel({
       setItems((currentItems) =>
         reconcileDashboardEventQueueItem(currentItems, result.request),
       );
-      setMessage(`Zmieniono status. ${actionSuccessMessages[action]}`);
+      toast.success("Zmieniono status", {
+        description: actionSuccessMessages[action],
+      });
     } catch (caughtError) {
       if (!handleAuthenticationError(caughtError)) {
         setItems((currentItems) =>
@@ -280,7 +283,6 @@ export function EventQueuePanel({
 
     markOperationPending(operationKey);
     setItems(optimisticItems);
-    setMessage(null);
     setError(null);
 
     try {
@@ -294,11 +296,11 @@ export function EventQueuePanel({
       setItems((currentItems) =>
         reconcileDashboardEventQueueItem(currentItems, result.request),
       );
-      setMessage(
-        !result.moved
-          ? "Zgłoszenie jest już na skraju kolejki."
-          : "Kolejność zgłoszeń została zmieniona.",
-      );
+      if (!result.moved) {
+        toast.info("Zgłoszenie jest już na skraju kolejki");
+      } else {
+        toast.success("Kolejność zgłoszeń została zmieniona");
+      }
     } catch (caughtError) {
       if (!handleAuthenticationError(caughtError)) {
         setItems((currentItems) =>
@@ -378,12 +380,6 @@ export function EventQueuePanel({
               Rola viewer pozwala przeglądać kolejkę, ale nie zmieniać statusów
               zgłoszeń ani ich kolejności.
             </AlertDescription>
-          </Alert>
-        ) : null}
-
-        {message ? (
-          <Alert role="status">
-            <AlertDescription>{message}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -516,9 +512,7 @@ function EventQueueRequestRow({
       <div className={styles.requestMain}>
         <div className={styles.requestHeading}>
           <strong>{item.displayName || item.singerName}</strong>
-          <Badge variant={getRequestStatusBadgeVariant(item.status)}>
-            {statusLabels[item.status]}
-          </Badge>
+          <RequestStatusBadge status={item.status} />
           <Badge variant="outline">
             {item.requestedBy === "public" ? "Link sesji" : "Operator"}
           </Badge>
@@ -574,11 +568,49 @@ function EventQueueRequestRow({
             );
             const isCurrentActionPending = pendingOperations.has(operationKey);
 
+            if (action === "reject") {
+              return (
+                <AlertDialog key={action}>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      type="button"
+                      disabled={isRequestPending}
+                    >
+                      {getActionIcon(action)}
+                      {isCurrentActionPending
+                        ? "Zapisywanie..."
+                        : actionLabels[action]}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent data-management-theme="true">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Odrzucić zgłoszenie?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Zgłoszenie zniknie z aktywnej kolejki. Można je później
+                        przywrócić.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                      <AlertDialogAction
+                        variant="destructive"
+                        onClick={() => void onAction(item.id, action)}
+                      >
+                        Odrzuć zgłoszenie
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              );
+            }
+
             return (
               <Button
                 key={action}
                 size="sm"
-                variant={action === "reject" ? "destructive" : "default"}
+                variant="default"
                 type="button"
                 onClick={() => void onAction(item.id, action)}
                 disabled={isRequestPending}
@@ -626,18 +658,6 @@ function getActionIcon(action: DashboardEventQueueAction) {
     case "restore":
       return <RotateCcw aria-hidden="true" data-icon="inline-start" />;
   }
-}
-
-function getRequestStatusBadgeVariant(status: DashboardEventQueueRequestStatus) {
-  if (status === "rejected") {
-    return "destructive" as const;
-  }
-
-  if (status === "approved" || status === "now" || status === "done") {
-    return "default" as const;
-  }
-
-  return "secondary" as const;
 }
 
 function formatDateTime(value: string) {

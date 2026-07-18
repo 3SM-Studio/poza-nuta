@@ -15,6 +15,7 @@ describe("SessionStateAlert", () => {
     ["closed", "Sesja zakończona"],
     ["queue_disabled", "Kolejka wyłączona"],
     ["rate_limited", "Zbyt wiele prób"],
+    ["duplicate_request", "To zgłoszenie już czeka"],
     ["canonical_unavailable", "Adres sesji niedostępny"],
     ["qr_unavailable", "Kod QR niedostępny"],
   ] satisfies [SessionStateAlertKind, string][])(

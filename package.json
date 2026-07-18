@@ -37,6 +37,7 @@
     "test:postgres:import-job-worker-foundation": "node --experimental-strip-types --test tests/postgres/importJobWorkerFoundation.integration.test.ts",
     "test:postgres:import-worker-runtime": "node --experimental-strip-types --test tests/postgres/importWorkerRuntime.integration.test.ts",
     "test:postgres:canonical-session-access": "node --experimental-strip-types --test tests/postgres/canonicalSessionAccess.integration.test.ts",
+    "test:postgres:guest-session-queue": "vitest run --config vitest.postgres.config.ts",
     "e2e": "playwright test"
   },
   "engines": {

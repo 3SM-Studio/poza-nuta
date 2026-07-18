@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, ilike, inArray, max } from "drizzle-orm";
+import { and, eq, ilike, inArray, max, sql } from "drizzle-orm";
 
 import { events, songRequests, songs } from "../../db/schema";
 import {
@@ -35,6 +35,12 @@ const sessionEventSelection = {
   endsAt: events.endsAt,
   closedAt: events.closedAt,
 };
+
+const ACTIVE_SESSION_REQUEST_STATUSES = [
+  "pending",
+  "approved",
+  "now",
+] as const;
 
 type SessionEventRow = {
   event: PublicSessionEvent;
@@ -206,6 +212,27 @@ export async function createSessionRequest(
         404,
         "SONG_NOT_FOUND",
         "The selected song does not exist.",
+      );
+    }
+
+    const [duplicateRequest] = await transaction
+      .select({ id: songRequests.id })
+      .from(songRequests)
+      .where(
+        and(
+          eq(songRequests.eventId, session.event.id),
+          eq(songRequests.songId, song.id),
+          sql`lower(${songRequests.displayName}) = lower(${input.singerName})`,
+          inArray(songRequests.status, ACTIVE_SESSION_REQUEST_STATUSES),
+        ),
+      )
+      .limit(1);
+
+    if (duplicateRequest) {
+      throw new PublicApiError(
+        409,
+        "SESSION_REQUEST_DUPLICATE",
+        "This singer already has an active request for the selected song.",
       );
     }
 

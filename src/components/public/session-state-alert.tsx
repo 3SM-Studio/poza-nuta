@@ -1,5 +1,6 @@
 import {
   CircleAlertIcon,
+  CopyXIcon,
   Clock3Icon,
   Link2OffIcon,
   ListXIcon,
@@ -16,6 +17,7 @@ export type SessionStateAlertKind =
   | "closed"
   | "queue_disabled"
   | "rate_limited"
+  | "duplicate_request"
   | "canonical_unavailable"
   | "qr_unavailable";
 
@@ -50,6 +52,13 @@ const presentations = {
     title: "Zbyt wiele prób",
     description: "Odczekaj chwilę przed kolejną próbą.",
     variant: "destructive",
+  },
+  duplicate_request: {
+    icon: CopyXIcon,
+    title: "To zgłoszenie już czeka",
+    description:
+      "Ta osoba ma już aktywne zgłoszenie tej piosenki. Poczekaj na decyzję operatora.",
+    variant: "default",
   },
   canonical_unavailable: {
     icon: Link2OffIcon,

@@ -80,6 +80,45 @@ test("event queue actions preserve the existing request status model", () => {
   assert.equal(getDashboardEventQueueTargetStatus("restore"), "pending");
 });
 
+test("queue feedback uses semantic badges, Sonner, and destructive confirmation", () => {
+  const panel = readFileSync(
+    "src/components/operator/event-queue-panel.tsx",
+    "utf8",
+  );
+  const badge = readFileSync(
+    "src/components/request-status-badge.tsx",
+    "utf8",
+  );
+
+  assert.match(panel, /toast\.success\("Zmieniono status"/);
+  assert.match(panel, /<AlertDialog key=\{action\}>/);
+  assert.match(panel, /<AlertDialogCancel>Anuluj<\/AlertDialogCancel>/);
+  assert.match(panel, /<RequestStatusBadge status=\{item\.status\}/);
+  assert.doesNotMatch(panel, /setMessage\(/);
+
+  for (const status of [
+    "pending",
+    "approved",
+    "now",
+    "done",
+    "skipped",
+    "rejected",
+  ]) {
+    assert.match(badge, new RegExp(`${status}: \\{`));
+  }
+
+  for (const label of [
+    "Oczekujące",
+    "Zaakceptowane",
+    "W trakcie",
+    "Zagrane",
+    "Pominięte",
+    "Odrzucone",
+  ]) {
+    assert.match(badge, new RegExp(label));
+  }
+});
+
 test("event queue pending keys are scoped per request and action", () => {
   const pendingOperations = new Set([
     getDashboardEventQueueActionOperationKey(10, "approve"),

@@ -139,6 +139,33 @@ test("session resolver reads the canonical event code and locks writes", () => {
   assert.match(source, /SESSION_EVENT_NOT_STARTED/);
 });
 
+test("session request duplicate protection is serialized by the event lock", () => {
+  const source = readFileSync("src/server/session-api/service.ts", "utf8");
+  const createRequest = source.slice(
+    source.indexOf("export async function createSessionRequest"),
+    source.indexOf("async function requireLiveSession"),
+  );
+
+  assert.match(
+    createRequest,
+    /requireSongRequestSessionInTransaction\(\s*transaction,\s*code/,
+  );
+  assert.match(createRequest, /eq\(songRequests\.songId, song\.id\)/);
+  assert.match(
+    createRequest,
+    /lower\(\$\{songRequests\.displayName\}\) = lower\(\$\{input\.singerName\}\)/,
+  );
+  assert.match(
+    createRequest,
+    /inArray\(songRequests\.status, ACTIVE_SESSION_REQUEST_STATUSES\)/,
+  );
+  assert.match(createRequest, /SESSION_REQUEST_DUPLICATE/);
+  assert.ok(
+    createRequest.indexOf("SESSION_REQUEST_DUPLICATE") <
+      createRequest.indexOf(".insert(songRequests)"),
+  );
+});
+
 test("session API remains anonymous, code-scoped and rate limited", () => {
   const routes = [
     "src/app/api/session/[code]/event/route.ts",
