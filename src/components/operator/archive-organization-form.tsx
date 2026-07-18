@@ -11,7 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-import styles from "./operator.module.css";
 
 type ArchiveOrganizationFormProps = {
   action: (formData: FormData) => void | Promise<void>;
@@ -30,7 +29,7 @@ export function ArchiveOrganizationForm({
   const isConfirmed = confirmation === organizationId;
 
   return (
-    <Card className={styles.dangerZoneCard}>
+    <Card className={"border-destructive/40"}>
       <CardHeader>
         <CardTitle>Strefa niebezpieczna</CardTitle>
         <CardDescription>
@@ -39,9 +38,9 @@ export function ArchiveOrganizationForm({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form className={styles.settingsForm} action={action}>
+        <form className={"grid gap-4 [&_button]:justify-self-start"} action={action}>
           <input type="hidden" name="organizationId" value={organizationId} />
-          <div className={styles.dashboardField}>
+          <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
             <label htmlFor="archive-confirmation">
               Wpisz ID organizacji, aby potwierdzić
             </label>
@@ -56,9 +55,9 @@ export function ArchiveOrganizationForm({
               disabled={!canArchive}
             />
           </div>
-          <p className={styles.eventMeta}>
+          <p className={"mt-1.5 text-sm text-muted-foreground"}>
             Organizacja: {organizationName}. Wymagane ID:{" "}
-            <span className={styles.breakValue}>{organizationId}</span>
+            <span className={"min-w-0 break-all [overflow-wrap:anywhere]"}>{organizationId}</span>
           </p>
           <Button
             variant="destructive"

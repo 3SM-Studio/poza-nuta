@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EventSessionAccessPanel } from "@/components/operator/event-session-access-panel";
-import styles from "@/components/operator/operator.module.css";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -17,10 +14,6 @@ import {
   getDashboardEventLifecycleStatus,
   type DashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
-import {
-  getDashboardOrganizationEventPath,
-  getDashboardOrganizationEventQueuePath,
-} from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { tryBuildCanonicalSiteUrl } from "@/server/canonical-site-origin";
 import {
@@ -59,43 +52,27 @@ export default async function OrganizationEventSharePage({
   }
 
   const lifecycleStatus = getDashboardEventLifecycleStatus(result.event);
-  const eventPath = getDashboardOrganizationEventPath(
-    result.organization.publicId,
-    result.event.id,
-  );
-  const queuePath = getDashboardOrganizationEventQueuePath(
-    result.organization.publicId,
-    result.event.id,
-  );
   const sessionUrl = tryBuildCanonicalSiteUrl(
     `/session/${result.event.sessionCode}`,
   );
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.organizationShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Udostępnij wydarzenie</h1>
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               {result.event.name}
               {result.event.venue ? ` · ${result.event.venue}` : ""}
             </p>
           </div>
-          <div className={styles.headerActions}>
-            <Badge variant={getStatusBadgeVariant(lifecycleStatus)}>
-              {formatLifecycleStatus(lifecycleStatus)}
-            </Badge>
-            <Button variant="outline" asChild>
-              <Link href={queuePath}>Kolejka</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={eventPath}>Powrót do wydarzenia</Link>
-            </Button>
-          </div>
+          <Badge variant={getStatusBadgeVariant(lifecycleStatus)}>
+            {formatLifecycleStatus(lifecycleStatus)}
+          </Badge>
         </header>
 
-        <div className={styles.organizationList}>
+        <div className={"grid min-w-0 gap-4"}>
           <Card>
             <CardHeader>
               <CardTitle>{result.event.name}</CardTitle>
@@ -104,7 +81,7 @@ export default async function OrganizationEventSharePage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <dl className={styles.eventDetails}>
+              <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                 <div>
                   <dt>Status</dt>
                   <dd>{formatLifecycleStatus(lifecycleStatus)}</dd>

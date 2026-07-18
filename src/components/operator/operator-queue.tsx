@@ -32,7 +32,6 @@ import {
   type OperatorRequestStatus,
   runOperatorQueueAction,
 } from "./api";
-import styles from "./operator.module.css";
 import { useDashboardQueueRealtime } from "./use-dashboard-queue-realtime";
 
 const queueSections: Array<{
@@ -200,7 +199,7 @@ export function OperatorQueuePanel() {
 
   if (isInitialLoading) {
     return (
-      <div className={styles.loadingScreen} role="status">
+      <div className={"px-4 py-16 text-center text-muted-foreground"} role="status">
         Ładowanie kolejki…
       </div>
     );
@@ -209,19 +208,19 @@ export function OperatorQueuePanel() {
   const warningNow = new Date();
 
   return (
-    <div className={styles.queueShell}>
-      <header className={styles.pageHeader}>
+    <div className={"mx-auto w-full min-w-0 max-w-[92rem]"}>
+      <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
         <div>
           <h1>Dashboard kolejki</h1>
           {queueData ? (
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               {queueData.event.name}
               {queueData.event.venue ? ` · ${queueData.event.venue}` : ""}
             </p>
           ) : null}
         </div>
 
-        <div className={styles.headerActions}>
+        <div className={"flex min-w-0 flex-wrap items-center gap-2 sm:justify-end"}>
           <Button
             variant="outline"
             type="button"
@@ -234,7 +233,7 @@ export function OperatorQueuePanel() {
       </header>
 
       {error ? (
-        <Alert className={styles.pageError} variant="destructive">
+        <Alert className={"mb-4"} variant="destructive">
           <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -243,10 +242,10 @@ export function OperatorQueuePanel() {
       {queueData &&
       !closingWarningDismissed &&
       shouldWarnEventClosingSoon(queueData.event.autoCloseAt, warningNow) ? (
-        <Alert className={styles.eventWarning}>
+        <Alert className={"mb-4"}>
           <AlertTitle>Event zakończy się za mniej niż 30 minut.</AlertTitle>
           <AlertDescription>
-            <div className={styles.warningActions}>
+            <div className={"flex flex-wrap gap-2"}>
               <Button
                 type="button"
                 onClick={() => void handleExtendEvent(1)}
@@ -279,7 +278,7 @@ export function OperatorQueuePanel() {
       ) : null}
 
       {queueData ? (
-        <div className={styles.queueGrid}>
+        <div className={"grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"}>
           {queueSections.map((section) => (
             <QueueSection
               key={section.status}
@@ -295,7 +294,7 @@ export function OperatorQueuePanel() {
           ))}
         </div>
       ) : (
-        <div className={styles.emptyPage}>
+        <div className={"px-4 py-16 text-center text-muted-foreground"}>
           Nie udało się wczytać kolejki.
         </div>
       )}
@@ -321,7 +320,7 @@ function QueueSection({
   onAction,
 }: QueueSectionProps) {
   return (
-    <Card className={wide ? styles.wideSection : undefined}>
+    <Card className={wide ? "lg:col-span-2" : undefined}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardAction>
@@ -332,7 +331,7 @@ function QueueSection({
       </CardHeader>
 
       {items.length > 0 ? (
-        <CardContent className={styles.requestList}>
+        <CardContent className={"grid p-0"}>
           {items.map((item) => (
             <RequestRow
               key={item.id}
@@ -370,35 +369,35 @@ function RequestRow({
   const sourceLabel = formatDashboardSongSource(item.song.source);
 
   return (
-    <article className={styles.requestRow}>
-      <div className={styles.requestMain}>
-        <div className={styles.requestHeading}>
+    <article className={"grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 px-4 py-3 sm:grid-cols-[minmax(12rem,1fr)_auto] [&+&]:border-t [&+&]:border-border"}>
+      <div className={"min-w-0"}>
+        <div className={"flex flex-wrap items-center gap-2 [&_strong]:text-base"}>
           <strong>{item.displayName || item.singerName}</strong>
           <Badge variant={getStatusBadgeVariant(item.status)}>
             {statusLabels[item.status]}
           </Badge>
         </div>
-        <div className={styles.songHeading}>
-          <p className={styles.songTitle}>{item.song.title}</p>
+        <div className={"mt-2 flex flex-wrap items-center gap-2"}>
+          <p className={"m-0 text-sm font-semibold leading-snug"}>{item.song.title}</p>
           <Badge
-            className={styles.songSourceBadge}
+            className={"max-w-full"}
             variant="outline"
             aria-label={`Źródło piosenki: ${sourceLabel}`}
           >
             {sourceLabel}
           </Badge>
         </div>
-        <p className={styles.songArtist}>{item.song.artist}</p>
-        {item.note ? <p className={styles.note}>Notatka: {item.note}</p> : null}
+        <p className={"mt-0.5 text-sm leading-snug text-muted-foreground"}>{item.song.artist}</p>
+        {item.note ? <p className={"mt-2 text-sm leading-relaxed text-muted-foreground"}>Notatka: {item.note}</p> : null}
       </div>
 
-      <div className={styles.requestMeta}>
+      <div className={"flex flex-row flex-wrap gap-1 text-xs text-muted-foreground sm:flex-col sm:items-end sm:whitespace-nowrap"}>
         <span>Pozycja: {item.position > 0 ? item.position : "—"}</span>
         {duration ? <span>Czas: {duration}</span> : null}
       </div>
 
       {actions.length > 0 ? (
-        <div className={styles.rowActions}>
+        <div className={"col-span-full flex flex-wrap gap-2"}>
           {actions.map(({ action, label, destructive }) => {
             const actionKey = `${item.id}:${action}`;
             const isActive = activeAction === actionKey;

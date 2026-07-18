@@ -17,7 +17,6 @@ import {
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventsPath,
 } from "@/lib/dashboard-routes";
-import styles from "@/components/operator/operator.module.css";
 import { OperatorApiError } from "@/server/operator-api/errors";
 import {
   canCreateDashboardOrganizationEvent,
@@ -56,12 +55,12 @@ export default async function NewOrganizationEventPage({
   const eventsPath = getDashboardOrganizationEventsPath(organization.publicId);
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.settingsShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[58rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Utwórz wydarzenie</h1>
-            <p className={styles.eventMeta}>{organization.name}</p>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>{organization.name}</p>
           </div>
         </header>
 

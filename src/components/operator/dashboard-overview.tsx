@@ -37,7 +37,6 @@ import {
   type OperatorRequestStatus,
 } from "./api";
 import { CloseEventConfirmation } from "./close-event-confirmation";
-import styles from "./operator.module.css";
 
 const queueCounters: Array<{
   status: OperatorRequestStatus;
@@ -160,18 +159,18 @@ export function DashboardOverview() {
 
   if (isLoading) {
     return (
-      <div className={styles.loadingScreen} role="status">
+      <div className={"px-4 py-16 text-center text-muted-foreground"} role="status">
         Ładowanie dashboardu…
       </div>
     );
   }
 
   return (
-    <div className={styles.overviewShell}>
-      <header className={styles.pageHeader}>
+    <div className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+      <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
         <div>
           <h1>Dashboard</h1>
-          <p className={styles.eventMeta}>
+          <p className={"mt-1.5 text-sm text-muted-foreground"}>
             Przegląd aktywnego eventu i kolejki.
           </p>
         </div>
@@ -181,14 +180,14 @@ export function DashboardOverview() {
       </header>
 
       {success ? (
-        <Alert className={styles.successMessage} role="status">
+        <Alert className={"mb-4"} role="status">
           <AlertTitle>Gotowe</AlertTitle>
           <AlertDescription>{success}</AlertDescription>
         </Alert>
       ) : null}
 
       {error ? (
-        <Alert className={styles.pageError} variant="destructive">
+        <Alert className={"mb-4"} variant="destructive">
           <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -197,14 +196,14 @@ export function DashboardOverview() {
       {event ? (
         <>
           {shouldWarnEventClosingSoon(event.autoCloseAt, now) ? (
-            <Alert className={styles.eventWarning}>
+            <Alert className={"mb-4"}>
               <AlertTitle>
                 Event zakończy się za mniej niż 30 minut.
               </AlertTitle>
             </Alert>
           ) : null}
 
-          <Card className={styles.overviewCard}>
+          <Card className={"mb-4"}>
             <CardHeader>
               <div>
                 <CardDescription>Aktywny event</CardDescription>
@@ -219,7 +218,7 @@ export function DashboardOverview() {
             </CardHeader>
 
             <CardContent>
-              <dl className={styles.eventDetails}>
+              <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                 <div>
                   <dt>Start (czas polski)</dt>
                   <dd>{formatDateTime(event.startsAt)}</dd>
@@ -247,7 +246,7 @@ export function DashboardOverview() {
               </dl>
             </CardContent>
 
-            <CardFooter className={styles.lifecycleActions}>
+            <CardFooter className={"flex flex-wrap gap-2"}>
               <Button
                 type="button"
                 onClick={() => void handleExtend(1)}
@@ -291,7 +290,7 @@ export function DashboardOverview() {
             onConfirm={() => void handleConfirmClose()}
           />
 
-          <Card className={styles.overviewCard}>
+          <Card className={"mb-4"}>
             <CardHeader>
               <div>
                 <CardDescription>Kolejka</CardDescription>
@@ -303,7 +302,7 @@ export function DashboardOverview() {
                 </Button>
               </CardAction>
             </CardHeader>
-            <CardContent className={styles.counterGrid}>
+            <CardContent className={"grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
               {queueCounters.map(({ status, label }) => (
                 <Card size="sm" key={status}>
                   <CardHeader>
@@ -316,7 +315,7 @@ export function DashboardOverview() {
           </Card>
         </>
       ) : (
-        <Card className={styles.overviewCard}>
+        <Card className={"mb-4"}>
           <CardHeader>
             <CardTitle>Brak aktywnego eventu</CardTitle>
             <CardDescription>

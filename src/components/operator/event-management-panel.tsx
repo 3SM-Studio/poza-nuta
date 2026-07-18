@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/card";
 import { DASHBOARD_EVENT_EXTENSION_MINUTES } from "@/lib/dashboard-event-lifecycle";
 
-import styles from "./operator.module.css";
 
 export type EventManagementActionIssue = {
   field: string;
@@ -94,12 +93,12 @@ export function EventManagementPanel({
   return (
     <>
       {showClosingWarning ? (
-        <Alert className={styles.eventWarning}>
+        <Alert className={"mb-4"}>
           <AlertTitle>
             Wydarzenie kończy się za mniej niż 30 minut. Wydłużyć?
           </AlertTitle>
           <AlertDescription>
-            <form className={styles.warningActions} action={extendFormAction}>
+            <form className={"flex flex-wrap gap-2"} action={extendFormAction}>
               <ExtendButtons disabled={isExtending} />
             </form>
           </AlertDescription>
@@ -115,10 +114,10 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={styles.settingsForm} action={detailsFormAction}>
+          <form className={"grid gap-4 [&_button]:justify-self-start"} action={detailsFormAction}>
             <ActionMessage state={detailsState} />
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-title">Nazwa wydarzenia</label>
               <input
                 id="event-manage-title"
@@ -132,7 +131,7 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="title" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-venue">Miejsce</label>
               <input
                 id="event-manage-venue"
@@ -145,7 +144,7 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="venue" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-city">Miasto</label>
               <input
                 id="event-manage-city"
@@ -158,7 +157,7 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="city" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-starts-at">
                 Start wydarzenia (czas polski)
               </label>
@@ -173,7 +172,7 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="startsAt" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-auto-close-at">
                 Czas zamknięcia (czas polski)
               </label>
@@ -184,14 +183,14 @@ export function EventManagementPanel({
                 defaultValue={initialValues.autoCloseAtInputValue}
                 aria-invalid={hasIssue(detailsState, "autoCloseAt") || undefined}
               />
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Jeśli zostawisz puste, czas zamknięcia zostanie ustawiony na 6
                 godzin po starcie.
               </p>
               <FieldIssue state={detailsState} field="autoCloseAt" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-facebook-url">Facebook URL</label>
               <input
                 id="event-manage-facebook-url"
@@ -204,9 +203,9 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="facebookUrl" />
             </div>
 
-            <div className={styles.formSection}>
+            <div className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"}>
               <h2>Katalog publiczny</h2>
-              <div className={styles.dashboardField}>
+              <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
                 <label htmlFor="event-manage-slug">Slug publiczny</label>
                 <input
                   id="event-manage-slug"
@@ -217,13 +216,13 @@ export function EventManagementPanel({
                   defaultValue={initialValues.slug}
                   aria-invalid={hasIssue(detailsState, "slug") || undefined}
                 />
-                <p className={styles.eventMeta}>
+                <p className={"mt-1.5 text-sm text-muted-foreground"}>
                   Zostaw puste, aby wygenerować slug z nazwy przy publikacji.
                 </p>
                 <FieldIssue state={detailsState} field="slug" />
               </div>
 
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="visibility"
                   type="checkbox"
@@ -232,16 +231,16 @@ export function EventManagementPanel({
                 />
                 <span>Opublikuj w katalogu wydarzeń</span>
               </label>
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Publiczne wydarzenie wymaga sluga i daty publikacji. Wyłączenie
                 publikacji nie usuwa historii pierwszej publikacji.
               </p>
               <FieldIssue state={detailsState} field="visibility" />
             </div>
 
-            <div className={styles.formSection}>
+            <div className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"}>
               <h2>Widoczność i kolejka publiczna</h2>
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="songRequestsEnabled"
                   type="checkbox"
@@ -249,12 +248,12 @@ export function EventManagementPanel({
                 />
                 <span>Publiczne zgłoszenia włączone</span>
               </label>
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Decyduje, czy publiczny endpoint wydarzenia przyjmuje nowe
                 piosenki.
               </p>
 
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="publicQueueEnabled"
                   type="checkbox"
@@ -262,12 +261,12 @@ export function EventManagementPanel({
                 />
                 <span>Publiczna kolejka włączona</span>
               </label>
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Decyduje, czy ludzie mogą korzystać z publicznego widoku kolejki
                 dla tego wydarzenia.
               </p>
 
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="publicShowSongTitles"
                   type="checkbox"
@@ -275,12 +274,12 @@ export function EventManagementPanel({
                 />
                 <span>Pokazuj tytuły piosenek publicznie</span>
               </label>
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Decyduje, czy publicznie widać tytuły zgłoszeń, czy tylko osoby
                 i statusy.
               </p>
 
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="isActivePublicEvent"
                   type="checkbox"
@@ -288,14 +287,14 @@ export function EventManagementPanel({
                 />
                 <span>Event aktywny publicznie</span>
               </label>
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Ten event jest używany przez publiczny widok /queue. Organizacja
                 może mieć tylko jeden aktywny publicznie event.
               </p>
               <FieldIssue state={detailsState} field="isActivePublicEvent" />
             </div>
 
-            <div className={styles.formActions}>
+            <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
               <Button type="submit" disabled={isSavingDetails}>
                 {isSavingDetails ? "Zapisywanie..." : "Zapisz szczegóły"}
               </Button>
@@ -313,16 +312,16 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={styles.settingsForm} action={extendFormAction}>
+          <form className={"grid gap-4 [&_button]:justify-self-start"} action={extendFormAction}>
             <ActionMessage state={extendState} />
-            <div className={styles.lifecycleActions}>
+            <div className={"flex flex-wrap gap-2"}>
               <ExtendButtons disabled={isExtending} />
             </div>
           </form>
         </CardContent>
       </Card>
 
-      <Card className={styles.dangerZoneCard}>
+      <Card className={"border-destructive/40"}>
         <CardHeader>
           <CardTitle>Zamknięcie wydarzenia</CardTitle>
           <CardDescription>
@@ -331,9 +330,9 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={styles.settingsForm} action={closeFormAction}>
+          <form className={"grid gap-4 [&_button]:justify-self-start"} action={closeFormAction}>
             <ActionMessage state={closeState} />
-            <div className={styles.formActions}>
+            <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
               <Button type="submit" variant="destructive" disabled={isClosing}>
                 {isClosing ? "Zamykanie..." : "Zamknij wydarzenie teraz"}
               </Button>
@@ -366,7 +365,7 @@ function ExtendButtons({ disabled }: { disabled: boolean }) {
 
 function ActionMessage({ state }: { state: EventManagementActionState }) {
   return state.message ? (
-    <p className={styles.formError} role="alert">
+    <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
       {state.message}
     </p>
   ) : null;
@@ -381,7 +380,7 @@ function FieldIssue({
 }) {
   const issue = state.issues.find((item) => item.field === field);
 
-  return issue ? <p className={styles.fieldError}>{issue.message}</p> : null;
+  return issue ? <p className={"m-0 text-sm leading-snug text-destructive"}>{issue.message}</p> : null;
 }
 
 function hasIssue(state: EventManagementActionState, field: string) {

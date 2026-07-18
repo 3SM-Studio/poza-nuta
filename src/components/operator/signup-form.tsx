@@ -9,7 +9,6 @@ import {
   isStrongSignupPassword,
 } from "../../lib/signup-password";
 import { OperatorClientError, signupOperator } from "./api";
-import styles from "./operator.module.css";
 
 type FieldErrors = Partial<
   Record<"email" | "password" | "confirmPassword", string>
@@ -71,12 +70,12 @@ export function OperatorSignupForm() {
 
   if (success) {
     return (
-      <section className={styles.signupConfirmation} role="status">
+      <section className={"grid gap-4 [&_h2]:text-xl [&_h2]:font-semibold [&_p]:leading-relaxed [&_p]:text-muted-foreground"} role="status">
         <h2>Sprawdź email</h2>
         <p>
           Konto zostało utworzone. Sprawdź skrzynkę i potwierdź adres email.
         </p>
-        <Link className={`${styles.button} ${styles.primaryButton}`} href="/sign-in">
+        <Link className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"}`} href="/sign-in">
           Przejdź do logowania
         </Link>
       </section>
@@ -84,8 +83,8 @@ export function OperatorSignupForm() {
   }
 
   return (
-    <form className={styles.loginForm} onSubmit={handleSubmit} noValidate>
-      <div className={styles.field}>
+    <form className={"grid gap-4"} onSubmit={handleSubmit} noValidate>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="signup-email">Email</label>
         <input
           id="signup-email"
@@ -101,7 +100,7 @@ export function OperatorSignupForm() {
         <FieldError message={fieldErrors.email} />
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="signup-password">Hasło</label>
         <input
           id="signup-password"
@@ -116,7 +115,7 @@ export function OperatorSignupForm() {
         />
         <FieldError message={fieldErrors.password} />
         <ul
-          className={styles.passwordRequirements}
+          className={"mt-0.5 grid list-none gap-1 p-0 text-xs leading-snug text-muted-foreground [&_li[data-met=true]]:text-foreground"}
           aria-label="Wymagania hasła"
         >
           {passwordRequirements.map((requirement) => (
@@ -127,7 +126,7 @@ export function OperatorSignupForm() {
         </ul>
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="signup-confirm-password">Potwierdź hasło</label>
         <input
           id="signup-confirm-password"
@@ -144,20 +143,20 @@ export function OperatorSignupForm() {
       </div>
 
       {error ? (
-        <p className={styles.formError} role="alert">
+        <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
           {error}
         </p>
       ) : null}
 
       <button
-        className={`${styles.button} ${styles.primaryButton} ${styles.loginButton}`}
+        className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"} ${"mt-1 w-full"}`}
         type="submit"
         disabled={isSubmitting}
       >
         {isSubmitting ? "Tworzenie konta..." : "Załóż konto"}
       </button>
 
-      <p className={styles.authSwitch}>
+      <p className={"mt-1 text-center text-sm text-muted-foreground [&_a]:font-semibold [&_a]:text-primary [&_a]:underline-offset-4 hover:[&_a]:underline"}>
         Masz już konto? <Link href="/sign-in">Zaloguj się</Link>
       </p>
     </form>
@@ -170,7 +169,7 @@ function FieldError({ message }: { message?: string }) {
   }
 
   return (
-    <p className={styles.fieldError} role="alert">
+    <p className={"m-0 text-sm leading-snug text-destructive"} role="alert">
       {message}
     </p>
   );

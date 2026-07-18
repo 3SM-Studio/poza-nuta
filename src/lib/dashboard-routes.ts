@@ -49,6 +49,13 @@ export function getDashboardOrganizationEventSharePath(
   return `${getDashboardOrganizationEventPath(organizationId, eventId)}/share`;
 }
 
+export function getDashboardOrganizationEventSettingsPath(
+  organizationId: string,
+  eventId: number | string,
+) {
+  return `${getDashboardOrganizationEventPath(organizationId, eventId)}/settings`;
+}
+
 export function getDashboardOrganizationSettingsPath(organizationId: string) {
   return `${getDashboardOrganizationPath(organizationId)}/settings`;
 }

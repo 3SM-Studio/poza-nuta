@@ -19,7 +19,6 @@ import {
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
 import { DashboardRuntimeError } from "../../../../components/operator/dashboard-runtime-error";
-import styles from "../../../../components/operator/operator.module.css";
 import { getDashboardOrganizationOverviewForAuthUser } from "../../../../server/operator-api/organization-overview";
 import { requireOperatorSession } from "../../../../server/operator-api/supabase-session";
 import { isTransientInfrastructureError } from "../../../../server/runtime-diagnostics";
@@ -76,16 +75,16 @@ export default async function DashboardOrganizationPage({
   );
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.overviewShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>{overview.organization.name}</h1>
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               ID organizacji: {overview.organization.publicId}
             </p>
           </div>
-          <div className={styles.headerActions}>
+          <div className={"flex min-w-0 flex-wrap items-center gap-2 sm:justify-end"}>
             <Badge variant="secondary">{formatRole(overview.organization.role)}</Badge>
             <Button variant="outline" asChild>
               <Link href={settingsPath}>Ustawienia</Link>
@@ -94,13 +93,13 @@ export default async function DashboardOrganizationPage({
         </header>
 
         {overview.partialFailures.counts ? (
-          <p className={styles.eventMeta}>
+          <p className={"mt-1.5 text-sm text-muted-foreground"}>
             Nie udało się chwilowo wczytać statystyk. Pozostałe sekcje są
             dostępne.
           </p>
         ) : null}
 
-        <section className={styles.overviewMetricGrid} aria-label="Statystyki">
+        <section className={"mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3"} aria-label="Statystyki">
           <StatCard label="Aktywne eventy" value={overview.stats.activeEvents} />
           <StatCard label="Wszystkie eventy" value={overview.stats.totalEvents} />
           <StatCard label="Requesty dzisiaj" value={overview.stats.requestsToday} />
@@ -121,8 +120,8 @@ export default async function DashboardOrganizationPage({
           />
         </section>
 
-        <div className={styles.overviewSectionGrid}>
-          <Card className={styles.overviewCard}>
+        <div className={"grid grid-cols-1 gap-4 lg:grid-cols-2"}>
+          <Card className={"mb-4"}>
             <CardHeader>
               <div>
                 <CardDescription>Stan kolejki i wydarzenia</CardDescription>
@@ -146,12 +145,12 @@ export default async function DashboardOrganizationPage({
             </CardHeader>
             <CardContent>
               {overview.partialFailures.activeEvent ? (
-                <p className={styles.eventMeta}>
+                <p className={"mt-1.5 text-sm text-muted-foreground"}>
                   Nie udało się wczytać stanu aktywnego wydarzenia. Pozostałe
                   dane są dostępne.
                 </p>
               ) : overview.activeEvent ? (
-                <dl className={styles.eventDetails}>
+                <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                   <div>
                     <dt>Miejsce</dt>
                     <dd>{overview.activeEvent.venue ?? "Nie ustawiono"}</dd>
@@ -174,7 +173,7 @@ export default async function DashboardOrganizationPage({
                   </div>
                 </dl>
               ) : (
-                <p className={styles.eventMeta}>
+                <p className={"mt-1.5 text-sm text-muted-foreground"}>
                   Ta organizacja nie ma jeszcze wydarzeń albo nie ma teraz
                   aktywnego wydarzenia.
                 </p>
@@ -182,7 +181,7 @@ export default async function DashboardOrganizationPage({
             </CardContent>
           </Card>
 
-          <Card className={styles.overviewCard}>
+          <Card className={"mb-4"}>
             <CardHeader>
               <div>
                 <CardDescription>Ostatnie wydarzenia</CardDescription>
@@ -200,14 +199,14 @@ export default async function DashboardOrganizationPage({
                   Nie udało się wczytać tej sekcji. Pozostałe dane są dostępne.
                 </CardDescription>
               ) : overview.recentEvents.length > 0 ? (
-                <div className={styles.overviewList}>
+                <div className={"grid gap-3"}>
                   {overview.recentEvents.map((event) => (
-                    <div className={styles.overviewRow} key={event.id}>
+                    <div className={"grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-muted/40 p-3 [&_strong]:block [&_strong]:text-sm [&_p]:mt-1 [&_p]:text-sm [&_p]:text-muted-foreground"} key={event.id}>
                       <div>
                         <strong>{event.name}</strong>
                         <p>{event.venue ?? "Bez ustawionego miejsca"}</p>
                       </div>
-                      <div className={styles.overviewRowMeta}>
+                      <div className={"flex flex-col items-end gap-1 whitespace-nowrap text-right text-xs text-muted-foreground"}>
                         <Badge variant={getStatusBadgeVariant(event.status)}>
                           {formatEventStatus(event.status)}
                         </Badge>
@@ -223,7 +222,7 @@ export default async function DashboardOrganizationPage({
           </Card>
         </div>
 
-        <Card className={styles.overviewCard}>
+        <Card className={"mb-4"}>
           <CardHeader>
             <CardDescription>
               Najczęściej zgłaszane utwory - ostatnie 30 dni
@@ -236,17 +235,17 @@ export default async function DashboardOrganizationPage({
                 Nie udało się wczytać rankingu. Pozostałe dane są dostępne.
               </CardDescription>
             ) : overview.topRequestedSongs.length > 0 ? (
-              <div className={styles.overviewList}>
+              <div className={"grid gap-3"}>
                 {overview.topRequestedSongs.map((song) => (
-                  <div className={styles.topSongRow} key={song.songId}>
+                  <div className={"grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-muted/40 p-3 [&_strong]:block [&_strong]:text-sm [&_p]:mt-1 [&_p]:text-sm [&_p]:text-muted-foreground"} key={song.songId}>
                     <div>
                       <strong>{song.title}</strong>
                       <p>{song.artist}</p>
                     </div>
-                    <div className={styles.topSongMetric}>
+                    <div className={"grid min-w-24 justify-items-end gap-1.5 font-semibold text-muted-foreground"}>
                       <span>{song.requestCount}</span>
                       <div
-                        className={styles.topSongBar}
+                        className={"h-1.5 min-w-2 max-w-24 rounded-full bg-primary"}
                         style={{
                           width: `${Math.max(
                             (song.requestCount / maxTopSongRequests) * 100,
@@ -274,7 +273,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle className={styles.overviewStatValue}>
+        <CardTitle className={"text-2xl font-semibold leading-none"}>
           {formatNumber(value)}
         </CardTitle>
         <CardDescription>{label}</CardDescription>

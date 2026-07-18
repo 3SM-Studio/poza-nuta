@@ -9,6 +9,7 @@ export type AppNavigationItem = {
 
 export type AppNavigationGroup = {
   label: string;
+  contextLabel?: string;
   items: AppNavigationItem[];
 };
 

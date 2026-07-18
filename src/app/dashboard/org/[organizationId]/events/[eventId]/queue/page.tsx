@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EventQueuePanel } from "@/components/operator/event-queue-panel";
-import styles from "@/components/operator/operator.module.css";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -17,10 +14,6 @@ import {
   getDashboardEventLifecycleStatus,
   type DashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
-import {
-  getDashboardOrganizationEventPath,
-  getDashboardOrganizationEventSharePath,
-} from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { getDashboardOrganizationEventQueueForAuthUser } from "@/server/operator-api/event-queue";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
@@ -60,44 +53,28 @@ export default async function OrganizationEventQueuePage({
     notFound();
   }
 
-  const eventPath = getDashboardOrganizationEventPath(
-    result.organization.publicId,
-    result.event.id,
-  );
-  const sharePath = getDashboardOrganizationEventSharePath(
-    result.organization.publicId,
-    result.event.id,
-  );
   const lifecycleStatus = getDashboardEventLifecycleStatus(
     result.event,
     new Date(),
   );
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.organizationShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Kolejka wydarzenia</h1>
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               {result.event.name}
               {result.event.venue ? ` · ${result.event.venue}` : ""}
             </p>
           </div>
-          <div className={styles.headerActions}>
-            <Badge variant={getStatusBadgeVariant(lifecycleStatus)}>
-              {formatLifecycleStatus(lifecycleStatus)}
-            </Badge>
-            <Button variant="outline" asChild>
-              <Link href={sharePath}>Udostępnij</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={eventPath}>Powrót do wydarzenia</Link>
-            </Button>
-          </div>
+          <Badge variant={getStatusBadgeVariant(lifecycleStatus)}>
+            {formatLifecycleStatus(lifecycleStatus)}
+          </Badge>
         </header>
 
-        <div className={styles.organizationList}>
+        <div className={"grid min-w-0 gap-4"}>
           <Card>
             <CardHeader>
               <CardTitle>{result.event.name}</CardTitle>
@@ -106,7 +83,7 @@ export default async function OrganizationEventQueuePage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <dl className={styles.eventDetails}>
+              <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                 <div>
                   <dt>Miejsce</dt>
                   <dd>{result.event.venue ?? "Nie ustawiono"}</dd>

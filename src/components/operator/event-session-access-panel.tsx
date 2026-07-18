@@ -1,8 +1,7 @@
 "use client";
 
-import QRCode from "qrcode";
 import { Check, Copy, Download, QrCode } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { SessionStateAlert } from "@/components/public/session-state-alert";
@@ -14,8 +13,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  createBrandedSessionQrSvg,
+  SESSION_QR_DOWNLOAD_FILENAME,
+  SESSION_QR_MIME_TYPE,
+  toSessionQrSvgDataUrl,
+  toStandaloneSessionQrSvg,
+} from "@/lib/branded-session-qr";
 
-import styles from "./operator.module.css";
 
 export function EventSessionAccessPanel({
   sessionCode,
@@ -60,24 +65,31 @@ function AvailableEventSessionAccessPanel({
   sessionUrl: string;
   isClosed: boolean;
 }) {
-  const [qrUnavailable, setQrUnavailable] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [qrState, setQrState] = useState<{
+    sessionUrl: string;
+    svg: string | null;
+    unavailable: boolean;
+  }>({ sessionUrl, svg: null, unavailable: false });
+  const qrSvg = qrState.sessionUrl === sessionUrl ? qrState.svg : null;
+  const qrDataUrl = qrSvg ? toSessionQrSvgDataUrl(qrSvg) : null;
+  const qrUnavailable =
+    qrState.sessionUrl === sessionUrl && qrState.unavailable;
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     let cancelled = false;
-    setQrUnavailable(false);
 
-    QRCode.toCanvas(canvas, sessionUrl, {
-      errorCorrectionLevel: "H",
-      margin: 4,
-      width: 360,
-      color: { dark: "#050505", light: "#ffffff" },
-    }).catch(() => {
-      if (!cancelled) setQrUnavailable(true);
-    });
+    void (async () => {
+      try {
+        const svg = await createBrandedSessionQrSvg(sessionUrl);
+        if (!cancelled) {
+          setQrState({ sessionUrl, svg, unavailable: false });
+        }
+      } catch {
+        if (!cancelled) {
+          setQrState({ sessionUrl, svg: null, unavailable: true });
+        }
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -95,38 +107,55 @@ function AvailableEventSessionAccessPanel({
     }
   }
 
-  function downloadQrPng() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  function downloadQrSvg() {
+    if (!qrSvg) {
+      toast.error("Kod QR nie jest jeszcze gotowy.");
+      return;
+    }
 
-    const anchor = document.createElement("a");
-    anchor.href = canvas.toDataURL("image/png");
-    anchor.download = `poza-nuta-${sessionCode}.png`;
-    anchor.click();
-    toast.info("Pobieranie QR rozpoczęte.");
+    let objectUrl: string | null = null;
+    try {
+      const blob = new Blob([toStandaloneSessionQrSvg(qrSvg)], {
+        type: SESSION_QR_MIME_TYPE,
+      });
+      objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = SESSION_QR_DOWNLOAD_FILENAME;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      toast.success("Kod QR został pobrany.");
+    } catch {
+      toast.error("Nie udało się pobrać kodu QR.", {
+        description: "Spróbuj ponownie za chwilę.",
+      });
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
   }
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>Dostęp do sesji</CardTitle>
         <CardDescription>
           Jeden stały kod wydarzenia prowadzi do kolejki uczestników.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-5">
+      <CardContent className="flex min-w-0 flex-col gap-5">
         {isClosed ? (
           <SessionStateAlert kind="closed" />
         ) : null}
 
-        <div className={styles.shareGrid}>
-          <div className={styles.formSection}>
+        <div className="grid min-w-0 grid-cols-1 gap-4 min-[60rem]:grid-cols-[minmax(0,1fr)_minmax(16rem,24rem)]">
+          <div className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"}>
             <h2>Kod sesji</h2>
-            <p className="font-mono text-3xl font-semibold tracking-widest">
+            <p className="max-w-full break-all font-mono text-[clamp(1.75rem,9vw,3rem)] font-semibold tracking-[0.12em]">
               {sessionCode}
             </p>
-            <p className={styles.breakValue}>{sessionUrl}</p>
-            <div className={styles.formActions}>
+            <p className={"min-w-0 break-all [overflow-wrap:anywhere]"}>{sessionUrl}</p>
+            <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
               <Button
                 type="button"
                 variant="outline"
@@ -146,22 +175,31 @@ function AvailableEventSessionAccessPanel({
             </div>
           </div>
 
-          <div className={styles.formSection}>
+          <div className={`${"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"} ${"min-w-0 content-start"}`}>
             <h2 className="flex items-center gap-2">
               <QrCode aria-hidden="true" />
               Kod QR
             </h2>
-            <div className={styles.qrFrame}>
-              <canvas
-                ref={canvasRef}
-                aria-label={`Kod QR prowadzący do sesji ${sessionCode}`}
-                width={360}
-                height={360}
-              />
+            <div className={"mx-auto grid aspect-square w-full min-w-0 max-w-sm place-items-center overflow-clip rounded-md bg-white p-3 sm:p-4"}>
+              {qrDataUrl ? (
+                // The QR is a generated data URL, so Next image optimization is not applicable.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="block h-auto w-full max-w-full"
+                  src={qrDataUrl}
+                  alt={`Kod QR prowadzący do sesji ${sessionCode}`}
+                />
+              ) : null}
             </div>
-            <Button type="button" variant="outline" onClick={downloadQrPng}>
+            <Button
+              type="button"
+              variant="outline"
+              className={"mx-auto w-full max-w-sm whitespace-normal"}
+              disabled={!qrSvg}
+              onClick={downloadQrSvg}
+            >
               <Download aria-hidden="true" />
-              Pobierz QR
+              Pobierz QR (SVG)
             </Button>
             {qrUnavailable ? <SessionStateAlert kind="qr_unavailable" /> : null}
           </div>

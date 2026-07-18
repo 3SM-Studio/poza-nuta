@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 
 import { OperatorLoginForm } from "../../components/operator/login-form";
 import { UnauthorizedSignIn } from "../../components/operator/unauthorized-sign-in";
-import styles from "../../components/operator/operator.module.css";
 import { getSignInPageAccess } from "../../server/operator-api/supabase-session";
 
 export const metadata: Metadata = {
@@ -28,15 +27,15 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   }
 
   return (
-    <main className={styles.loginPage}>
-      <section className={styles.loginCard}>
+    <main className={"grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground"}>
+      <section className={"w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-lg sm:p-10 [&_h1]:text-[clamp(1.75rem,6vw,2.25rem)] [&_h1]:font-semibold [&_h1]:leading-tight"}>
         <Link
-          className={styles.brand}
+          className={"mb-3 inline-flex w-fit items-center leading-none focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"}
           href="/"
           aria-label="Przejdź na stronę główną"
         >
           <Image
-            className={styles.brandLogo}
+            className={"block h-8 w-auto object-contain"}
             src="/brand/poza_nuta_logo-white.png"
             alt="Poza Nutą"
             width={1254}
@@ -48,16 +47,16 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
         ) : (
           <>
             <h1>Logowanie do dashboardu</h1>
-            <p className={styles.loginIntro}>
+            <p className={"mt-3 mb-7 leading-relaxed text-muted-foreground"}>
               Zaloguj się, aby zarządzać kolejką aktywnego wydarzenia.
             </p>
             {authError ? (
-              <p className={styles.formError} role="alert">
+              <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
                 {authError}
               </p>
             ) : null}
             <OperatorLoginForm />
-            <p className={styles.authSwitch}>
+            <p className={"mt-1 text-center text-sm text-muted-foreground [&_a]:font-semibold [&_a]:text-primary [&_a]:underline-offset-4 hover:[&_a]:underline"}>
               Nie masz konta? <Link href="/sign-up">Zarejestruj się</Link>
             </p>
           </>

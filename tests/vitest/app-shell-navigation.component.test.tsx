@@ -5,6 +5,7 @@ import type { AnchorHTMLAttributes } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DashboardShell } from "@/components/operator/dashboard-shell";
+import { EventSidebarBridge } from "@/components/operator/event-sidebar-context";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
 let pathname = "/dashboard/organizations";
@@ -73,15 +74,34 @@ describe("shared application shell", () => {
     }
   });
 
-  it("marks only the deepest matching organization destination as active", () => {
+  it("renders event navigation and marks only its deepest destination active", async () => {
     pathname = "/dashboard/org/demo/events/42/queue";
-    renderDashboard();
+    renderDashboard({ event: { eventId: "42", name: "Wieczór testowy" } });
+
+    expect(await screen.findByText("Wieczór testowy")).toBeVisible();
+    for (const label of [
+      "Szczegóły",
+      "Kolejka",
+      "Link i QR",
+      "Powrót do wydarzeń",
+    ]) {
+      expect(screen.getByRole("link", { name: label })).toBeVisible();
+    }
+    expect(
+      screen
+        .getAllByRole("link", { name: "Ustawienia" })
+        .find(
+          (link) =>
+            link.getAttribute("href") ===
+            "/dashboard/org/demo/events/42/settings",
+        ),
+    ).toBeVisible();
 
     const currentLinks = screen
       .getAllByRole("link")
       .filter((link) => link.hasAttribute("aria-current"));
     expect(currentLinks).toHaveLength(1);
-    expect(currentLinks[0]).toHaveTextContent("Wydarzenia");
+    expect(currentLinks[0]).toHaveTextContent("Kolejka");
     expect(screen.getByRole("link", { name: "Przegląd" })).not.toHaveAttribute(
       "aria-current",
     );
@@ -227,7 +247,13 @@ const organizations = [
   },
 ];
 
-function renderDashboard({ canAccessAdmin = true } = {}) {
+function renderDashboard({
+  canAccessAdmin = true,
+  event = null,
+}: {
+  canAccessAdmin?: boolean;
+  event?: { eventId: string; name: string } | null;
+} = {}) {
   return render(
     <SidebarProvider
       data-management-theme="true"
@@ -239,7 +265,13 @@ function renderDashboard({ canAccessAdmin = true } = {}) {
         email="jan@example.test"
         canAccessAdmin={canAccessAdmin}
       >
-        <h1>Treść dashboardu</h1>
+        {event ? (
+          <EventSidebarBridge event={event}>
+            <h1>Treść dashboardu</h1>
+          </EventSidebarBridge>
+        ) : (
+          <h1>Treść dashboardu</h1>
+        )}
       </DashboardShell>
     </SidebarProvider>,
   );

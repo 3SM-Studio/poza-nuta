@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -21,6 +22,7 @@ import {
   getDashboardOrganizationsPath,
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventSettingsPath,
   getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationGeneralSettingsPath,
@@ -75,6 +77,10 @@ test("organization route helpers encode organizationId values", () => {
   assert.equal(
     getDashboardOrganizationEventSharePath(exampleOrganizationId, 42),
     `/dashboard/org/${exampleOrganizationId}/events/42/share`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventSettingsPath(exampleOrganizationId, 42),
+    `/dashboard/org/${exampleOrganizationId}/events/42/settings`,
   );
   assert.equal(
     getDashboardOrganizationSettingsPath(exampleOrganizationId),
@@ -394,10 +400,7 @@ test("dashboard shell uses separate simple organization and account layouts", ()
 
 test("global theme exposes light and dark shadcn and sidebar tokens", () => {
   const globalsSource = readFileSync("src/app/globals.css", "utf8");
-  const operatorStyles = readFileSync(
-    "src/components/operator/operator.module.css",
-    "utf8",
-  );
+  const sidebarSource = readFileSync("src/components/ui/sidebar.tsx", "utf8");
   const buttonSource = readFileSync("src/components/ui/button.tsx", "utf8");
   const cardSource = readFileSync("src/components/ui/card.tsx", "utf8");
 
@@ -435,9 +438,8 @@ test("global theme exposes light and dark shadcn and sidebar tokens", () => {
   assert.match(globalsSource, /color-scheme: light/);
   assert.match(globalsSource, /html\.dark\s*\{/);
   assert.match(globalsSource, /oklch\(/);
-  assert.match(operatorStyles, /background: var\(--sidebar\)/);
-  assert.match(operatorStyles, /background: var\(--topbar-bg\)/);
-  assert.match(operatorStyles, /box-shadow: var\(--shadow-accent/);
+  assert.match(sidebarSource, /bg-sidebar/);
+  assert.match(sidebarSource, /bg-background/);
   assert.match(buttonSource, /shadow-\[var\(--shadow-accent-soft\)\]/);
   assert.match(cardSource, /shadow-\[var\(--shadow-card\)\]/);
 });
@@ -833,6 +835,14 @@ test("organization events support owner and manager create flow", () => {
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
     "utf8",
   );
+  const sharePageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+    "utf8",
+  );
+  const settingsPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
+    "utf8",
+  );
   const organizationsSource = readFileSync(
     "src/server/operator-api/organizations.ts",
     "utf8",
@@ -849,12 +859,11 @@ test("organization events support owner and manager create flow", () => {
   assert.match(newPageSource, /formData\.has\("publicShowSongTitles"\)/);
   assert.match(newPageSource, /formData\.has\("isActivePublicEvent"\)/);
   assert.match(newPageSource, /redirect\(/);
-  assert.match(detailPageSource, /EventSessionAccessPanel/);
-  assert.match(detailPageSource, /result\.event\.sessionCode/);
+  assert.match(sharePageSource, /EventSessionAccessPanel/);
+  assert.match(sharePageSource, /result\.event\.sessionCode/);
   assert.match(detailPageSource, /result\.event\.autoCloseAt/);
-  assert.match(detailPageSource, /result\.event\.songRequestsEnabled/);
+  assert.match(settingsPageSource, /result\.event\.songRequestsEnabled/);
   assert.match(detailPageSource, /result\.event\.facebookUrl/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
   assert.match(
     organizationsSource,
     /or\(eq\(workspaceMembers\.role, "owner"\), eq\(workspaceMembers\.role, "manager"\)\)/,
@@ -893,7 +902,7 @@ test("organization event list and detail present the same effective closed statu
   );
   assert.match(
     detailPageSource,
-    /const lifecycleStatus = getDashboardEventLifecycleStatus\(result\.event, now\)/,
+    /const lifecycleStatus = getDashboardEventLifecycleStatus\(result\.event\)/,
   );
   assert.match(
     dashboardLifecycleSource,
@@ -946,9 +955,13 @@ test("organization event create persists scheduling and public visibility fields
   assert.match(organizationsSource, /sessionCode/);
 });
 
-test("organization event detail exposes management and canonical session access", () => {
+test("organization event detail and settings keep one focused responsibility", () => {
   const detailPageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const settingsPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
     "utf8",
   );
   const panelSource = readFileSync(
@@ -958,13 +971,12 @@ test("organization event detail exposes management and canonical session access"
 
   assert.match(detailPageSource, /getDashboardEventLifecycleStatus/);
   assert.match(detailPageSource, /areDashboardEventRequestsOpen/);
-  assert.match(detailPageSource, /shouldShowDashboardEventClosingWarning/);
-  assert.match(detailPageSource, /EventManagementPanel/);
-  assert.match(detailPageSource, /EventSessionAccessPanel/);
-  assert.match(detailPageSource, /detailsAction=\{updateEventDetails\.bind/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
+  assert.doesNotMatch(detailPageSource, /EventManagementPanel|EventSessionAccessPanel/);
+  assert.match(settingsPageSource, /shouldShowDashboardEventClosingWarning/);
+  assert.match(settingsPageSource, /EventManagementPanel/);
+  assert.match(settingsPageSource, /detailsAction=\{updateEventDetails\.bind/);
   assert.doesNotMatch(detailPageSource, /generateSessionLink/);
-  assert.match(detailPageSource, /tryBuildCanonicalSiteUrl/);
+  assert.doesNotMatch(detailPageSource, /tryBuildCanonicalSiteUrl/);
   assert.match(panelSource, /Wydarzenie kończy się za mniej niż 30 minut/);
   assert.match(panelSource, /name="title"/);
   assert.match(panelSource, /name="venue"/);
@@ -976,7 +988,7 @@ test("organization event detail exposes management and canonical session access"
   assert.match(panelSource, /name="publicShowSongTitles"/);
   assert.match(panelSource, /name="isActivePublicEvent"/);
   assert.match(panelSource, /Zamknij wydarzenie teraz/);
-  assert.match(detailPageSource, /result\.event\.sessionCode/);
+  assert.match(settingsPageSource, /sessionCode/);
 });
 
 test("canonical site origin accepts configured HTTP origins and normalizes trailing slashes", () => {
@@ -1019,7 +1031,7 @@ test("canonical site origin fails safely when configuration is missing", () => {
   );
 });
 
-test("canonical session views share one server-only origin helper", () => {
+test("canonical session share view uses the server-only origin helper", () => {
   const detailPageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
     "utf8",
@@ -1042,10 +1054,11 @@ test("canonical session views share one server-only origin helper", () => {
   );
 
   for (const source of [detailPageSource, sharePageSource]) {
-    assert.match(source, /tryBuildCanonicalSiteUrl/);
     assert.doesNotMatch(source, /process\.env\.SITE_URL|buildSessionUrl/);
     assert.doesNotMatch(source, /headers\(\)|x-forwarded-host|host\.startsWith/);
   }
+  assert.doesNotMatch(detailPageSource, /tryBuildCanonicalSiteUrl/);
+  assert.match(sharePageSource, /tryBuildCanonicalSiteUrl/);
 
   assert.match(helperSource, /import "server-only"/);
   assert.match(helperSource, /process\.env\.SITE_URL/);
@@ -1058,8 +1071,8 @@ test("canonical session views share one server-only origin helper", () => {
 });
 
 test("organization event management is limited to owner and manager roles", () => {
-  const detailPageSource = readFileSync(
-    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+  const settingsPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
     "utf8",
   );
   const organizationsSource = readFileSync(
@@ -1067,7 +1080,7 @@ test("organization event management is limited to owner and manager roles", () =
     "utf8",
   );
 
-  assert.match(detailPageSource, /canManageDashboardOrganizationEvent/);
+  assert.match(settingsPageSource, /canManageDashboardOrganizationEvent/);
   assert.match(organizationsSource, /canManageDashboardOrganizationEvent/);
   assert.match(
     organizationsSource,
@@ -1120,34 +1133,34 @@ test("organization event management updates auto_close_at and closes without del
 });
 
 test("event management revalidates every lifecycle-dependent view", () => {
-  const detailPageSource = readFileSync(
+  const settingsPageSource = readFileSync(
     new URL(
-      "../src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+      "../src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
       import.meta.url,
     ),
     "utf8",
   );
 
   assert.match(
-    detailPageSource,
+    settingsPageSource,
     /revalidatePath\(getDashboardOrganizationEventsPath\(/,
   );
   assert.match(
-    detailPageSource,
+    settingsPageSource,
     /revalidatePath\([\s\S]*getDashboardOrganizationEventPath\(/,
   );
   assert.match(
-    detailPageSource,
+    settingsPageSource,
     /revalidatePath\([\s\S]*getDashboardOrganizationEventQueuePath\(/,
   );
   assert.match(
-    detailPageSource,
+    settingsPageSource,
     /revalidatePath\([\s\S]*getDashboardOrganizationEventSharePath\(/,
   );
-  assert.match(detailPageSource, /revalidatePath\(`\/session\/\$\{event\.sessionCode\}`\)/);
-  assert.match(detailPageSource, /revalidatePath\(`\/events\/\$\{event\.slug\}`\)/);
+  assert.match(settingsPageSource, /revalidatePath\(`\/session\/\$\{event\.sessionCode\}`\)/);
+  assert.match(settingsPageSource, /revalidatePath\(`\/events\/\$\{event\.slug\}`\)/);
   assert.equal(
-    (detailPageSource.match(/revalidateManagedEventPaths\(result\)/g) ?? [])
+    (settingsPageSource.match(/revalidateManagedEventPaths\(result\)/g) ?? [])
       .length,
     3,
   );
@@ -1158,18 +1171,17 @@ test("organization event queue route renders the event-scoped management panel",
     "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
     "utf8",
   );
-  const detailPageSource = readFileSync(
-    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
 
   assert.match(queuePageSource, /getDashboardOrganizationEventQueueForAuthUser/);
   assert.match(queuePageSource, /EventQueuePanel/);
   assert.match(queuePageSource, /Kolejka wydarzenia/);
-  assert.match(queuePageSource, /Powrót do wydarzenia/);
-  assert.match(queuePageSource, /getDashboardOrganizationEventPath/);
-  assert.match(detailPageSource, /Zarządzaj kolejką/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
+  assert.doesNotMatch(queuePageSource, /Powrót do wydarzenia|Udostępnij/);
+  assert.match(sidebarSource, /getDashboardOrganizationEventQueuePath/);
+  assert.match(sidebarSource, /label: "Kolejka"/);
 });
 
 test("organization event share route renders canonical code and QR controls", () => {
@@ -1188,6 +1200,10 @@ test("organization event share route renders canonical code and QR controls", ()
     "src/components/operator/event-session-access-panel.tsx",
     "utf8",
   );
+  const brandedQrSource = readFileSync(
+    "src/lib/branded-session-qr.ts",
+    "utf8",
+  );
   const organizationsSource = readFileSync(
     "src/server/operator-api/organizations.ts",
     "utf8",
@@ -1204,14 +1220,27 @@ test("organization event share route renders canonical code and QR controls", ()
   assert.doesNotMatch(sharePageSource, /generateDashboardOrganizationEventShareLinkForAuthUser/);
   assert.match(sharePageSource, /notFound\(\)/);
   assert.match(sharePageSource, /result\.event\.sessionCode/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventSharePath/);
-  assert.match(detailPageSource, /Link i QR/);
-  assert.match(queuePageSource, /getDashboardOrganizationEventSharePath/);
-  assert.match(queuePageSource, /Udostępnij/);
-  assert.match(sharePanelSource, /QRCode\.toCanvas/);
-  assert.match(sharePanelSource, /errorCorrectionLevel: "H"/);
-  assert.match(sharePanelSource, /margin: 4/);
-  assert.match(sharePanelSource, /Pobierz QR/);
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
+    "utf8",
+  );
+  assert.match(sidebarSource, /getDashboardOrganizationEventSharePath/);
+  assert.match(sidebarSource, /label: "Link i QR"/);
+  assert.doesNotMatch(detailPageSource, /Link i QR/);
+  assert.doesNotMatch(queuePageSource, /Udostępnij/);
+  assert.match(sharePanelSource, /createBrandedSessionQrSvg/);
+  assert.match(sharePanelSource, /Pobierz QR \(SVG\)/);
+  assert.match(brandedQrSource, /errorCorrectionLevel: QR_ERROR_CORRECTION_LEVEL/);
+  assert.match(brandedQrSource, /const QR_ERROR_CORRECTION_LEVEL = "H"/);
+  assert.match(brandedQrSource, /const QR_MARGIN_MODULES = 4/);
+  assert.match(brandedQrSource, /QRCode\.create/);
+  assert.match(brandedQrSource, /createModulesPath/);
+  assert.match(brandedQrSource, /data-qr-brand-mark/);
+  assert.doesNotMatch(brandedQrSource, /<image\b/);
+  assert.doesNotMatch(brandedQrSource, /import .*AudioLinesIcon/);
+  assert.match(brandedQrSource, /SESSION_QR_BRAND_ASSET_PATH/);
+  assert.match(brandedQrSource, /data:image\/svg\+xml/);
+  assert.doesNotMatch(sharePanelSource, /dangerouslySetInnerHTML/);
   assert.match(sharePanelSource, /Kopiuj kod/);
   assert.doesNotMatch(sharePanelSource, /Wygeneruj|Regeneruj/);
   assert.match(organizationsSource, /canShareDashboardOrganizationEvent/);
@@ -1219,6 +1248,34 @@ test("organization event share route renders canonical code and QR controls", ()
   assert.equal(sharePageSource.includes("codeHash"), false);
   assert.equal(sharePanelSource.includes("codeHash"), false);
 });
+
+test("dashboard and admin shells use Tailwind without CSS Modules", () => {
+  assert.equal(existsSync("src/components/operator/operator.module.css"), false);
+
+  const roots = [
+    "src/app/dashboard",
+    "src/app/account",
+    "src/components/operator",
+    "src/components/platform-admin",
+    "src/components/app-shell",
+  ];
+  const sources = roots.flatMap(listSourceFiles).map((path) => ({
+    path,
+    source: readFileSync(path, "utf8"),
+  }));
+
+  for (const { path, source } of sources) {
+    assert.doesNotMatch(source, /\.module\.css|styles\.[A-Za-z]/, path);
+  }
+});
+
+function listSourceFiles(root: string): string[] {
+  return readdirSync(root).flatMap((entry) => {
+    const path = join(root, entry);
+    if (statSync(path).isDirectory()) return listSourceFiles(path);
+    return /\.(?:ts|tsx)$/.test(path) ? [path] : [];
+  });
+}
 
 test("account identity sanitizer exposes login methods without tokens", () => {
   const identities = sanitizeAuthIdentities([

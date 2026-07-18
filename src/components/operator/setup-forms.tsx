@@ -8,7 +8,6 @@ import {
   isStrongSignupPassword,
 } from "../../lib/signup-password";
 import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/client";
-import styles from "./operator.module.css";
 
 type FieldErrors = Record<string, string>;
 
@@ -52,7 +51,7 @@ export function PlatformSetupSignupForm() {
 
   if (success) {
     return (
-      <section className={styles.signupConfirmation} role="status">
+      <section className={"grid gap-4 [&_h2]:text-xl [&_h2]:font-semibold [&_p]:leading-relaxed [&_p]:text-muted-foreground"} role="status">
         <h2>Sprawdz email</h2>
         <p>
           Jesli token i email sa poprawne, wyslalismy link do konfiguracji.
@@ -62,8 +61,8 @@ export function PlatformSetupSignupForm() {
   }
 
   return (
-    <form className={styles.loginForm} onSubmit={handleSubmit} noValidate>
-      <div className={styles.field}>
+    <form className={"grid gap-4"} onSubmit={handleSubmit} noValidate>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-invite-token">Token konfiguracji</label>
         <input
           id="setup-invite-token"
@@ -79,7 +78,7 @@ export function PlatformSetupSignupForm() {
         <FieldError message={fieldErrors.setupToken} />
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-email">Email</label>
         <input
           id="setup-email"
@@ -95,13 +94,13 @@ export function PlatformSetupSignupForm() {
       </div>
 
       {error ? (
-        <p className={styles.formError} role="alert">
+        <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
           {error}
         </p>
       ) : null}
 
       <button
-        className={`${styles.button} ${styles.primaryButton} ${styles.loginButton}`}
+        className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"} ${"mt-1 w-full"}`}
         type="submit"
         disabled={isSubmitting}
       >
@@ -178,8 +177,8 @@ export function PlatformSetupFinalizeForm() {
   }
 
   return (
-    <form className={styles.loginForm} onSubmit={handleSubmit} noValidate>
-      <div className={styles.field}>
+    <form className={"grid gap-4"} onSubmit={handleSubmit} noValidate>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-password">Haslo</label>
         <input
           id="setup-password"
@@ -195,7 +194,7 @@ export function PlatformSetupFinalizeForm() {
         />
         <FieldError message={fieldErrors.password} />
         <ul
-          className={styles.passwordRequirements}
+          className={"mt-0.5 grid list-none gap-1 p-0 text-xs leading-snug text-muted-foreground [&_li[data-met=true]]:text-foreground"}
           aria-label="Wymagania hasla"
         >
           {passwordRequirements.map((requirement) => (
@@ -206,7 +205,7 @@ export function PlatformSetupFinalizeForm() {
         </ul>
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-confirm-password">Potwierdz haslo</label>
         <input
           id="setup-confirm-password"
@@ -222,7 +221,7 @@ export function PlatformSetupFinalizeForm() {
         <FieldError message={fieldErrors.confirmPassword} />
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-token">Token konfiguracji</label>
         <input
           id="setup-token"
@@ -237,7 +236,7 @@ export function PlatformSetupFinalizeForm() {
         <FieldError message={fieldErrors.setupToken} />
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-display-name">Imie i nazwisko</label>
         <input
           id="setup-display-name"
@@ -252,7 +251,7 @@ export function PlatformSetupFinalizeForm() {
         <FieldError message={fieldErrors.displayName} />
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-workspace-name">Nazwa organizacji</label>
         <input
           id="setup-workspace-name"
@@ -266,7 +265,7 @@ export function PlatformSetupFinalizeForm() {
         <FieldError message={fieldErrors.workspaceName} />
       </div>
 
-      <div className={styles.field}>
+      <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <label htmlFor="setup-workspace-handle">Identyfikator organizacji</label>
         <input
           id="setup-workspace-handle"
@@ -281,13 +280,13 @@ export function PlatformSetupFinalizeForm() {
       </div>
 
       {error ? (
-        <p className={styles.formError} role="alert">
+        <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
           {error}
         </p>
       ) : null}
 
       <button
-        className={`${styles.button} ${styles.primaryButton} ${styles.loginButton}`}
+        className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"} ${"mt-1 w-full"}`}
         type="submit"
         disabled={isSubmitting}
       >
@@ -303,7 +302,7 @@ function FieldError({ message }: { message?: string }) {
   }
 
   return (
-    <p className={styles.fieldError} role="alert">
+    <p className={"m-0 text-sm leading-snug text-destructive"} role="alert">
       {message}
     </p>
   );

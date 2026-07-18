@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 
-import styles from "@/components/operator/operator.module.css";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -29,12 +28,12 @@ export default async function AccountSecurityPage() {
     identities.some((identity) => identity.provider === "email");
 
   return (
-    <div className={styles.queuePage}>
-      <section className={styles.settingsShell}>
-        <header className={styles.pageHeader}>
+    <div className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[58rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Bezpieczeństwo</h1>
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               Podgląd ustawień bezpieczeństwa konta operatora.
             </p>
           </div>
@@ -49,7 +48,7 @@ export default async function AccountSecurityPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <dl className={styles.eventDetails}>
+            <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
               <div>
                 <dt>Email</dt>
                 <dd>{session.authUser.email ?? "Brak emaila"}</dd>
@@ -75,11 +74,11 @@ export default async function AccountSecurityPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className={styles.identityList}>
+            <div className={"grid gap-3"}>
               {identities.length > 0 ? (
                 identities.map((identity, index) => (
                   <div
-                    className={styles.identityRow}
+                    className={"grid gap-3 rounded-md bg-muted/40 p-3 [&_dl]:grid [&_dl]:gap-2 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-0.5 [&_dd]:text-sm"}
                     key={`${identity.provider}-${identity.identityId ?? index}`}
                   >
                     <Badge>{formatProvider(identity.provider)}</Badge>
@@ -96,22 +95,22 @@ export default async function AccountSecurityPage() {
                   </div>
                 ))
               ) : (
-                <p className={styles.eventMeta}>
+                <p className={"mt-1.5 text-sm text-muted-foreground"}>
                   Supabase nie zwrócił listy aktywnych metod logowania.
                 </p>
               )}
 
-              <div className={styles.identityRow}>
+              <div className={"grid gap-3 rounded-md bg-muted/40 p-3 [&_dl]:grid [&_dl]:gap-2 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-0.5 [&_dd]:text-sm"}>
                 <Badge variant="secondary">Google · Wkrótce</Badge>
-                <p className={styles.eventMeta}>
+                <p className={"mt-1.5 text-sm text-muted-foreground"}>
                   Łączenie konta Google zostanie dodane osobno. Ten ekran nie
                   uruchamia OAuth.
                 </p>
               </div>
 
-              <div className={styles.identityRow}>
+              <div className={"grid gap-3 rounded-md bg-muted/40 p-3 [&_dl]:grid [&_dl]:gap-2 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-0.5 [&_dd]:text-sm"}>
                 <Badge variant="secondary">MFA · Wkrótce</Badge>
-                <p className={styles.eventMeta}>
+                <p className={"mt-1.5 text-sm text-muted-foreground"}>
                   Wieloskładnikowe logowanie zostanie zaprojektowane jako osobny
                   etap bezpieczeństwa.
                 </p>

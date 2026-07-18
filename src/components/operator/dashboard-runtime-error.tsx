@@ -6,7 +6,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-import styles from "./operator.module.css";
 
 export function DashboardRuntimeError({
   title = "Nie udało się wczytać dashboardu",
@@ -16,9 +15,9 @@ export function DashboardRuntimeError({
   description?: string;
 }) {
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.overviewShell}>
-        <Card className={styles.overviewCard}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+        <Card className={"mb-4"}>
           <CardHeader>
             <CardDescription>Awaria zależności</CardDescription>
             <CardTitle>{title}</CardTitle>

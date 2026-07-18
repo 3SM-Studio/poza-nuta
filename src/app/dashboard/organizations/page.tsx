@@ -16,7 +16,6 @@ import {
   getDashboardOrganizationPath,
 } from "@/lib/dashboard-routes";
 
-import styles from "../../../components/operator/operator.module.css";
 import { listDashboardOrganizationsForAuthUser } from "../../../server/operator-api/organizations";
 import { requireOperatorSession } from "../../../server/operator-api/supabase-session";
 
@@ -33,12 +32,12 @@ export default async function DashboardOrganizationsPage() {
   );
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.organizationShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Twoje organizacje</h1>
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               Wybierz organizację, którą chcesz teraz zarządzać.
             </p>
           </div>
@@ -52,12 +51,12 @@ export default async function DashboardOrganizationsPage() {
         </header>
 
         {organizations.length > 0 ? (
-          <div className={styles.organizationList}>
+          <div className={"grid min-w-0 gap-4"}>
             {organizations.map((organization) => (
               <Card key={organization.id}>
                 <CardHeader>
                   <CardTitle>{organization.name}</CardTitle>
-                  <CardDescription className={styles.breakValue}>
+                  <CardDescription className={"min-w-0 break-all [overflow-wrap:anywhere]"}>
                     ID organizacji: {organization.publicId}
                   </CardDescription>
                 </CardHeader>
@@ -79,7 +78,7 @@ export default async function DashboardOrganizationsPage() {
             ))}
           </div>
         ) : (
-          <Card className={styles.emptyStateCard}>
+          <Card className={"max-w-[38rem]"}>
             <CardHeader>
               <CardTitle>Nie masz jeszcze organizacji</CardTitle>
               <CardDescription>

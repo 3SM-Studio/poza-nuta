@@ -18,7 +18,6 @@ import {
 } from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
-import styles from "../../../../../components/operator/operator.module.css";
 import {
   canCreateDashboardOrganizationEvent,
   listDashboardOrganizationEventsForAuthUser,
@@ -59,12 +58,12 @@ export default async function OrganizationEventsPage({
   );
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.organizationShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Eventy</h1>
-            <p className={styles.eventMeta}>{result.organization.name}</p>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>{result.organization.name}</p>
           </div>
           {canCreateEvent ? (
             <Button asChild>
@@ -74,7 +73,7 @@ export default async function OrganizationEventsPage({
         </header>
 
         {result.events.length > 0 ? (
-          <div className={styles.organizationList}>
+          <div className={"grid min-w-0 gap-4"}>
             {result.events.map((event) => (
               <Card key={event.id}>
                 <CardHeader>
@@ -84,7 +83,7 @@ export default async function OrganizationEventsPage({
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <dl className={styles.eventDetails}>
+                  <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                     <div>
                       <dt>Status</dt>
                       <dd>

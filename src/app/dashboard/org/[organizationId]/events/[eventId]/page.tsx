@@ -1,15 +1,8 @@
 import type { Metadata } from "next";
-import { revalidatePath } from "next/cache";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
-import { EventManagementPanel } from "@/components/operator/event-management-panel";
-import type { EventManagementActionState } from "@/components/operator/event-management-panel";
-import { EventSessionAccessPanel } from "@/components/operator/event-session-access-panel";
-import styles from "@/components/operator/operator.module.css";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -19,35 +12,12 @@ import {
 } from "@/components/ui/card";
 import {
   areDashboardEventRequestsOpen,
-  canManageDashboardEventLifecycle,
   getDashboardEventLifecycleStatus,
-  shouldShowDashboardEventClosingWarning,
 } from "@/lib/dashboard-event-lifecycle";
-import {
-  getDashboardOrganizationEventPath,
-  getDashboardOrganizationEventQueuePath,
-  getDashboardOrganizationEventSharePath,
-  getDashboardOrganizationEventsPath,
-} from "@/lib/dashboard-routes";
-import {
-  formatWarsawDateTime,
-  formatWarsawDateTimeLocal,
-} from "@/lib/warsaw-time";
-import { OperatorApiError } from "@/server/operator-api/errors";
-import {
-  canManageDashboardOrganizationEvent,
-  closeDashboardOrganizationEventForAuthUser,
-  extendDashboardOrganizationEventForAuthUser,
-  getDashboardOrganizationEventSessionAccessForAuthUser,
-  updateDashboardOrganizationEventDetailsForAuthUser,
-} from "@/server/operator-api/organizations";
+import { formatWarsawDateTime } from "@/lib/warsaw-time";
+import { getDashboardOrganizationEventSessionAccessForAuthUser } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import {
-  validateEventId,
-  validateExtendDashboardEventInput,
-  validateUpdateDashboardEventDetailsInput,
-} from "@/server/operator-api/validation";
-import { tryBuildCanonicalSiteUrl } from "@/server/canonical-site-origin";
+import { validateEventId } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
   title: "Wydarzenie | Poza Nutą",
@@ -55,31 +25,14 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-type OrganizationEventDetailPageProps = {
-  params: Promise<{
-    organizationId: string;
-    eventId: string;
-  }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-type EventAction = "details-updated" | "extended" | "closed";
-
-const emptyActionState: EventManagementActionState = {
-  issues: [],
-  message: null,
-};
-
 export default async function OrganizationEventDetailPage({
   params,
-  searchParams,
-}: OrganizationEventDetailPageProps) {
+}: {
+  params: Promise<{ organizationId: string; eventId: string }>;
+}) {
   const { organizationId, eventId } = await params;
   const eventIdValidation = validateEventId(eventId);
-
-  if (!eventIdValidation.success) {
-    notFound();
-  }
+  if (!eventIdValidation.success) notFound();
 
   const session = await requireOperatorSession();
   const result = await getDashboardOrganizationEventSessionAccessForAuthUser({
@@ -87,417 +40,81 @@ export default async function OrganizationEventDetailPage({
     organizationId,
     eventId: eventIdValidation.data,
   });
+  if (!result) notFound();
 
-  if (!result) {
-    notFound();
-  }
-
-  const now = new Date();
-  const lifecycleStatus = getDashboardEventLifecycleStatus(result.event, now);
-  const requestsOpen = areDashboardEventRequestsOpen(result.event, now);
-  const roleCanManage = canManageDashboardOrganizationEvent(
-    result.organization.role,
-  );
-  const lifecycleCanManage = canManageDashboardEventLifecycle(
-    result.event,
-    now,
-  );
-  const canManage = roleCanManage && lifecycleCanManage;
-  const eventsPath = getDashboardOrganizationEventsPath(
-    result.organization.publicId,
-  );
-  const queuePath = getDashboardOrganizationEventQueuePath(
-    result.organization.publicId,
-    result.event.id,
-  );
-  const sharePath = getDashboardOrganizationEventSharePath(
-    result.organization.publicId,
-    result.event.id,
-  );
-  const resolvedSearchParams = searchParams ? await searchParams : {};
-  const actionMessage = getActionMessage(resolvedSearchParams.eventAction);
-  const sessionUrl = tryBuildCanonicalSiteUrl(
-    `/session/${result.event.sessionCode}`,
-  );
+  const lifecycleStatus = getDashboardEventLifecycleStatus(result.event);
+  const requestsOpen = areDashboardEventRequestsOpen(result.event);
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.organizationShell}>
-        <header className={styles.pageHeader}>
-          <div>
-            <h1>{result.event.name}</h1>
-            <p className={styles.eventMeta}>{result.organization.name}</p>
+    <main className="min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground">
+      <section className="mx-auto w-full min-w-0 max-w-[72rem]">
+        <header className="mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl">
+          <div className="min-w-0">
+            <h1 className="truncate">{result.event.name}</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {result.organization.name}
+            </p>
           </div>
-          <div className={styles.headerActions}>
-            <Badge variant={getLifecycleStatusBadgeVariant(lifecycleStatus)}>
-              {formatLifecycleStatus(lifecycleStatus)}
-            </Badge>
-            <Button asChild>
-              <Link href={queuePath}>Zarządzaj kolejką</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={sharePath}>Link i QR</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={eventsPath}>Wróć do eventów</Link>
-            </Button>
-          </div>
+          <Badge variant={getLifecycleStatusBadgeVariant(lifecycleStatus)}>
+            {formatLifecycleStatus(lifecycleStatus)}
+          </Badge>
         </header>
 
-        {actionMessage ? (
-          <Alert className={styles.successMessage} role="status">
-            <AlertDescription>{actionMessage}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        <div className={styles.organizationList}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Szczegóły wydarzenia</CardTitle>
-              <CardDescription>
-                Panel zarządzania godziną zamknięcia i ręcznym zakończeniem
-                wydarzenia.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className={styles.eventDetails}>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{formatLifecycleStatus(lifecycleStatus)}</dd>
-                </div>
-                <div>
-                  <dt>Zgłoszenia</dt>
-                  <dd>{requestsOpen ? "Otwarte" : "Zamknięte"}</dd>
-                </div>
-                <div>
-                  <dt>Start (czas polski)</dt>
-                  <dd>{formatDateTime(result.event.startsAt)}</dd>
-                </div>
-                <div>
-                  <dt>Czas zamknięcia (czas polski)</dt>
-                  <dd>{formatDateTime(result.event.autoCloseAt)}</dd>
-                </div>
-                <div>
-                  <dt>Publiczny event</dt>
-                  <dd>{result.event.isActivePublicEvent ? "Tak" : "Nie"}</dd>
-                </div>
-                <div>
-                  <dt>Katalog wydarzeń</dt>
-                  <dd>{result.event.visibility === "public" ? "Opublikowany" : "Prywatny"}</dd>
-                </div>
-                <div>
-                  <dt>Publiczny URL</dt>
-                  <dd>
-                    {result.event.slug ? (
-                      <Link
-                        className={styles.inlineLink}
-                        href={`/events/${result.event.slug}`}
-                      >
-                        /events/{result.event.slug}
-                      </Link>
-                    ) : (
-                      "Nie ustawiono"
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Publiczna kolejka</dt>
-                  <dd>{result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
-                </div>
-                <div>
-                  <dt>Facebook</dt>
-                  <dd>
-                    {result.event.facebookUrl ? (
-                      <a
-                        className={styles.inlineLink}
-                        href={result.event.facebookUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Otwórz wydarzenie
-                      </a>
-                    ) : (
-                      "Nie ustawiono"
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
-
-          <EventSessionAccessPanel
-            sessionCode={result.event.sessionCode}
-            sessionUrl={sessionUrl}
-            isClosed={
-              lifecycleStatus === "closed" || lifecycleStatus === "cancelled"
-            }
-          />
-          <EventManagementPanel
-            canManage={canManage}
-            manageBlockedReason={getManageBlockedReason({
-              roleCanManage,
-              lifecycleStatus,
-            })}
-            initialValues={{
-              title: result.event.name,
-              venue: result.event.venue ?? "",
-              city: result.event.city ?? "",
-              slug: result.event.slug ?? "",
-              visibility: result.event.visibility,
-              startsAtInputValue: formatDateTimeLocalInput(
-                result.event.startsAt,
-              ),
-              autoCloseAtInputValue: formatDateTimeLocalInput(
-                result.event.autoCloseAt,
-              ),
-              facebookUrl: result.event.facebookUrl ?? "",
-              songRequestsEnabled: result.event.songRequestsEnabled,
-              publicQueueEnabled: result.event.publicQueueEnabled,
-              publicShowSongTitles: result.event.publicShowSongTitles,
-              isActivePublicEvent: result.event.isActivePublicEvent,
-            }}
-            showClosingWarning={shouldShowDashboardEventClosingWarning(
-              result.event,
-              now,
-            )}
-            detailsAction={updateEventDetails.bind(
-              null,
-              result.organization.publicId,
-              result.event.id,
-            )}
-            extendAction={extendEvent.bind(
-              null,
-              result.organization.publicId,
-              result.event.id,
-            )}
-            closeAction={closeEvent.bind(
-              null,
-              result.organization.publicId,
-              result.event.id,
-            )}
-          />
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Szczegóły wydarzenia</CardTitle>
+            <CardDescription>
+              Bieżący stan i publiczna konfiguracja wydarzenia.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold">
+              <Detail label="Status" value={formatLifecycleStatus(lifecycleStatus)} />
+              <Detail label="Zgłoszenia" value={requestsOpen ? "Otwarte" : "Zamknięte"} />
+              <Detail label="Start (czas polski)" value={formatDateTime(result.event.startsAt)} />
+              <Detail label="Czas zamknięcia (czas polski)" value={formatDateTime(result.event.autoCloseAt)} />
+              <Detail label="Publiczne wydarzenie" value={result.event.isActivePublicEvent ? "Tak" : "Nie"} />
+              <Detail label="Katalog wydarzeń" value={result.event.visibility === "public" ? "Opublikowane" : "Prywatne"} />
+              <div>
+                <dt>Publiczny URL</dt>
+                <dd>
+                  {result.event.slug ? (
+                    <Link className="font-semibold text-primary underline-offset-4 hover:underline" href={`/events/${result.event.slug}`}>
+                      /events/{result.event.slug}
+                    </Link>
+                  ) : (
+                    "Nie ustawiono"
+                  )}
+                </dd>
+              </div>
+              <Detail label="Publiczna kolejka" value={result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"} />
+              <div>
+                <dt>Facebook</dt>
+                <dd>
+                  {result.event.facebookUrl ? (
+                    <a className="font-semibold text-primary underline-offset-4 hover:underline" href={result.event.facebookUrl} rel="noreferrer" target="_blank">
+                      Otwórz wydarzenie
+                    </a>
+                  ) : (
+                    "Nie ustawiono"
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
       </section>
     </main>
   );
 }
 
-async function updateEventDetails(
-  organizationId: string,
-  eventId: number,
-  _state: EventManagementActionState,
-  formData: FormData,
-): Promise<EventManagementActionState> {
-  "use server";
-
-  const validation = validateUpdateDashboardEventDetailsInput({
-    title: formData.get("title"),
-    venue: formData.get("venue"),
-    city: formData.get("city"),
-    slug: formData.get("slug"),
-    visibility: formData.has("visibility") ? "public" : "private",
-    startsAt: formData.get("startsAt"),
-    autoCloseAt: formData.get("autoCloseAt"),
-    facebookUrl: formData.get("facebookUrl"),
-    songRequestsEnabled: formData.has("songRequestsEnabled"),
-    publicQueueEnabled: formData.has("publicQueueEnabled"),
-    publicShowSongTitles: formData.has("publicShowSongTitles"),
-    isActivePublicEvent: formData.has("isActivePublicEvent"),
-  });
-
-  if (!validation.success) {
-    return {
-      issues: validation.issues,
-      message: "Popraw szczegóły wydarzenia.",
-    };
-  }
-
-  const session = await requireOperatorSession();
-
-  try {
-    const result = await updateDashboardOrganizationEventDetailsForAuthUser({
-      authUserId: session.authUser.id,
-      organizationId,
-      eventId,
-      event: validation.data,
-    });
-    const path = getDashboardOrganizationEventPath(
-      result.organization.publicId,
-      result.event.id,
-    );
-
-    revalidateManagedEventPaths(result);
-    redirect(`${path}?eventAction=details-updated`);
-  } catch (error) {
-    return mapEventManagementActionError(error);
-  }
-}
-
-async function extendEvent(
-  organizationId: string,
-  eventId: number,
-  _state: EventManagementActionState,
-  formData: FormData,
-): Promise<EventManagementActionState> {
-  "use server";
-
-  const validation = validateExtendDashboardEventInput({
-    minutes: formData.get("minutes"),
-  });
-
-  if (!validation.success) {
-    return {
-      issues: validation.issues,
-      message: "Wybierz poprawny czas wydłużenia.",
-    };
-  }
-
-  const session = await requireOperatorSession();
-
-  try {
-    const result = await extendDashboardOrganizationEventForAuthUser({
-      authUserId: session.authUser.id,
-      organizationId,
-      eventId,
-      extension: validation.data,
-    });
-    const path = getDashboardOrganizationEventPath(
-      result.organization.publicId,
-      result.event.id,
-    );
-
-    revalidateManagedEventPaths(result);
-    redirect(`${path}?eventAction=extended`);
-  } catch (error) {
-    return mapEventManagementActionError(error);
-  }
-}
-
-async function closeEvent(
-  organizationId: string,
-  eventId: number,
-): Promise<EventManagementActionState> {
-  "use server";
-
-  const session = await requireOperatorSession();
-
-  try {
-    const result = await closeDashboardOrganizationEventForAuthUser({
-      authUserId: session.authUser.id,
-      organizationId,
-      eventId,
-    });
-    const path = getDashboardOrganizationEventPath(
-      result.organization.publicId,
-      result.event.id,
-    );
-
-    revalidateManagedEventPaths(result);
-    redirect(`${path}?eventAction=closed`);
-  } catch (error) {
-    return mapEventManagementActionError(error);
-  }
-}
-
-function revalidateManagedEventPaths(input: {
-  organization: { publicId: string };
-  event: { id: number; sessionCode: string; slug: string | null };
-}) {
-  const { event, organization } = input;
-
-  revalidatePath(getDashboardOrganizationEventsPath(organization.publicId));
-  revalidatePath(
-    getDashboardOrganizationEventPath(organization.publicId, event.id),
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
   );
-  revalidatePath(
-    getDashboardOrganizationEventQueuePath(organization.publicId, event.id),
-  );
-  revalidatePath(
-    getDashboardOrganizationEventSharePath(organization.publicId, event.id),
-  );
-  revalidatePath(`/session/${event.sessionCode}`);
-
-  if (event.slug) {
-    revalidatePath(`/events/${event.slug}`);
-  }
-}
-
-function mapEventManagementActionError(
-  error: unknown,
-): EventManagementActionState {
-  if (error instanceof OperatorApiError) {
-    if (error.status === 403) {
-      return {
-        ...emptyActionState,
-        message: "Nie masz uprawnień do zarządzania tym wydarzeniem.",
-      };
-    }
-
-    if (error.status === 404) {
-      return {
-        ...emptyActionState,
-        message: "Nie znaleziono wydarzenia albo organizacji.",
-      };
-    }
-
-    if (error.status === 409) {
-      if (error.code === "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS") {
-        return {
-          issues: [
-            {
-              field: "isActivePublicEvent",
-              message:
-                "Ta organizacja ma już aktywny publicznie event. Wyłącz go przed ustawieniem kolejnego.",
-            },
-          ],
-          message: "Nie można ustawić dwóch aktywnych publicznie eventów.",
-        };
-      }
-
-      if (error.code === "EVENT_SLUG_ALREADY_EXISTS") {
-        return {
-          issues: [
-            {
-              field: "slug",
-              message: "Ten slug jest już zajęty przez inne wydarzenie.",
-            },
-          ],
-          message: "Nie można opublikować wydarzenia z tym slugiem.",
-        };
-      }
-
-      return {
-        ...emptyActionState,
-        message:
-          "To wydarzenie jest już zamknięte albo anulowane. W MVP nie otwieramy go ponownie.",
-      };
-    }
-
-    if (error.status === 400) {
-      if (
-        error.code === "EVENT_PUBLICATION_SLUG_REQUIRED" ||
-        error.code === "EVENT_SLUG_INVALID"
-      ) {
-        return {
-          issues: [
-            {
-              field: "slug",
-              message:
-                "Podaj poprawny slug albo zostaw pole puste, aby wygenerować go z nazwy.",
-            },
-          ],
-          message: "Nie można opublikować wydarzenia bez poprawnego sluga.",
-        };
-      }
-
-      return {
-        ...emptyActionState,
-        message: "Sprawdź dane formularza.",
-      };
-    }
-  }
-
-  throw error;
 }
 
 function getLifecycleStatusBadgeVariant(status: string) {
@@ -523,51 +140,6 @@ function formatLifecycleStatus(status: string) {
   }
 }
 
-function getManageBlockedReason({
-  roleCanManage,
-  lifecycleStatus,
-}: {
-  roleCanManage: boolean;
-  lifecycleStatus: string;
-}) {
-  if (!roleCanManage) {
-    return "Twoja rola pozwala na podgląd wydarzenia, ale nie na zmianę czasu zamknięcia ani ręczne zamykanie.";
-  }
-
-  if (lifecycleStatus === "cancelled") {
-    return "Wydarzenie jest anulowane, więc w MVP nie pozwalamy zmieniać jego ustawień.";
-  }
-
-  if (lifecycleStatus === "closed") {
-    return "Wydarzenie jest zamknięte, więc w MVP nie otwieramy go ponownie przez zmianę czasu zamknięcia.";
-  }
-
-  return "Zarządzanie tym wydarzeniem jest obecnie niedostępne.";
-}
-
-function getActionMessage(value: string | string[] | undefined) {
-  const action = Array.isArray(value) ? value[0] : value;
-
-  switch (action as EventAction | undefined) {
-    case "details-updated":
-      return "Szczegóły wydarzenia zostały zapisane.";
-    case "extended":
-      return "Wydarzenie zostało wydłużone.";
-    case "closed":
-      return "Wydarzenie zostało zamknięte.";
-    default:
-      return null;
-  }
-}
-
 function formatDateTime(date: Date | null) {
-  if (!date) {
-    return "Brak terminu";
-  }
-
-  return formatWarsawDateTime(date);
-}
-
-function formatDateTimeLocalInput(date: Date | null) {
-  return formatWarsawDateTimeLocal(date);
+  return date ? formatWarsawDateTime(date) : "Brak terminu";
 }

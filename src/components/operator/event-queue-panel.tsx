@@ -78,7 +78,6 @@ import {
   runDashboardEventQueueAction,
   type DashboardEventQueueItemDto,
 } from "./event-queue-api";
-import styles from "./operator.module.css";
 import { useDashboardQueueRealtime } from "./use-dashboard-queue-realtime";
 
 const filterLabels: Record<DashboardEventQueueFilter, string> = {
@@ -352,7 +351,7 @@ export function EventQueuePanel({
           Zmiany są pobierane przez API po sygnale Supabase Realtime.
         </CardDescription>
         <CardAction>
-          <div className={styles.eventQueueLiveActions}>
+          <div className={"flex flex-wrap items-center justify-end gap-2"}>
             <Badge variant={liveStatus === "live" ? "default" : "secondary"}>
               {formatLiveStatus(liveStatus)}
             </Badge>
@@ -372,7 +371,7 @@ export function EventQueuePanel({
         </CardAction>
       </CardHeader>
 
-      <CardContent className={styles.eventQueueContent}>
+      <CardContent className={"grid gap-4"}>
         {!canManage ? (
           <Alert>
             <AlertTitle>Tryb tylko do odczytu</AlertTitle>
@@ -390,10 +389,10 @@ export function EventQueuePanel({
           </Alert>
         ) : null}
 
-        <section className={styles.eventQueueCurrent}>
+        <section className={"grid gap-3 border-y border-border py-4 [&_h3]:text-base [&_h3]:font-semibold"}>
           <div>
             <h3>Aktualnie śpiewane</h3>
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               Tylko jedno zgłoszenie może mieć ten status w wydarzeniu.
             </p>
           </div>
@@ -414,7 +413,7 @@ export function EventQueuePanel({
           )}
         </section>
 
-        <div className={styles.eventQueueFilters}>
+        <div className={"flex flex-wrap gap-2"}>
           <Select
             value={activeFilter}
             onValueChange={(value) =>
@@ -422,7 +421,7 @@ export function EventQueuePanel({
             }
           >
             <SelectTrigger
-              className={styles.eventQueueFilterSelect}
+              className={"w-full max-w-72"}
               aria-label="Filtr kolejki wydarzenia"
             >
               <SelectValue />
@@ -440,7 +439,7 @@ export function EventQueuePanel({
         </div>
 
         {filteredItems.length > 0 ? (
-          <div className={styles.requestList}>
+          <div className={"grid p-0"}>
             {filteredItems.map((item) => {
               const approvedIndex = approvedItems.findIndex(
                 (approvedItem) => approvedItem.id === item.id,
@@ -464,7 +463,7 @@ export function EventQueuePanel({
             })}
           </div>
         ) : (
-          <CardDescription className={styles.emptyPage}>
+          <CardDescription className={"px-4 py-16 text-center text-muted-foreground"}>
             <strong>Brak zgłoszeń</strong>
             <br />
             Nie ma jeszcze zgłoszeń z linku sesji.
@@ -508,23 +507,23 @@ function EventQueueRequestRow({
   );
 
   return (
-    <article className={styles.requestRow}>
-      <div className={styles.requestMain}>
-        <div className={styles.requestHeading}>
+    <article className={"grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 px-4 py-3 sm:grid-cols-[minmax(12rem,1fr)_auto] [&+&]:border-t [&+&]:border-border"}>
+      <div className={"min-w-0"}>
+        <div className={"flex flex-wrap items-center gap-2 [&_strong]:text-base"}>
           <strong>{item.displayName || item.singerName}</strong>
           <RequestStatusBadge status={item.status} />
           <Badge variant="outline">
             {item.requestedBy === "public" ? "Link sesji" : "Operator"}
           </Badge>
         </div>
-        <div className={styles.songHeading}>
-          <p className={styles.songTitle}>{item.song.title}</p>
+        <div className={"mt-2 flex flex-wrap items-center gap-2"}>
+          <p className={"m-0 text-sm font-semibold leading-snug"}>{item.song.title}</p>
         </div>
-        <p className={styles.songArtist}>{item.song.artist}</p>
-        {item.note ? <p className={styles.note}>Notatka: {item.note}</p> : null}
+        <p className={"mt-0.5 text-sm leading-snug text-muted-foreground"}>{item.song.artist}</p>
+        {item.note ? <p className={"mt-2 text-sm leading-relaxed text-muted-foreground"}>Notatka: {item.note}</p> : null}
       </div>
 
-      <div className={styles.requestMeta}>
+      <div className={"flex flex-row flex-wrap gap-1 text-xs text-muted-foreground sm:flex-col sm:items-end sm:whitespace-nowrap"}>
         <span>
           Pozycja: {item.status === "approved" ? item.position : "—"}
         </span>
@@ -533,7 +532,7 @@ function EventQueueRequestRow({
       </div>
 
       {canManage && (actions.length > 0 || item.status === "approved") ? (
-        <div className={styles.rowActions}>
+        <div className={"col-span-full flex flex-wrap gap-2"}>
           {item.status === "approved" ? (
             <>
               <Button

@@ -226,17 +226,21 @@ test("session rate limiting is bounded by scope", () => {
   );
 });
 
-test("organizer QR uses the canonical session URL without a generator", () => {
+test("organizer QR uses a responsive Tailwind layout without HTML injection", () => {
   const panel = readFileSync(
     "src/components/operator/event-session-access-panel.tsx",
     "utf8",
   );
-  assert.match(panel, /QRCode\.toCanvas\(canvas, sessionUrl/);
+  assert.match(panel, /createBrandedSessionQrSvg\(sessionUrl\)/);
   assert.match(panel, /Kopiuj kod/);
   assert.match(panel, /Kopiuj link/);
-  assert.match(panel, /Pobierz QR/);
+  assert.match(panel, /Pobierz QR \(SVG\)/);
   assert.doesNotMatch(panel, /useActionState/);
   assert.doesNotMatch(panel, /Regeneruj|Wygeneruj/);
+  assert.match(panel, /grid min-w-0 grid-cols-1/);
+  assert.match(panel, /aspect-square w-full min-w-0 max-w-sm/);
+  assert.match(panel, /className="block h-auto w-full max-w-full"/);
+  assert.doesNotMatch(panel, /dangerouslySetInnerHTML|operator\.module\.css/);
 });
 
 test("legacy manual link UI and endpoints are absent", () => {

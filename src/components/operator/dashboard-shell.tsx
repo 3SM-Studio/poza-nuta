@@ -18,6 +18,10 @@ import {
   OrganizerSidebar,
   type OrganizerSidebarOrganization,
 } from "./organizer-sidebar";
+import {
+  EventSidebarProvider,
+  useEventSidebarContext,
+} from "./event-sidebar-context";
 
 type DashboardShellProps = {
   children: ReactNode;
@@ -34,8 +38,33 @@ export function DashboardShell({
   email,
   canAccessAdmin,
 }: DashboardShellProps) {
+  return (
+    <EventSidebarProvider>
+      <DashboardShellContent
+        organizations={organizations}
+        operatorName={operatorName}
+        email={email}
+        canAccessAdmin={canAccessAdmin}
+      >
+        {children}
+      </DashboardShellContent>
+    </EventSidebarProvider>
+  );
+}
+
+function DashboardShellContent({
+  children,
+  organizations,
+  operatorName,
+  email,
+  canAccessAdmin,
+}: DashboardShellProps) {
   const pathname = usePathname();
+  const eventContext = useEventSidebarContext();
   const organizationId = getSelectedOrganizationId(pathname);
+  const eventId = getSelectedEventId(pathname);
+  const currentEvent =
+    eventContext && eventContext.eventId === eventId ? eventContext : null;
   const currentOrganization =
     organizations.find(
       (organization) => organization.organizationId === organizationId,
@@ -56,6 +85,11 @@ export function DashboardShell({
         <OrganizerSidebar
           pathname={pathname}
           organization={currentOrganization}
+          event={
+            eventId
+              ? { eventId, name: currentEvent?.name ?? "Wydarzenie" }
+              : null
+          }
           organizations={organizations}
           operatorName={operatorName}
           email={email}
@@ -68,6 +102,13 @@ export function DashboardShell({
       {children}
     </AppShell>
   );
+}
+
+function getSelectedEventId(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  return segments[3] === "events" && segments[4]
+    ? decodeURIComponent(segments[4])
+    : null;
 }
 
 export function getDashboardPageTitle(

@@ -12,7 +12,6 @@ import {
 import { resolveDashboardOrganizationAccess } from "@/lib/dashboard-organization-access";
 
 import { ArchiveOrganizationForm } from "../../../../../components/operator/archive-organization-form";
-import styles from "../../../../../components/operator/operator.module.css";
 import {
   archiveDashboardOrganizationForAuthUser,
   getDashboardOrganizationForAuthUser,
@@ -50,19 +49,19 @@ export default async function OrganizationSettingsPage({
   const canManageOrganization = access.organization.role === "owner";
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.organizationShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Ustawienia</h1>
-            <p className={styles.eventMeta}>{access.organization.name}</p>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>{access.organization.name}</p>
           </div>
           <Badge variant={access.organization.active ? "secondary" : "destructive"}>
             {access.organization.active ? "Aktywna" : "Nieaktywna"}
           </Badge>
         </header>
 
-        <div className={styles.organizationList}>
+        <div className={"grid min-w-0 gap-4"}>
           <Card>
             <CardHeader>
               <CardTitle>Dane organizacji</CardTitle>
@@ -72,14 +71,14 @@ export default async function OrganizationSettingsPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <dl className={styles.eventDetails}>
+              <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                 <div>
                   <dt>Nazwa</dt>
                   <dd>{access.organization.name}</dd>
                 </div>
                 <div>
                   <dt>ID organizacji</dt>
-                  <dd className={styles.breakValue}>
+                  <dd className={"min-w-0 break-all [overflow-wrap:anywhere]"}>
                     {access.organization.publicId}
                   </dd>
                 </div>
@@ -103,9 +102,9 @@ export default async function OrganizationSettingsPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form className={styles.settingsForm} action={updateName}>
+              <form className={"grid gap-4 [&_button]:justify-self-start"} action={updateName}>
                 <input type="hidden" name="organizationId" value={organizationId} />
-                <div className={styles.dashboardField}>
+                <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
                   <label htmlFor="organization-name">Nazwa organizacji</label>
                   <input
                     id="organization-name"
@@ -118,7 +117,7 @@ export default async function OrganizationSettingsPage({
                   />
                 </div>
                 <button
-                  className={`${styles.button} ${styles.primaryButton}`}
+                  className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"}`}
                   type="submit"
                   disabled={!canManageOrganization}
                 >

@@ -3,9 +3,12 @@
 import {
   Building2Icon,
   CalendarDaysIcon,
+  ChevronLeftIcon,
   LayoutDashboardIcon,
+  ListMusicIcon,
   LockKeyholeIcon,
   PlusIcon,
+  QrCodeIcon,
   SettingsIcon,
   UserRoundIcon,
   UsersIcon,
@@ -16,6 +19,10 @@ import type { AppNavigationGroup } from "@/components/app-shell/navigation";
 import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
+  getDashboardOrganizationEventPath,
+  getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventSettingsPath,
+  getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
@@ -37,9 +44,11 @@ export type OrganizerSidebarOrganization = {
 export function getOrganizerNavigationGroups({
   organizationId,
   accountRoute,
+  event,
 }: {
   organizationId: string | null;
   accountRoute: boolean;
+  event?: { eventId: string; name: string } | null;
 }): AppNavigationGroup[] {
   const panelGroup: AppNavigationGroup = {
     label: "Panel organizatora",
@@ -59,7 +68,7 @@ export function getOrganizerNavigationGroups({
   };
 
   if (organizationId) {
-    return [
+    const organizationGroups: AppNavigationGroup[] = [
       {
         label: "Organizacja",
         items: [
@@ -87,6 +96,57 @@ export function getOrganizerNavigationGroups({
         ],
       },
       panelGroup,
+    ];
+
+    if (!event) return organizationGroups;
+
+    return [
+      {
+        label: "Wydarzenie",
+        contextLabel: event.name,
+        items: [
+          {
+            href: getDashboardOrganizationEventPath(
+              organizationId,
+              event.eventId,
+            ),
+            label: "Szczegóły",
+            icon: CalendarDaysIcon,
+            exact: true,
+          },
+          {
+            href: getDashboardOrganizationEventQueuePath(
+              organizationId,
+              event.eventId,
+            ),
+            label: "Kolejka",
+            icon: ListMusicIcon,
+          },
+          {
+            href: getDashboardOrganizationEventSharePath(
+              organizationId,
+              event.eventId,
+            ),
+            label: "Link i QR",
+            icon: QrCodeIcon,
+          },
+          {
+            href: getDashboardOrganizationEventSettingsPath(
+              organizationId,
+              event.eventId,
+            ),
+            label: "Ustawienia",
+            icon: SettingsIcon,
+          },
+          {
+            href: getDashboardOrganizationEventsPath(organizationId),
+            label: "Powrót do wydarzeń",
+            icon: ChevronLeftIcon,
+            exact: true,
+          },
+        ],
+      },
+      ...organizationGroups,
     ];
   }
 
@@ -117,6 +177,7 @@ export function getOrganizerNavigationGroups({
 export function OrganizerSidebar({
   pathname,
   organization,
+  event,
   organizations,
   operatorName,
   email,
@@ -124,6 +185,7 @@ export function OrganizerSidebar({
 }: {
   pathname: string;
   organization: OrganizerSidebarOrganization | null;
+  event: { eventId: string; name: string } | null;
   organizations: DashboardOrganizationSwitcherItem[];
   operatorName: string;
   email: string | null;
@@ -132,6 +194,7 @@ export function OrganizerSidebar({
   const groups = getOrganizerNavigationGroups({
     organizationId: organization?.organizationId ?? null,
     accountRoute: pathname.startsWith("/account"),
+    event,
   });
 
   return (

@@ -34,7 +34,6 @@ import {
   updateDashboardEventSettings,
 } from "./api";
 import { CloseEventConfirmation } from "./close-event-confirmation";
-import styles from "./operator.module.css";
 
 export function DashboardEventSettings() {
   const router = useRouter();
@@ -177,27 +176,27 @@ export function DashboardEventSettings() {
 
   if (isLoading) {
     return (
-      <div className={styles.loadingScreen} role="status">
+      <div className={"px-4 py-16 text-center text-muted-foreground"} role="status">
         Ładowanie ustawień…
       </div>
     );
   }
 
   return (
-    <div className={styles.settingsShell}>
-      <header className={styles.pageHeader}>
+    <div className={"mx-auto w-full min-w-0 max-w-[58rem]"}>
+      <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
         <h1>Ustawienia eventu</h1>
       </header>
 
       {success ? (
-        <Alert className={styles.successMessage} role="status">
+        <Alert className={"mb-4"} role="status">
           <AlertTitle>Gotowe</AlertTitle>
           <AlertDescription>{success}</AlertDescription>
         </Alert>
       ) : null}
 
       {error ? (
-        <Alert className={styles.pageError} variant="destructive">
+        <Alert className={"mb-4"} variant="destructive">
           <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -205,7 +204,7 @@ export function DashboardEventSettings() {
 
       {event ? (
         <>
-          <Card className={styles.settingsCard}>
+          <Card className={"mb-4"}>
             <CardHeader>
               <CardTitle>Aktywny event</CardTitle>
               <CardAction>
@@ -213,7 +212,7 @@ export function DashboardEventSettings() {
               </CardAction>
             </CardHeader>
             <CardContent>
-              <dl className={styles.eventDetails}>
+              <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                 <div>
                   <dt>Start (czas polski)</dt>
                   <dd>{formatDateTime(event.startsAt)}</dd>
@@ -233,12 +232,12 @@ export function DashboardEventSettings() {
           </Card>
 
 
-          <Card className={styles.settingsCard}>
+          <Card className={"mb-4"}>
             <CardHeader>
               <CardTitle>Edycja ustawień</CardTitle>
             </CardHeader>
             <CardContent>
-              <form className={styles.settingsForm} onSubmit={handleSave}>
+              <form className={"grid gap-4 [&_button]:justify-self-start"} onSubmit={handleSave}>
                 <EventNameAndVenueFields
                   name={name}
                   venue={venue}
@@ -247,7 +246,7 @@ export function DashboardEventSettings() {
                   onVenueChange={setVenue}
                 />
 
-                <Label className={styles.checkboxField}>
+                <Label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                   <input
                     type="checkbox"
                     checked={songRequestsEnabled}
@@ -259,7 +258,7 @@ export function DashboardEventSettings() {
                   Publiczne zgłoszenia piosenek
                 </Label>
 
-                <Label className={styles.checkboxField}>
+                <Label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                   <input
                     type="checkbox"
                     checked={publicQueueEnabled}
@@ -271,7 +270,7 @@ export function DashboardEventSettings() {
                   Publiczny podgląd kolejki
                 </Label>
 
-                <Label className={styles.checkboxField}>
+                <Label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                   <input
                     type="checkbox"
                     checked={publicShowSongTitles}
@@ -290,11 +289,11 @@ export function DashboardEventSettings() {
             </CardContent>
           </Card>
 
-          <Card className={styles.settingsCard}>
+          <Card className={"mb-4"}>
             <CardHeader>
               <CardTitle>Lifecycle</CardTitle>
             </CardHeader>
-            <CardFooter className={styles.lifecycleActions}>
+            <CardFooter className={"flex flex-wrap gap-2"}>
               <Button
                 type="button"
                 onClick={() => void handleExtend(1)}
@@ -338,7 +337,7 @@ export function DashboardEventSettings() {
           />
         </>
       ) : (
-        <Card className={styles.settingsCard}>
+        <Card className={"mb-4"}>
           <CardHeader>
             <CardTitle>Uruchom nowy event</CardTitle>
             <CardDescription>
@@ -347,7 +346,7 @@ export function DashboardEventSettings() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className={styles.settingsForm} onSubmit={handleStart}>
+            <form className={"grid gap-4 [&_button]:justify-self-start"} onSubmit={handleStart}>
               <EventNameAndVenueFields
                 name={name}
                 venue={venue}
@@ -383,7 +382,7 @@ function EventNameAndVenueFields({
 }: EventNameAndVenueFieldsProps) {
   return (
     <>
-      <div className={styles.dashboardField}>
+      <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <Label htmlFor="event-name">Nazwa</Label>
         <Input
           id="event-name"
@@ -395,7 +394,7 @@ function EventNameAndVenueFields({
           required
         />
       </div>
-      <div className={styles.dashboardField}>
+      <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
         <Label htmlFor="event-venue">Lokal</Label>
         <Input
           id="event-venue"
