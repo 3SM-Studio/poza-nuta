@@ -9,15 +9,25 @@ import {
   type ImportAdminPageData,
 } from "@/server/platform-admin/import-admin-core";
 
-const refresh = vi.fn();
+const { refresh, toastSuccess, toastError } = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
 }));
 
+vi.mock("sonner", () => ({
+  toast: { success: toastSuccess, error: toastError },
+}));
+
 afterEach(() => {
   vi.useRealTimers();
   refresh.mockReset();
+  toastSuccess.mockReset();
+  toastError.mockReset();
 });
 
 describe("AdminImportsPanel", () => {
@@ -60,7 +70,11 @@ describe("AdminImportsPanel", () => {
     await act(async () => {
       resolveWrite?.({ kind: "success", message: "Dodano." });
     });
-    await waitFor(() => expect(screen.getByText("Dodano.")).toBeVisible());
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Gotowe", {
+        description: "Dodano.",
+      }),
+    );
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -87,7 +101,11 @@ describe("AdminImportsPanel", () => {
     );
 
     await waitFor(() => expect(cancelJob).toHaveBeenCalledWith(activeJob.id));
-    expect(await screen.findByText("Anulowanie zapisane.")).toBeVisible();
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Gotowe", {
+        description: "Anulowanie zapisane.",
+      }),
+    );
   });
 
   it("polls only while a job is active", async () => {

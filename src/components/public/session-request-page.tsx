@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
+import {
+  SessionStateAlert,
+  type SessionStateAlertKind,
+} from "@/components/public/session-state-alert";
 import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 import { getSessionCapabilityState } from "@/lib/session-capabilities";
 import {
@@ -25,9 +30,6 @@ import {
 } from "./validation";
 import { usePublicQueueRealtime } from "./use-public-queue-realtime";
 
-const REQUEST_SUCCESS_MESSAGE =
-  "Dodano zgłoszenie. Operator musi je zatwierdzić.";
-
 type SessionRequestFormErrors = Partial<
   Record<"songId" | "requesterName", string>
 >;
@@ -46,7 +48,8 @@ export function SessionRequestPage({
   const [isSearching, setIsSearching] = useState(false);
   const [requesterName, setRequesterName] = useState("");
   const [formErrors, setFormErrors] = useState<SessionRequestFormErrors>({});
-  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [submitAlert, setSubmitAlert] =
+    useState<SessionStateAlertKind | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [queue, setQueue] = useState<PublicQueueResponse | null>(null);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
@@ -111,7 +114,7 @@ export function SessionRequestPage({
 
     setIsSearching(true);
     setSearchMessage(null);
-    setSubmitMessage(null);
+    setSubmitAlert(null);
 
     try {
       const songs = await searchSessionSongs(code, query);
@@ -132,12 +135,12 @@ export function SessionRequestPage({
   function selectSong(song: PublicSong) {
     setSelectedSong(song);
     setFormErrors((current) => ({ ...current, songId: undefined }));
-    setSubmitMessage(null);
+    setSubmitAlert(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitMessage(null);
+    setSubmitAlert(null);
 
     const validation = validateSessionRequestForm({
       songId: selectedSong?.id ?? null,
@@ -158,12 +161,21 @@ export function SessionRequestPage({
       setSearchTerm("");
       setSearchResults([]);
       setRequesterName("");
-      setSubmitMessage(REQUEST_SUCCESS_MESSAGE);
+      toast.success("Dodano zgłoszenie", {
+        description: "Operator musi je zatwierdzić.",
+      });
       if (canViewPublicQueue) {
         await loadQueue();
       }
     } catch (caughtError) {
-      setSubmitMessage(getSubmitErrorMessage(caughtError));
+      const alertKind = getSubmitAlertKind(caughtError);
+      if (alertKind) {
+        setSubmitAlert(alertKind);
+      } else {
+        toast.error("Nie udało się dodać zgłoszenia", {
+          description: getSubmitErrorMessage(caughtError),
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -184,10 +196,7 @@ export function SessionRequestPage({
       {capabilities.allSessionFeaturesDisabled ? (
         <section className={styles.publicSection}>
           <h2>Sesja wydarzenia</h2>
-          <p className={styles.inlineMessage} role="status">
-            Zgłoszenia piosenek i publiczny podgląd kolejki są wyłączone dla
-            tej sesji.
-          </p>
+          <SessionStateAlert kind="queue_disabled" />
         </section>
       ) : null}
 
@@ -320,20 +329,7 @@ export function SessionRequestPage({
           </button>
         </form>
 
-        {submitMessage ? (
-          <div
-            className={
-              submitMessage === REQUEST_SUCCESS_MESSAGE
-                ? styles.successMessage
-                : styles.errorMessage
-            }
-            role={
-              submitMessage === REQUEST_SUCCESS_MESSAGE ? "status" : "alert"
-            }
-          >
-            {submitMessage}
-          </div>
-        ) : null}
+        {submitAlert ? <SessionStateAlert kind={submitAlert} /> : null}
       </section>
         </>
       ) : null}
@@ -471,6 +467,24 @@ function getSubmitErrorMessage(error: unknown) {
   }
 
   return "Nie udało się dodać zgłoszenia. Spróbuj ponownie.";
+}
+
+function getSubmitAlertKind(
+  error: unknown,
+): SessionStateAlertKind | null {
+  if (!(error instanceof SessionClientError)) return null;
+
+  if (error.status === 429 || error.code === "SESSION_RATE_LIMITED") {
+    return "rate_limited";
+  }
+
+  if (error.code === "SESSION_EVENT_NOT_STARTED") return "scheduled";
+  if (error.code === "SESSION_EVENT_CLOSED") return "closed";
+  if (error.code === "SESSION_PUBLIC_REQUESTS_DISABLED") {
+    return "queue_disabled";
+  }
+
+  return null;
 }
 
 function getQueueErrorMessage(error: unknown) {

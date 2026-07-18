@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import {
   Alert,
@@ -119,7 +120,7 @@ export function DashboardEventSettings() {
         publicShowSongTitles,
       });
       applyEventToForm(response.event);
-      setSuccess("Ustawienia eventu zostały zapisane.");
+      toast.success("Ustawienia wydarzenia zostały zapisane.");
     });
   }
 

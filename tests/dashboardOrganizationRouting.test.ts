@@ -1036,6 +1036,10 @@ test("canonical session views share one server-only origin helper", () => {
     "src/components/operator/event-session-access-panel.tsx",
     "utf8",
   );
+  const sessionAlertSource = readFileSync(
+    "src/components/public/session-state-alert.tsx",
+    "utf8",
+  );
 
   for (const source of [detailPageSource, sharePageSource]) {
     assert.match(source, /tryBuildCanonicalSiteUrl/);
@@ -1049,7 +1053,8 @@ test("canonical session views share one server-only origin helper", () => {
     helperSource,
     /headers\(\)|x-forwarded-host|request\.headers|host\.startsWith/,
   );
-  assert.match(panelSource, /Adres sesji jest chwilowo niedostępny/);
+  assert.match(panelSource, /kind="canonical_unavailable"/);
+  assert.match(sessionAlertSource, /Adres sesji jest chwilowo niedostępny/);
 });
 
 test("organization event management is limited to owner and manager roles", () => {

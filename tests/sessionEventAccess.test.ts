@@ -156,11 +156,17 @@ test("session API remains anonymous, code-scoped and rate limited", () => {
 
 test("session page provides neutral invalid state and canonical status copy", () => {
   const page = readFileSync("src/app/session/[code]/page.tsx", "utf8");
+  const alert = readFileSync(
+    "src/components/public/session-state-alert.tsx",
+    "utf8",
+  );
   assert.match(page, /consumeSessionRequestRateLimit/);
-  assert.match(page, /Sesja jeszcze się nie rozpoczęła/);
-  assert.match(page, /Sesja została zakończona/);
-  assert.match(page, /Nie udało się otworzyć sesji/);
-  assert.doesNotMatch(page, /wygasł/);
+  assert.match(page, /rate_limited/);
+  assert.match(page, /SessionStateAlert/);
+  assert.match(alert, /Sesja jeszcze się nie rozpoczęła/);
+  assert.match(alert, /Sesja została zakończona/);
+  assert.match(alert, /Nieprawidłowy kod sesji/);
+  assert.doesNotMatch(alert, /wygasł/);
 });
 
 test("session entry form normalizes paste and preserves a leading zero", () => {
@@ -168,6 +174,10 @@ test("session entry form normalizes paste and preserves a leading zero", () => {
   assert.match(form, /normalizeSessionCode\(code\)/);
   assert.match(form, /isCanonicalSessionCode\(normalized\)/);
   assert.match(form, /router\.push\(`\/session\/\$\{normalized\}`\)/);
+  assert.match(form, /REGEXP_ONLY_DIGITS/);
+  assert.match(form, /<InputOTP/);
+  assert.equal((form.match(/<InputOTPGroup>/g) ?? []).length, 2);
+  assert.match(form, /<InputOTPSeparator/);
   assert.match(form, /inputMode="numeric"/);
 });
 

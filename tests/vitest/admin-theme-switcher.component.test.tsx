@@ -10,6 +10,7 @@ import {
   AppThemeProvider,
 } from "@/components/theme-provider";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { Toaster } from "@/components/ui/sonner";
 
 describe("global application theme", () => {
   beforeEach(() => {
@@ -23,6 +24,13 @@ describe("global application theme", () => {
 
   it("does not read the selected theme during server rendering", () => {
     expect(() => renderToString(<ThemeSwitcher managementTheme />)).not.toThrow();
+    expect(() =>
+      renderToString(
+        <AppThemeProvider>
+          <Toaster />
+        </AppThemeProvider>,
+      ),
+    ).not.toThrow();
   });
 
   it("offers global dark, light and system choices", async () => {
@@ -96,9 +104,13 @@ describe("global application theme", () => {
     const siteHeader = readSource("src/components/app-shell/site-header.tsx");
 
     expect(rootLayout.match(/<AppThemeProvider>/g)).toHaveLength(1);
+    expect(rootLayout.match(/<Toaster\b/g)).toHaveLength(1);
     expect(adminLayout).not.toContain("ThemeProvider");
     expect(dashboardLayout).not.toContain("ThemeProvider");
     expect(accountLayout).not.toContain("ThemeProvider");
+    expect(adminLayout).not.toContain("Toaster");
+    expect(dashboardLayout).not.toContain("Toaster");
+    expect(accountLayout).not.toContain("Toaster");
     expect(provider).toContain('attribute="class"');
     expect(provider).toContain('defaultTheme="dark"');
     expect(provider).toContain("enableSystem");

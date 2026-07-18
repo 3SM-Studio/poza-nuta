@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   BanIcon,
-  CheckCircle2Icon,
   LoaderCircleIcon,
   PlayIcon,
   RefreshCwIcon,
@@ -49,7 +49,6 @@ export function AdminImportsPanel({
 }: AdminImportsPanelProps) {
   const router = useRouter();
   const [activeAction, setActiveAction] = useState<string | null>(null);
-  const [message, setMessage] = useState<ImportAdminActionResult | null>(null);
   const [writeConfirmationOpen, setWriteConfirmationOpen] = useState(false);
   const [cancelConfirmationJob, setCancelConfirmationJob] =
     useState<ImportJobViewModel | null>(null);
@@ -77,18 +76,20 @@ export function AdminImportsPanel({
     operation: () => Promise<ImportAdminActionResult>,
   ) {
     setActiveAction(key);
-    setMessage(null);
 
     try {
       const result = await operation();
-      setMessage(result);
+      if (result.kind === "error") {
+        toast.error("Operacja nieudana", { description: result.message });
+      } else {
+        toast.success("Gotowe", { description: result.message });
+      }
       if (key === "write") setWriteConfirmationOpen(false);
       if (key.startsWith("cancel:")) setCancelConfirmationJob(null);
       startRefreshTransition(() => router.refresh());
     } catch {
-      setMessage({
-        kind: "error",
-        message: "Nie udało się wykonać operacji. Spróbuj ponownie.",
+      toast.error("Operacja nieudana", {
+        description: "Nie udało się wykonać operacji. Spróbuj ponownie.",
       });
     } finally {
       setActiveAction(null);
@@ -96,7 +97,6 @@ export function AdminImportsPanel({
   }
 
   function refresh() {
-    setMessage(null);
     startRefreshTransition(() => router.refresh());
   }
 
@@ -169,22 +169,6 @@ export function AdminImportsPanel({
           Nowy import iSing będzie dostępny po zakończeniu aktywnego joba.
         </p>
       ) : null}
-
-      <div aria-live="polite" aria-atomic="true">
-        {message ? (
-          <Alert variant={message.kind === "error" ? "destructive" : "default"}>
-            {message.kind === "error" ? (
-              <BanIcon aria-hidden="true" />
-            ) : (
-              <CheckCircle2Icon aria-hidden="true" />
-            )}
-            <AlertTitle>
-              {message.kind === "error" ? "Operacja nieudana" : "Gotowe"}
-            </AlertTitle>
-            <AlertDescription>{message.message}</AlertDescription>
-          </Alert>
-        ) : null}
-      </div>
 
       <section aria-labelledby="recent-import-jobs" className="grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

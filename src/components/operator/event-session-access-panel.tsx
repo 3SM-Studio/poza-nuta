@@ -3,8 +3,9 @@
 import QRCode from "qrcode";
 import { Check, Copy, Download, QrCode } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SessionStateAlert } from "@/components/public/session-state-alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,11 +36,7 @@ export function EventSessionAccessPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Alert>
-            <AlertDescription>
-              Adres sesji jest chwilowo niedostępny.
-            </AlertDescription>
-          </Alert>
+          <SessionStateAlert kind="canonical_unavailable" />
         </CardContent>
       </Card>
     );
@@ -63,8 +60,7 @@ function AvailableEventSessionAccessPanel({
   sessionUrl: string;
   isClosed: boolean;
 }) {
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
-  const [qrMessage, setQrMessage] = useState<string | null>(null);
+  const [qrUnavailable, setQrUnavailable] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -72,7 +68,7 @@ function AvailableEventSessionAccessPanel({
     if (!canvas) return;
 
     let cancelled = false;
-    setQrMessage(null);
+    setQrUnavailable(false);
 
     QRCode.toCanvas(canvas, sessionUrl, {
       errorCorrectionLevel: "H",
@@ -80,7 +76,7 @@ function AvailableEventSessionAccessPanel({
       width: 360,
       color: { dark: "#050505", light: "#ffffff" },
     }).catch(() => {
-      if (!cancelled) setQrMessage("Nie udało się wygenerować kodu QR.");
+      if (!cancelled) setQrUnavailable(true);
     });
 
     return () => {
@@ -91,9 +87,11 @@ function AvailableEventSessionAccessPanel({
   async function copy(value: string, message: string) {
     try {
       await navigator.clipboard.writeText(value);
-      setCopyMessage(message);
+      toast.success(message);
     } catch {
-      setCopyMessage("Nie udało się skopiować automatycznie.");
+      toast.error("Nie udało się skopiować", {
+        description: "Skopiuj wartość ręcznie.",
+      });
     }
   }
 
@@ -105,7 +103,7 @@ function AvailableEventSessionAccessPanel({
     anchor.href = canvas.toDataURL("image/png");
     anchor.download = `poza-nuta-${sessionCode}.png`;
     anchor.click();
-    setQrMessage("Pobieranie QR rozpoczęte.");
+    toast.info("Pobieranie QR rozpoczęte.");
   }
 
   return (
@@ -118,12 +116,7 @@ function AvailableEventSessionAccessPanel({
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {isClosed ? (
-          <Alert>
-            <AlertDescription>
-              Sesja została zakończona. Kod pozostaje przypisany do wydarzenia,
-              ale nie pozwala dodawać zgłoszeń.
-            </AlertDescription>
-          </Alert>
+          <SessionStateAlert kind="closed" />
         ) : null}
 
         <div className={styles.shareGrid}>
@@ -151,11 +144,6 @@ function AvailableEventSessionAccessPanel({
                 Kopiuj link
               </Button>
             </div>
-            {copyMessage ? (
-              <p className={styles.eventMeta} role="status">
-                {copyMessage}
-              </p>
-            ) : null}
           </div>
 
           <div className={styles.formSection}>
@@ -175,11 +163,7 @@ function AvailableEventSessionAccessPanel({
               <Download aria-hidden="true" />
               Pobierz QR
             </Button>
-            {qrMessage ? (
-              <p className={styles.eventMeta} role="status">
-                {qrMessage}
-              </p>
-            ) : null}
+            {qrUnavailable ? <SessionStateAlert kind="qr_unavailable" /> : null}
           </div>
         </div>
       </CardContent>

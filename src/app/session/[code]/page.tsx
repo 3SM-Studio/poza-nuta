@@ -4,6 +4,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 
 import { SessionRequestPage } from "@/components/public/session-request-page";
+import { SessionStateAlert } from "@/components/public/session-state-alert";
 import type { SessionEvent } from "@/components/public/session-api";
 import styles from "@/components/public/public.module.css";
 import { resolveSessionEventAccess } from "@/server/session-api/service";
@@ -27,8 +28,11 @@ export default async function SessionPage({ params }: SessionPageProps) {
   const rateLimit = consumeSessionRequestRateLimit(await headers(), "page");
   const access = rateLimit.allowed
     ? await resolveSessionEventAccess(code)
-    : ({ status: "invalid" } as const);
-  const event = access.status === "invalid" ? null : access.event;
+    : ({ status: "rate_limited" } as const);
+  const event =
+    access.status === "invalid" || access.status === "rate_limited"
+      ? null
+      : access.event;
 
   return (
     <main className={styles.publicPage}>
@@ -60,25 +64,12 @@ export default async function SessionPage({ params }: SessionPageProps) {
         ) : (
           <section className={styles.publicSection}>
             <h2>Sesja karaoke</h2>
-            <div className={styles.errorMessage} role="alert">
-              {getSessionAccessMessage(access.status)}
-            </div>
+            <SessionStateAlert kind={access.status} />
           </section>
         )}
       </div>
     </main>
   );
-}
-
-function getSessionAccessMessage(status: ResolveStatus) {
-  switch (status) {
-    case "scheduled":
-      return "Sesja jeszcze się nie rozpoczęła.";
-    case "closed":
-      return "Sesja została zakończona.";
-    default:
-      return "Nie udało się otworzyć sesji. Sprawdź kod i spróbuj ponownie.";
-  }
 }
 
 function serializeSessionEvent(event: PublicSessionEvent): SessionEvent {
@@ -96,7 +87,3 @@ function serializeSessionEvent(event: PublicSessionEvent): SessionEvent {
     closedAt: event.closedAt?.toISOString() ?? null,
   };
 }
-
-type ResolveStatus = Awaited<
-  ReturnType<typeof resolveSessionEventAccess>
->["status"];

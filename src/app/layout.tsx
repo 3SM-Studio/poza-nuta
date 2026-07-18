@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { AppThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
 import "./(platform-admin)/admin/admin-theme.css";
@@ -19,7 +20,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="pl" suppressHydrationWarning>
       <body>
-        <AppThemeProvider>{children}</AppThemeProvider>
+        <AppThemeProvider>
+          {children}
+          <Toaster closeButton position="top-right" />
+        </AppThemeProvider>
       </body>
     </html>
   );
