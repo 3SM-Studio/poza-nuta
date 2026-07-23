@@ -21,7 +21,6 @@ export type PublicQueueItem = {
 };
 
 export type PublicQueueResponse = {
-  eventId: number;
   enabled: boolean;
   showSongTitles: boolean;
   items: PublicQueueItem[];

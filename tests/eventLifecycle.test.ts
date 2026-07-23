@@ -239,10 +239,10 @@ test("dashboard managed event extend uses max of now and auto_close_at", () => {
   assert.equal(
     calculateManagedEventExtendedAutoCloseAt({
       autoCloseAt: null,
-      minutes: 120,
+      minutes: 60,
       now,
     }).toISOString(),
-    "2026-07-05T20:00:00.000Z",
+    "2026-07-05T19:00:00.000Z",
   );
 });
 
@@ -304,18 +304,34 @@ test("dashboard managed event details reject auto_close_at before starts_at", ()
 test("dashboard managed event accepts only configured extension minutes", () => {
   assert.deepEqual(validateExtendDashboardEventInput({ minutes: "30" }), {
     success: true,
-    data: { minutes: 30 },
+    data: { minutes: 30, closesAt: null },
   });
   assert.deepEqual(validateExtendDashboardEventInput({ minutes: 60 }), {
     success: true,
-    data: { minutes: 60 },
+    data: { minutes: 60, closesAt: null },
   });
-  assert.deepEqual(validateExtendDashboardEventInput({ minutes: "120" }), {
+  assert.deepEqual(
+    validateExtendDashboardEventInput({
+      closesAt: "2026-07-05T20:00:00.000Z",
+    }),
+    {
     success: true,
-    data: { minutes: 120 },
-  });
+      data: {
+        minutes: null,
+        closesAt: new Date("2026-07-05T20:00:00.000Z"),
+      },
+    },
+  );
+  assert.equal(validateExtendDashboardEventInput({ minutes: "120" }).success, false);
   assert.equal(validateExtendDashboardEventInput({ minutes: "15" }).success, false);
   assert.equal(validateExtendDashboardEventInput({ minutes: 90 }).success, false);
+  assert.deepEqual(
+    validateExtendDashboardEventInput({ closesAt: "not-a-date" }),
+    {
+      success: false,
+      issues: [{ field: "closesAt", message: "closesAt must be a valid date." }],
+    },
+  );
 });
 
 test("closed and cancelled dashboard managed events block management", () => {

@@ -6,7 +6,7 @@ import {
   operatorValidationErrorResponse,
 } from "@/server/operator-api/responses";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateEventId } from "@/server/operator-api/validation";
+import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export async function GET(
   try {
     const session = await requireOperatorSession();
     const { organizationId, eventId: rawEventId } = await context.params;
-    const eventIdValidation = validateEventId(rawEventId);
+    const eventIdValidation = validateDashboardEventIdentifier(rawEventId);
 
     if (!eventIdValidation.success) {
       return operatorValidationErrorResponse(eventIdValidation.issues);

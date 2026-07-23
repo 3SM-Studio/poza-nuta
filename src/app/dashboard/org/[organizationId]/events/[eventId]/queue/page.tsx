@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { EventQueuePanel } from "@/components/operator/event-queue-panel";
 import { Badge } from "@/components/ui/badge";
@@ -14,10 +14,11 @@ import {
   getDashboardEventLifecycleStatus,
   type DashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
+import { getDashboardOrganizationEventQueuePath } from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { getDashboardOrganizationEventQueueForAuthUser } from "@/server/operator-api/event-queue";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateEventId } from "@/server/operator-api/validation";
+import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
   title: "Kolejka wydarzenia | Poza Nutą",
@@ -36,7 +37,7 @@ export default async function OrganizationEventQueuePage({
   params,
 }: OrganizationEventQueuePageProps) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateEventId(eventId);
+  const eventIdValidation = validateDashboardEventIdentifier(eventId);
 
   if (!eventIdValidation.success) {
     notFound();
@@ -51,6 +52,15 @@ export default async function OrganizationEventQueuePage({
 
   if (!result) {
     notFound();
+  }
+
+  if (eventId !== result.event.publicId) {
+    redirect(
+      getDashboardOrganizationEventQueuePath(
+        result.organization.publicId,
+        result.event.publicId,
+      ),
+    );
   }
 
   const lifecycleStatus = getDashboardEventLifecycleStatus(
@@ -122,7 +132,8 @@ export default async function OrganizationEventQueuePage({
 
           <EventQueuePanel
             organizationId={result.organization.publicId}
-            eventId={result.event.id}
+            eventId={result.event.publicId}
+            realtimeEventId={result.event.id}
             canManage={result.canManage}
             initialItems={result.items.map((item) => ({
               ...item,

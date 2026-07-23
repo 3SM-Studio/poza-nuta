@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,10 +14,11 @@ import {
   areDashboardEventRequestsOpen,
   getDashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
+import { getDashboardOrganizationEventPath } from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { getDashboardOrganizationEventSessionAccessForAuthUser } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateEventId } from "@/server/operator-api/validation";
+import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
   title: "Wydarzenie | Poza Nutą",
@@ -31,7 +32,7 @@ export default async function OrganizationEventDetailPage({
   params: Promise<{ organizationId: string; eventId: string }>;
 }) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateEventId(eventId);
+  const eventIdValidation = validateDashboardEventIdentifier(eventId);
   if (!eventIdValidation.success) notFound();
 
   const session = await requireOperatorSession();
@@ -41,6 +42,15 @@ export default async function OrganizationEventDetailPage({
     eventId: eventIdValidation.data,
   });
   if (!result) notFound();
+
+  if (eventId !== result.event.publicId) {
+    redirect(
+      getDashboardOrganizationEventPath(
+        result.organization.publicId,
+        result.event.publicId,
+      ),
+    );
+  }
 
   const lifecycleStatus = getDashboardEventLifecycleStatus(result.event);
   const requestsOpen = areDashboardEventRequestsOpen(result.event);

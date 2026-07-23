@@ -32,9 +32,12 @@ export function getDashboardQueueRealtimeTopic(eventId: number) {
   return `dashboard:event:${eventId}:queue`;
 }
 
-export function getPublicQueueRealtimeTopic(eventId: number) {
-  assertEventId(eventId);
-  return `public:event:${eventId}:queue`;
+export function getPublicQueueRealtimeTopic(publicToken: string) {
+  if (!/^[A-Za-z0-9_-]{22}$/.test(publicToken)) {
+    throw new Error("Public queue realtime token is invalid.");
+  }
+
+  return `public:session:${publicToken}:queue`;
 }
 
 export function isDashboardQueueChangedPayload(

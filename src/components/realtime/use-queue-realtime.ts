@@ -17,21 +17,21 @@ type QueueRealtimeAudience = "dashboard" | "public";
 
 export function useQueueRealtime({
   audience,
-  eventId,
+  identity,
   onInvalidate,
 }: {
   audience: QueueRealtimeAudience;
-  eventId: number | null | undefined;
+  identity: number | string | null | undefined;
   onInvalidate: (
     reason: QueueRealtimeInvalidateReason,
     signal: AbortSignal,
   ) => void | Promise<void>;
 }) {
   const [connection, setConnection] = useState<{
-    eventId: number | null;
+    identity: number | string | null;
     status: QueueRealtimeConnectionStatus;
   }>({
-    eventId: null,
+    identity: null,
     status: "connecting",
   });
   const onInvalidateRef = useRef(onInvalidate);
@@ -41,16 +41,16 @@ export function useQueueRealtime({
   }, [onInvalidate]);
 
   useEffect(() => {
-    if (!eventId) {
+    if (!identity) {
       return;
     }
 
-    const realtimeEventId = eventId;
+    const realtimeIdentity = identity;
     const supabase = createClient();
     const topic =
       audience === "dashboard"
-        ? getDashboardQueueRealtimeTopic(realtimeEventId)
-        : getPublicQueueRealtimeTopic(realtimeEventId);
+        ? getDashboardQueueRealtimeTopic(realtimeIdentity as number)
+        : getPublicQueueRealtimeTopic(realtimeIdentity as string);
     let active = true;
     let hasSubscribed = false;
     let refreshInFlight = false;
@@ -106,7 +106,7 @@ export function useQueueRealtime({
             audience === "dashboard"
               ? isDashboardQueueChangedPayload(
                   message.payload,
-                  realtimeEventId,
+                  realtimeIdentity as number,
                 )
               : isPublicQueueChangedPayload(message.payload);
 
@@ -121,7 +121,7 @@ export function useQueueRealtime({
 
           if (channelStatus === "SUBSCRIBED") {
             setConnection({
-              eventId: realtimeEventId,
+              identity: realtimeIdentity,
               status: "live",
             });
             invalidate(hasSubscribed ? "reconnect" : "subscribe");
@@ -135,7 +135,7 @@ export function useQueueRealtime({
             channelStatus === "CLOSED"
           ) {
             setConnection({
-              eventId: realtimeEventId,
+              identity: realtimeIdentity,
               status: "unavailable",
             });
           }
@@ -145,7 +145,7 @@ export function useQueueRealtime({
     void subscribe().catch(() => {
       if (active) {
         setConnection({
-          eventId: realtimeEventId,
+          identity: realtimeIdentity,
           status: "unavailable",
         });
       }
@@ -160,11 +160,11 @@ export function useQueueRealtime({
         void supabase.removeChannel(channel);
       }
     };
-  }, [audience, eventId]);
+  }, [audience, identity]);
 
-  if (!eventId) {
+  if (!identity) {
     return "unavailable";
   }
 
-  return connection.eventId === eventId ? connection.status : "connecting";
+  return connection.identity === identity ? connection.status : "connecting";
 }

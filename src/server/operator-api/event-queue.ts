@@ -20,6 +20,7 @@ import {
   workspaces,
 } from "../../db/schema";
 import { isOrganizationPublicId } from "../../lib/organization-public-id";
+import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier";
 import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
 import { getDb } from "../db";
 import {
@@ -80,7 +81,7 @@ export type DashboardEventQueueItem = ReturnType<
 export async function getDashboardOrganizationEventQueueForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
 }) {
   const result = await getDashboardOrganizationEventForAuthUser(input);
 
@@ -107,7 +108,7 @@ export async function getDashboardOrganizationEventQueueForAuthUser(input: {
 export async function applyDashboardOrganizationEventQueueActionForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
   requestId: number;
   action: DashboardEventQueueAction;
 }) {
@@ -257,7 +258,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
 export async function moveDashboardOrganizationEventQueueRequestForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
   requestId: number;
   direction: DashboardEventQueueMoveDirection;
 }) {
@@ -454,7 +455,7 @@ async function requireEventQueueManagerContext(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
-  eventId: number,
+  eventId: string | number,
 ) {
   if (!isOrganizationPublicId(organizationId)) {
     throw new OperatorApiError(
@@ -514,7 +515,10 @@ async function requireEventQueueManagerContext(
     })
     .from(events)
     .where(
-      and(eq(events.id, eventId), eq(events.workspaceId, organization.id)),
+      and(
+        getEventIdentifierCondition(eventId),
+        eq(events.workspaceId, organization.id),
+      ),
     )
     .for("update")
     .limit(1);
@@ -539,6 +543,15 @@ async function requireEventQueueManagerContext(
     organization,
     event,
   };
+}
+
+function getEventIdentifierCondition(eventId: string | number) {
+  const identifier = parseDashboardEventIdentifier(eventId);
+  if (!identifier) return sql`false`;
+
+  return identifier.kind === "public"
+    ? eq(events.publicId, identifier.value)
+    : eq(events.id, identifier.value);
 }
 
 async function requireDashboardEventQueueItem(

@@ -120,7 +120,8 @@ function renderPanel(
   return render(
     <EventQueuePanel
       organizationId="organization-test"
-      eventId={1}
+      eventId="123e4567-e89b-42d3-a456-426614174000"
+      realtimeEventId={1}
       canManage={canManage}
       initialItems={initialItems}
     />,

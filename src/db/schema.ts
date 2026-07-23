@@ -137,6 +137,7 @@ export const events = pgTable(
   "events",
   {
     id: idColumn(),
+    publicId: uuid("public_id").notNull().defaultRandom(),
     workspaceId: bigint("workspace_id", { mode: "number" })
       .notNull()
       .references(() => workspaces.id, { onDelete: "restrict" }),
@@ -169,6 +170,7 @@ export const events = pgTable(
     autoCloseAt: timestampColumn("auto_close_at"),
     endsAt: timestampColumn("ends_at").notNull(),
     closedAt: timestampColumn("closed_at"),
+    closeReason: text("close_reason"),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },
@@ -180,6 +182,7 @@ export const events = pgTable(
       .on(table.slug)
       .where(sql`${table.slug} is not null`),
     uniqueIndex("events_session_code_idx").on(table.sessionCode),
+    uniqueIndex("events_public_id_idx").on(table.publicId),
     index("events_public_catalog_idx")
       .on(table.visibility, table.publishedAt, table.status, table.startsAt)
       .where(
@@ -213,6 +216,11 @@ export const events = pgTable(
     check(
       "events_session_code_format_check",
       sql`${table.sessionCode} ~ '^[0-9]{8}$'`,
+    ),
+    check(
+      "events_close_reason_check",
+      sql`(${table.closedAt} is null and ${table.closeReason} is null)
+        or (${table.closedAt} is not null and ${table.closeReason} in ('manual', 'scheduled', 'automatic'))`,
     ),
   ],
 ).enableRLS();
@@ -313,6 +321,78 @@ export const operatorUsers = pgTable(
           and ${table.suspendedByOperatorId} is not null
         )
       )`,
+    ),
+  ],
+).enableRLS();
+
+export const eventSessions = pgTable(
+  "event_sessions",
+  {
+    id: idColumn(),
+    eventId: bigint("event_id", { mode: "number" })
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    publicToken: text("public_token").notNull(),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("event_sessions_event_id_idx").on(table.eventId),
+    uniqueIndex("event_sessions_public_token_idx").on(table.publicToken),
+    check(
+      "event_sessions_public_token_format_check",
+      sql`${table.publicToken} ~ '^[A-Za-z0-9_-]{22}$'`,
+    ),
+  ],
+).enableRLS();
+
+export const eventSessionCodes = pgTable(
+  "event_session_codes",
+  {
+    id: idColumn(),
+    sessionId: bigint("session_id", { mode: "number" })
+      .notNull()
+      .references(() => eventSessions.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    validFrom: timestampColumn("valid_from").notNull().defaultNow(),
+    validUntil: timestampColumn("valid_until"),
+    revokedAt: timestampColumn("revoked_at"),
+    releaseAfter: timestampColumn("release_after"),
+    createdByOperatorId: bigint("created_by_operator_id", { mode: "number" })
+      .references(() => operatorUsers.id, { onDelete: "set null" }),
+    revokedByOperatorId: bigint("revoked_by_operator_id", { mode: "number" })
+      .references(() => operatorUsers.id, { onDelete: "set null" }),
+    rotationReason: text("rotation_reason").notNull(),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("event_session_codes_code_idx").on(table.code),
+    uniqueIndex("event_session_codes_current_session_idx")
+      .on(table.sessionId)
+      .where(sql`${table.validUntil} is null and ${table.revokedAt} is null`),
+    index("event_session_codes_session_created_at_idx").on(
+      table.sessionId,
+      table.createdAt.desc(),
+    ),
+    index("event_session_codes_release_after_idx")
+      .on(table.releaseAfter)
+      .where(sql`${table.releaseAfter} is not null`),
+    check(
+      "event_session_codes_code_format_check",
+      sql`${table.code} ~ '^[0-9]{8}$'`,
+    ),
+    check(
+      "event_session_codes_chronology_check",
+      sql`(${table.revokedAt} is null and ${table.validUntil} is null)
+        or (${table.revokedAt} is not null and ${table.validUntil} = ${table.revokedAt} and ${table.revokedAt} >= ${table.validFrom})`,
+    ),
+    check(
+      "event_session_codes_revocation_check",
+      sql`(${table.revokedAt} is null and ${table.validUntil} is null and ${table.releaseAfter} is null and ${table.revokedByOperatorId} is null)
+        or (${table.revokedAt} is not null and ${table.validUntil} is not null and ${table.releaseAfter} is not null and ${table.releaseAfter} >= ${table.revokedAt} + interval '365 days')`,
+    ),
+    check(
+      "event_session_codes_rotation_reason_check",
+      sql`${table.rotationReason} in ('migration', 'initial', 'operator_rotation')`,
     ),
   ],
 ).enableRLS();

@@ -19,7 +19,11 @@ import {
   SESSION_CODE_LENGTH,
 } from "@/lib/session-code";
 
-export function SessionCodeForm() {
+export function SessionCodeForm({
+  destinationBasePath = "/join",
+}: {
+  destinationBasePath?: "/join";
+}) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -57,7 +61,7 @@ export function SessionCodeForm() {
     }
 
     setMessage(null);
-    router.push(`/session/${normalized}`);
+    router.push(`${destinationBasePath}/${normalized}`);
   }
 
   return (

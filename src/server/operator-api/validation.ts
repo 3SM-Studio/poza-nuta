@@ -4,6 +4,7 @@ import {
 } from "../../lib/warsaw-time.ts";
 import { isStrongSignupPassword } from "../../lib/signup-password.ts";
 import { formatEventSlug, isValidEventSlug } from "../../lib/event-slug.ts";
+import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier.ts";
 
 export const DEFAULT_OPERATOR_NAME = "Operator";
 export const MAX_OPERATOR_NAME_LENGTH = 120;
@@ -81,7 +82,11 @@ export type UpdateDashboardEventAutoCloseAtInput = {
 };
 
 export type ExtendDashboardEventInput = {
-  minutes: 30 | 60 | 120;
+  minutes: 20 | 30 | 60;
+  closesAt: null;
+} | {
+  minutes: null;
+  closesAt: Date;
 };
 
 export type ExtendEventInput = {
@@ -151,6 +156,19 @@ export function validateRequestId(value: string): ValidationResult<number> {
 
 export function validateEventId(value: string): ValidationResult<number> {
   return validatePositiveSafeInteger(value, "eventId");
+}
+
+export function validateDashboardEventIdentifier(
+  value: string,
+): ValidationResult<string> {
+  if (!parseDashboardEventIdentifier(value)) {
+    return {
+      success: false,
+      issues: [{ field: "eventId", message: "eventId is invalid." }],
+    };
+  }
+
+  return { success: true, data: value };
 }
 
 function validatePositiveSafeInteger(
@@ -594,16 +612,33 @@ export function validateExtendDashboardEventInput(
     return invalidBodyResult();
   }
 
+  const issues: ValidationIssue[] = [];
+  const requestedClosesAt = parseOptionalDateTimeInput(
+    input.closesAt,
+    "closesAt",
+    issues,
+  );
   const minutes =
     typeof input.minutes === "string" ? Number(input.minutes) : input.minutes;
 
-  if (minutes !== 30 && minutes !== 60 && minutes !== 120) {
+  if (requestedClosesAt) {
+    return {
+      success: true,
+      data: { minutes: null, closesAt: requestedClosesAt },
+    };
+  }
+
+  if (issues.length > 0) {
+    return { success: false, issues };
+  }
+
+  if (minutes !== 20 && minutes !== 30 && minutes !== 60) {
     return {
       success: false,
       issues: [
         {
           field: "minutes",
-          message: "minutes must be 30, 60 or 120.",
+          message: "minutes must be 20, 30 or 60, or closesAt must be set.",
         },
       ],
     };
@@ -611,7 +646,7 @@ export function validateExtendDashboardEventInput(
 
   return {
     success: true,
-    data: { minutes },
+    data: { minutes, closesAt: null },
   };
 }
 

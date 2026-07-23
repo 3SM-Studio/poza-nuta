@@ -119,7 +119,7 @@ export default async function OrganizationEventsPage({
                     <Link
                       href={getDashboardOrganizationEventPath(
                         result.organization.publicId,
-                        event.id,
+                        event.publicId,
                       )}
                     >
                       Otwórz

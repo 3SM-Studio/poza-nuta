@@ -106,7 +106,8 @@ const actionSuccessMessages: Record<DashboardEventQueueAction, string> = {
 
 type EventQueuePanelProps = {
   organizationId: string;
-  eventId: number;
+  eventId: string;
+  realtimeEventId: number;
   canManage: boolean;
   initialItems: DashboardEventQueueItemDto[];
 };
@@ -114,6 +115,7 @@ type EventQueuePanelProps = {
 export function EventQueuePanel({
   organizationId,
   eventId,
+  realtimeEventId,
   canManage,
   initialItems,
 }: EventQueuePanelProps) {
@@ -184,7 +186,7 @@ export function EventQueuePanel({
     [eventId, organizationId, router],
   );
   const liveStatus = useDashboardQueueRealtime(
-    eventId,
+    realtimeEventId,
     refreshFromRealtime,
   );
 

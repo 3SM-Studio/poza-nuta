@@ -4,10 +4,17 @@ import { and, eq, gt, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 
 import { events, operatorAuditLog, workspaces } from "../db/schema";
 import { calculateAutoCloseAt } from "../lib/event-lifecycle";
+import { isActivePublicEventUniqueViolation } from "../lib/dashboard-event-lifecycle";
+import { withEventSessionIdentityRetry } from "../lib/event-session-identity";
+import { isEventSessionIdentityUniqueViolation } from "../lib/event-session-identity-db-error";
 import { withSessionCodeCollisionRetry } from "../lib/session-code";
 import { isSessionCodeUniqueViolation } from "../lib/session-code-db-error";
 import { DEFAULT_WORKSPACE_HANDLE } from "../lib/workspace";
 import { getDb } from "./db";
+import {
+  insertEventSessionIdentity,
+  publishEventSessionInvalidation,
+} from "./event-session-identity-store";
 import { OperatorApiError } from "./operator-api/errors";
 import type {
   EventSettingsInput,
@@ -24,6 +31,7 @@ const activeEventFilter = (workspaceId: number) =>
 
 export const activeEventSelection = {
   id: events.id,
+  publicId: events.publicId,
   workspaceId: events.workspaceId,
   name: events.name,
   venue: events.venue,
@@ -37,6 +45,7 @@ export const activeEventSelection = {
   autoCloseAt: events.autoCloseAt,
   endsAt: events.endsAt,
   closedAt: events.closedAt,
+  closeReason: events.closeReason,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
 };
@@ -96,6 +105,7 @@ export async function closeExpiredActiveEventInTransaction(
       status: "closed",
       isActivePublicEvent: false,
       closedAt: now,
+      closeReason: "automatic",
       updatedAt: now,
     })
     .where(
@@ -125,6 +135,8 @@ export async function closeExpiredActiveEventInTransaction(
       closedAt: now.toISOString(),
     },
   });
+
+  await publishEventSessionInvalidation(transaction, closedEvent.id);
 
   return closedEvent;
 }
@@ -182,6 +194,8 @@ export async function updateActiveEventSettings(
       },
     });
 
+    await publishEventSessionInvalidation(transaction, event.id);
+
     return updatedEvent;
   });
 }
@@ -229,6 +243,8 @@ export async function extendActiveEvent(
       },
     });
 
+    await publishEventSessionInvalidation(transaction, event.id);
+
     return updatedEvent;
   });
 }
@@ -251,6 +267,7 @@ export async function closeActiveEvent(operatorId: number) {
         status: "closed",
         isActivePublicEvent: false,
         closedAt: now,
+        closeReason: "manual",
         updatedAt: now,
       })
       .where(eq(events.id, event.id))
@@ -267,6 +284,8 @@ export async function closeActiveEvent(operatorId: number) {
       },
     });
 
+    await publishEventSessionInvalidation(transaction, event.id);
+
     return closedEvent;
   });
 }
@@ -275,8 +294,11 @@ export async function startEvent(
   input: StartEventInput,
   operatorId: number,
 ) {
-  return withSessionCodeCollisionRetry(
-    (sessionCode) => getDb().transaction(async (transaction) => {
+  return mapActivePublicEventUniqueViolation(() =>
+    withEventSessionIdentityRetry(
+      (identity) =>
+        withSessionCodeCollisionRetry(
+          (sessionCode) => getDb().transaction(async (transaction) => {
     await acquireEventLifecycleLock(transaction);
     const now = new Date();
     const workspaceId = await requireDefaultWorkspaceIdInTransaction(
@@ -293,7 +315,7 @@ export async function startEvent(
     if (activeEvent) {
       throw new OperatorApiError(
         409,
-        "ACTIVE_EVENT_ALREADY_EXISTS",
+        "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
         "An active public event already exists.",
       );
     }
@@ -303,6 +325,7 @@ export async function startEvent(
       .insert(events)
       .values({
         workspaceId,
+        publicId: identity.eventPublicId,
         sessionCode,
         name: input.name,
         venue: input.venue,
@@ -317,6 +340,14 @@ export async function startEvent(
       })
       .returning(activeEventSelection);
 
+    await insertEventSessionIdentity(transaction, {
+      eventId: createdEvent.id,
+      publicToken: identity.publicToken,
+      sessionCode,
+      createdByOperatorId: operatorId,
+      createdAt: createdEvent.createdAt,
+    });
+
     await transaction.insert(operatorAuditLog).values({
       actorKind: "operator",
       operatorId,
@@ -329,10 +360,31 @@ export async function startEvent(
       },
     });
 
-    return createdEvent;
-    }),
-    isSessionCodeUniqueViolation,
+          return createdEvent;
+          }),
+          isSessionCodeUniqueViolation,
+        ),
+      isEventSessionIdentityUniqueViolation,
+    ),
   );
+}
+
+async function mapActivePublicEventUniqueViolation<T>(
+  action: () => Promise<T>,
+) {
+  try {
+    return await action();
+  } catch (error) {
+    if (isActivePublicEventUniqueViolation(error)) {
+      throw new OperatorApiError(
+        409,
+        "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
+        "An active public event already exists.",
+      );
+    }
+
+    throw error;
+  }
 }
 
 async function requireActiveEventForUpdate(

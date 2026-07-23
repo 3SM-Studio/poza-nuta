@@ -27,7 +27,7 @@ describe("SessionCodeForm", () => {
     expect(push).not.toHaveBeenCalled();
 
     fireEvent.click(submit);
-    expect(push).toHaveBeenCalledWith("/session/01234567");
+    expect(push).toHaveBeenCalledWith("/join/01234567");
   });
 
   it("rejects letters and accepts a complete pasted code", () => {
@@ -57,6 +57,6 @@ describe("SessionCodeForm", () => {
     fireEvent.change(input, { target: { value: "12345678" } });
     expect(input).toHaveAttribute("aria-invalid", "false");
     fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
-    expect(push).toHaveBeenCalledWith("/session/12345678");
+    expect(push).toHaveBeenCalledWith("/join/12345678");
   });
 });

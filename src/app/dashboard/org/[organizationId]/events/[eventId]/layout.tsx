@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { EventSidebarBridge } from "@/components/operator/event-sidebar-context";
 import { getDashboardOrganizationEventForAuthUser } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateEventId } from "@/server/operator-api/validation";
+import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export default async function DashboardEventLayout({
   children,
@@ -14,7 +14,7 @@ export default async function DashboardEventLayout({
   params: Promise<{ organizationId: string; eventId: string }>;
 }) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateEventId(eventId);
+  const eventIdValidation = validateDashboardEventIdentifier(eventId);
   if (!eventIdValidation.success) notFound();
 
   const session = await requireOperatorSession();
@@ -27,7 +27,7 @@ export default async function DashboardEventLayout({
 
   return (
     <EventSidebarBridge
-      event={{ eventId: String(result.event.id), name: result.event.name }}
+      event={{ eventId: result.event.publicId, name: result.event.name }}
     >
       {children}
     </EventSidebarBridge>

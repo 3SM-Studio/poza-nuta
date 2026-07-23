@@ -1,7 +1,6 @@
 import type { PublicQueueResponse, PublicSong } from "./api";
 
 export type SessionEvent = {
-  id: number;
   name: string;
   venue: string | null;
   startsAt: string;
@@ -33,38 +32,39 @@ export class SessionClientError extends Error {
   }
 }
 
-export async function getSessionEvent(code: string) {
-  const response = await requestJson<{ event: SessionEvent }>(
-    `/api/session/${encodeURIComponent(code)}/event`,
+export async function getSessionEvent(publicToken: string) {
+  return requestJson<{
+    accessStatus: "scheduled" | "active" | "closed";
+    event: SessionEvent;
+  }>(
+    `/api/s/${encodeURIComponent(publicToken)}/event`,
   );
-
-  return response.event;
 }
 
-export async function searchSessionSongs(code: string, query: string) {
+export async function searchSessionSongs(publicToken: string, query: string) {
   const response = await requestJson<{ items: PublicSong[] }>(
-    `/api/session/${encodeURIComponent(code)}/songs/search?q=${encodeURIComponent(query)}`,
+    `/api/s/${encodeURIComponent(publicToken)}/songs/search?q=${encodeURIComponent(query)}`,
   );
 
   return response.items;
 }
 
 export function createSessionRequest(
-  code: string,
+  publicToken: string,
   input: {
     songId: number;
     requesterName: string;
   },
 ) {
-  return requestJson(`/api/session/${encodeURIComponent(code)}/requests`, {
+  return requestJson(`/api/s/${encodeURIComponent(publicToken)}/requests`, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
-export function getSessionQueue(code: string, signal?: AbortSignal) {
+export function getSessionQueue(publicToken: string, signal?: AbortSignal) {
   return requestJson<PublicQueueResponse>(
-    `/api/session/${encodeURIComponent(code)}/queue`,
+    `/api/s/${encodeURIComponent(publicToken)}/queue`,
     { signal },
   );
 }
@@ -99,11 +99,11 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
 }
 
 function toSameOriginSessionApiPath(path: string) {
-  if (!path.startsWith("/api/session/")) {
+  if (!path.startsWith("/api/s/")) {
     throw new SessionClientError(
       0,
       "INVALID_API_PATH",
-      "Session API requests must use same-origin /api/session paths.",
+      "Session API requests must use same-origin canonical paths.",
     );
   }
 

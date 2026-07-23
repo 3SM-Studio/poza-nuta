@@ -23,10 +23,11 @@ const snapshot20 = JSON.parse(
 ) as Record<string, unknown>;
 
 test("migration 0020 is the next journal entry", () => {
-  assert.deepEqual(journal.entries.at(-1), {
+  const entry = journal.entries.find(({ idx }) => idx === 20);
+  assert.deepEqual(entry, {
     idx: 20,
     version: "7",
-    when: journal.entries.at(-1)?.when,
+    when: entry?.when,
     tag: "0020_canonical_session_access",
     breakpoints: true,
   });

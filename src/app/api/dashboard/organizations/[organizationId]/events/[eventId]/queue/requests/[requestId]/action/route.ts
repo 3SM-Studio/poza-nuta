@@ -12,7 +12,7 @@ import {
 } from "@/server/operator-api/responses";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 import {
-  validateEventId,
+  validateDashboardEventIdentifier,
   validateRequestId,
 } from "@/server/operator-api/validation";
 
@@ -36,7 +36,7 @@ export async function POST(
       eventId: rawEventId,
       requestId: rawRequestId,
     } = await context.params;
-    const eventIdValidation = validateEventId(rawEventId);
+    const eventIdValidation = validateDashboardEventIdentifier(rawEventId);
     const requestIdValidation = validateRequestId(rawRequestId);
 
     if (!eventIdValidation.success) {

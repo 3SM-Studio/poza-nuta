@@ -14,7 +14,7 @@ import {
   toStandaloneSessionQrSvg,
 } from "@/lib/branded-session-qr";
 
-const SESSION_URL = "http://localhost:3000/session/01234567";
+const SESSION_URL = "http://localhost:3000/s/AbCdEfGhIjKlMnOpQrStUv";
 const BRAND_ASSET = readFileSync(
   resolve(process.cwd(), "public/brand/poza_nuta_logo-white.svg"),
   "utf8",
@@ -71,7 +71,10 @@ describe("branded session QR", () => {
     expect(rootTag).toBeTruthy();
     expect(rootTag).toContain('width="1024"');
     expect(rootTag).toContain('height="1024"');
-    expect(rootTag).toContain('viewBox="0 0 45 45"');
+    const totalSize = QRCode.create(SESSION_URL, {
+      errorCorrectionLevel: "H",
+    }).modules.size + 8;
+    expect(rootTag).toContain(`viewBox="0 0 ${totalSize} ${totalSize}"`);
   });
 
   it("removes every dark module from the grid-aligned logo zone", async () => {
@@ -133,8 +136,12 @@ describe("branded session QR", () => {
     expect(generatedPath?.hasAttribute("stroke")).toBe(false);
     expect(generatedPath?.getAttribute("fill")).not.toBe("none");
     expect(transformParts).toBeTruthy();
-    expect(Number(transformParts?.[1])).toBe(18.16811881);
-    expect(Number(transformParts?.[2])).toBe(18.53895018);
+    const totalSize = QRCode.create(SESSION_URL, {
+      errorCorrectionLevel: "H",
+    }).modules.size + 8;
+    const referenceOffset = (totalSize - 45) / 2;
+    expect(Number(transformParts?.[1])).toBe(referenceOffset + 18.16811881);
+    expect(Number(transformParts?.[2])).toBe(referenceOffset + 18.53895018);
     expect(Number(transformParts?.[3])).toBe(0.008128652185);
     expect(Number(transformParts?.[3]) * 1024).toBeCloseTo(8.32373983744);
     expect((Number(transformParts?.[3]) * 1024) / 45).toBeCloseTo(0.185);

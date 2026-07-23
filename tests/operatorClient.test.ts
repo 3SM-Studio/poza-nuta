@@ -177,8 +177,11 @@ test("dashboard queue realtime helpers scope messages to an event topic", () => 
 });
 
 test("public queue realtime helpers expose invalidation only", () => {
-  assert.equal(getPublicQueueRealtimeTopic(42), "public:event:42:queue");
-  assert.throws(() => getPublicQueueRealtimeTopic(-1));
+  assert.equal(
+    getPublicQueueRealtimeTopic("AbCdEfGhIjKlMnOpQrStUv"),
+    "public:session:AbCdEfGhIjKlMnOpQrStUv:queue",
+  );
+  assert.throws(() => getPublicQueueRealtimeTopic("invalid"));
   assert.equal(
     isPublicQueueChangedPayload({
       type: "queue_changed",

@@ -41,6 +41,7 @@ import { sanitizeAuthIdentities } from "../src/server/operator-api/account.ts";
 
 const exampleOrganizationId = "kgbgnpwpbcaebdytjmbx";
 const otherOrganizationId = "aaaaaaaaaaaaaaaaaaaa";
+const exampleEventPublicId = "123e4567-e89b-42d3-a456-426614174000";
 
 test("organization public IDs use twenty lowercase alphanumeric characters", () => {
   const publicId = generateOrganizationPublicId();
@@ -67,20 +68,20 @@ test("organization route helpers encode organizationId values", () => {
     `/dashboard/org/${exampleOrganizationId}/events/new`,
   );
   assert.equal(
-    getDashboardOrganizationEventPath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42`,
+    getDashboardOrganizationEventPath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}`,
   );
   assert.equal(
-    getDashboardOrganizationEventQueuePath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42/queue`,
+    getDashboardOrganizationEventQueuePath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/queue`,
   );
   assert.equal(
-    getDashboardOrganizationEventSharePath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42/share`,
+    getDashboardOrganizationEventSharePath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/share`,
   );
   assert.equal(
-    getDashboardOrganizationEventSettingsPath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42/settings`,
+    getDashboardOrganizationEventSettingsPath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/settings`,
   );
   assert.equal(
     getDashboardOrganizationSettingsPath(exampleOrganizationId),
@@ -1127,7 +1128,7 @@ test("organization event management updates auto_close_at and closes without del
   assert.match(manageSource, /status: "closed"/);
   assert.match(manageSource, /closedAt: now/);
   assert.match(manageSource, /isActivePublicEvent: false/);
-  assert.match(manageSource, /calculateDashboardEventExtendedAutoCloseAt/);
+  assert.match(manageSource, /resolveDashboardEventCloseAt/);
   assert.equal(manageSource.includes(".delete("), false);
   assert.equal(manageSource.includes("ends_at"), false);
 });
@@ -1157,12 +1158,13 @@ test("event management revalidates every lifecycle-dependent view", () => {
     settingsPageSource,
     /revalidatePath\([\s\S]*getDashboardOrganizationEventSharePath\(/,
   );
-  assert.match(settingsPageSource, /revalidatePath\(`\/session\/\$\{event\.sessionCode\}`\)/);
+  assert.match(settingsPageSource, /revalidatePath\(`\/join\/\$\{event\.sessionCode\}`\)/);
+  assert.match(settingsPageSource, /revalidatePath\("\/s\/\[token\]", "page"\)/);
   assert.match(settingsPageSource, /revalidatePath\(`\/events\/\$\{event\.slug\}`\)/);
   assert.equal(
     (settingsPageSource.match(/revalidateManagedEventPaths\(result\)/g) ?? [])
       .length,
-    3,
+    5,
   );
 });
 
@@ -1211,8 +1213,8 @@ test("organization event share route renders canonical code and QR controls", ()
 
   assert.equal(existsSync(sharePagePath), true);
   assert.equal(
-    getDashboardOrganizationEventSharePath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42/share`,
+    getDashboardOrganizationEventSharePath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/share`,
   );
   assert.match(sharePageSource, /Udostępnij wydarzenie/);
   assert.match(sharePageSource, /getDashboardOrganizationEventSessionAccessForAuthUser/);
@@ -1220,6 +1222,7 @@ test("organization event share route renders canonical code and QR controls", ()
   assert.doesNotMatch(sharePageSource, /generateDashboardOrganizationEventShareLinkForAuthUser/);
   assert.match(sharePageSource, /notFound\(\)/);
   assert.match(sharePageSource, /result\.event\.sessionCode/);
+  assert.match(sharePageSource, /`\/s\/\$\{result\.event\.publicToken\}`/);
   const sidebarSource = readFileSync(
     "src/components/operator/organizer-sidebar.tsx",
     "utf8",

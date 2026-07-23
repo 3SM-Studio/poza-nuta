@@ -123,20 +123,46 @@ test("session request validation requires and trims a nickname", () => {
   );
 });
 
-test("session resolver reads the canonical event code and locks writes", () => {
+test("session resolver uses one token/code identity service and locks writes", () => {
   const source = readFileSync("src/server/session-api/service.ts", "utf8");
   const transactionLookup = source.slice(
-    source.indexOf("async function findSessionEventByCodeInTransaction"),
+    source.indexOf("async function findSessionEventInTransaction"),
     source.indexOf("function toPublicSessionEvent"),
   );
 
-  assert.match(source, /eq\(events\.sessionCode, code\)/);
+  assert.match(source, /eq\(eventSessions\.publicToken, lookup\.value\)/);
+  assert.match(source, /eq\(eventSessionCodes\.code, lookup\.value\)/);
+  assert.match(source, /canResolveEventJoinCode/);
   assert.doesNotMatch(source, /hashEventAccessCode/);
   assert.doesNotMatch(source, /from\(eventAccessLinks\)/);
-  assert.match(transactionLookup, /\.from\(events\)/);
+  assert.match(transactionLookup, /\.from\(eventSessions\)/);
   assert.match(transactionLookup, /\.for\("update"\)/);
   assert.match(source, /SESSION_EVENT_CLOSED/);
   assert.match(source, /SESSION_EVENT_NOT_STARTED/);
+});
+
+test("public session DTOs exclude internal relational identifiers", () => {
+  const service = readFileSync("src/server/session-api/service.ts", "utf8");
+  const publicEventType = service.slice(
+    service.indexOf("export type PublicSessionEvent"),
+    service.indexOf("export async function resolveSessionEventAccess"),
+  );
+  const publicEventMapper = service.slice(
+    service.indexOf("function toPublicSessionEvent"),
+    service.indexOf("function escapeLikePattern"),
+  );
+  const requestWriter = service.slice(
+    service.indexOf("async function createRequestForLookup"),
+    service.indexOf("async function requireLiveSession"),
+  );
+
+  assert.doesNotMatch(publicEventType, /\bid:\s*number/);
+  assert.doesNotMatch(publicEventMapper, /\bid:\s*event\.id/);
+  assert.doesNotMatch(
+    requestWriter,
+    /\beventId:\s*songRequests\.eventId|\bsongId:\s*songRequests\.songId/,
+  );
+  assert.match(requestWriter, /status:\s*songRequests\.status/);
 });
 
 test("session request duplicate protection is serialized by the event lock", () => {
@@ -148,7 +174,7 @@ test("session request duplicate protection is serialized by the event lock", () 
 
   assert.match(
     createRequest,
-    /requireSongRequestSessionInTransaction\(\s*transaction,\s*code/,
+    /requireSongRequestSessionInTransaction\(\s*transaction,\s*lookup/,
   );
   assert.match(createRequest, /eq\(songRequests\.songId, song\.id\)/);
   assert.match(
@@ -166,12 +192,16 @@ test("session request duplicate protection is serialized by the event lock", () 
   );
 });
 
-test("session API remains anonymous, code-scoped and rate limited", () => {
+test("session API remains anonymous, identity-scoped and rate limited", () => {
   const routes = [
     "src/app/api/session/[code]/event/route.ts",
     "src/app/api/session/[code]/songs/search/route.ts",
     "src/app/api/session/[code]/requests/route.ts",
     "src/app/api/session/[code]/queue/route.ts",
+    "src/app/api/s/[token]/event/route.ts",
+    "src/app/api/s/[token]/songs/search/route.ts",
+    "src/app/api/s/[token]/requests/route.ts",
+    "src/app/api/s/[token]/queue/route.ts",
   ];
 
   for (const route of routes) {
@@ -181,8 +211,12 @@ test("session API remains anonymous, code-scoped and rate limited", () => {
   }
 });
 
-test("session page provides neutral invalid state and canonical status copy", () => {
-  const page = readFileSync("src/app/session/[code]/page.tsx", "utf8");
+test("canonical session page and code resolver provide safe states", () => {
+  const page = readFileSync("src/app/s/[token]/page.tsx", "utf8");
+  const resolver = readFileSync(
+    "src/server/session-api/code-resolver-response.ts",
+    "utf8",
+  );
   const alert = readFileSync(
     "src/components/public/session-state-alert.tsx",
     "utf8",
@@ -190,6 +224,9 @@ test("session page provides neutral invalid state and canonical status copy", ()
   assert.match(page, /consumeSessionRequestRateLimit/);
   assert.match(page, /rate_limited/);
   assert.match(page, /SessionStateAlert/);
+  assert.match(page, /notFound\(\)/);
+  assert.match(resolver, /status: 307/);
+  assert.match(resolver, /no-store/);
   assert.match(alert, /Sesja jeszcze się nie rozpoczęła/);
   assert.match(alert, /Sesja została zakończona/);
   assert.match(alert, /Nieprawidłowy kod sesji/);
@@ -200,7 +237,8 @@ test("session entry form normalizes paste and preserves a leading zero", () => {
   const form = readFileSync("src/components/public/session-code-form.tsx", "utf8");
   assert.match(form, /normalizeSessionCode\(code\)/);
   assert.match(form, /isCanonicalSessionCode\(normalized\)/);
-  assert.match(form, /router\.push\(`\/session\/\$\{normalized\}`\)/);
+  assert.match(form, /router\.push\(`\$\{destinationBasePath\}\/\$\{normalized\}`\)/);
+  assert.match(form, /destinationBasePath = "\/join"/);
   assert.match(form, /REGEXP_ONLY_DIGITS/);
   assert.match(form, /<InputOTP/);
   assert.equal((form.match(/<InputOTPGroup>/g) ?? []).length, 2);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -22,6 +23,7 @@ import type { PublicQueueResponse, PublicSong } from "./api";
 import styles from "./public.module.css";
 import {
   createSessionRequest,
+  getSessionEvent,
   getSessionQueue,
   searchSessionSongs,
   SessionClientError,
@@ -45,12 +47,13 @@ type SubmittedRequestSummary = {
 };
 
 export function SessionRequestPage({
-  code,
+  sessionToken,
   event,
 }: {
-  code: string;
+  sessionToken: string;
   event: SessionEvent;
 }) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PublicSong[]>([]);
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
@@ -77,7 +80,7 @@ export function SessionRequestPage({
       }
 
       try {
-        const response = await getSessionQueue(code, signal);
+        const response = await getSessionQueue(sessionToken, signal);
 
         setQueue(response);
         setQueueMessage(null);
@@ -89,11 +92,24 @@ export function SessionRequestPage({
         setQueueMessage(getQueueErrorMessage(caughtError));
       }
     },
-    [canViewPublicQueue, code],
+    [canViewPublicQueue, sessionToken],
   );
   const liveStatus = usePublicQueueRealtime(
-    canViewPublicQueue ? event.id : null,
-    async (_reason, signal) => loadQueue(signal),
+    canViewPublicQueue ? sessionToken : null,
+    async (_reason, signal) => {
+      const refreshed = await getSessionEvent(sessionToken);
+      const capabilitiesChanged =
+        refreshed.event.publicQueueEnabled !== event.publicQueueEnabled ||
+        refreshed.event.songRequestsEnabled !== event.songRequestsEnabled ||
+        refreshed.event.publicShowSongTitles !== event.publicShowSongTitles;
+
+      if (refreshed.accessStatus !== "active" || capabilitiesChanged) {
+        router.refresh();
+        return;
+      }
+
+      await loadQueue(signal);
+    },
   );
 
   useEffect(() => {
@@ -129,7 +145,7 @@ export function SessionRequestPage({
     setSubmitAlert(null);
 
     try {
-      const songs = await searchSessionSongs(code, query);
+      const songs = await searchSessionSongs(sessionToken, query);
       setSearchResults(songs);
       setSearchMessage(
         songs.length === 0 ? "Nie znaleziono pasujących piosenek." : null,
@@ -172,7 +188,7 @@ export function SessionRequestPage({
     setIsSubmitting(true);
 
     try {
-      await createSessionRequest(code, validation.data);
+      await createSessionRequest(sessionToken, validation.data);
       setSubmittedRequest({
         title: selectedSong.title,
         artist: selectedSong.artist,

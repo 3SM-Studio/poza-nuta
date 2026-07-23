@@ -75,7 +75,7 @@ type ApiErrorBody = {
 
 export function getDashboardEventQueue(
   organizationId: string,
-  eventId: number,
+  eventId: string,
   signal?: AbortSignal,
 ) {
   return requestJson<DashboardEventQueueResponse>(
@@ -86,7 +86,7 @@ export function getDashboardEventQueue(
 
 export function runDashboardEventQueueAction(
   organizationId: string,
-  eventId: number,
+  eventId: string,
   requestId: number,
   action: DashboardEventQueueAction,
 ) {
@@ -105,7 +105,7 @@ export function runDashboardEventQueueAction(
 
 export function moveDashboardEventQueueRequest(
   organizationId: string,
-  eventId: number,
+  eventId: string,
   requestId: number,
   direction: DashboardEventQueueMoveDirection,
 ) {
@@ -124,7 +124,7 @@ export function moveDashboardEventQueueRequest(
 
 export function getDashboardEventQueueApiPath(
   organizationId: string,
-  eventId: number,
+  eventId: string,
 ) {
   return `/api/dashboard/organizations/${encodeURIComponent(
     organizationId,
@@ -133,7 +133,7 @@ export function getDashboardEventQueueApiPath(
 
 export function getDashboardEventQueueActionApiPath(
   organizationId: string,
-  eventId: number,
+  eventId: string,
   requestId: number,
 ) {
   return `${getDashboardEventQueueApiPath(
@@ -144,7 +144,7 @@ export function getDashboardEventQueueActionApiPath(
 
 export function getDashboardEventQueueMoveApiPath(
   organizationId: string,
-  eventId: number,
+  eventId: string,
   requestId: number,
 ) {
   return `${getDashboardEventQueueApiPath(

@@ -4,6 +4,8 @@ import { cache } from "react";
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 
 import {
+  eventSessionCodes,
+  eventSessions,
   events,
   operatorAuditLog,
   operatorUsers,
@@ -21,9 +23,15 @@ import {
   validateOrganizationName,
 } from "../../lib/organization-workspace";
 import {
-  calculateDashboardEventExtendedAutoCloseAt,
   canManageDashboardEventLifecycle,
+  isActivePublicEventUniqueViolation,
+  resolveDashboardEventCloseAt,
 } from "../../lib/dashboard-event-lifecycle";
+import {
+  canReopenEvent,
+  canResolveEventJoinCode,
+  getEffectiveEventCloseInstant,
+} from "../../lib/event-session-lifecycle";
 import {
   buildEventSlugCandidate,
   buildEventSlugCollisionCandidate,
@@ -31,8 +39,16 @@ import {
 } from "../../lib/event-slug";
 import { isEventSlugUniqueViolation } from "../../lib/event-slug-db-error";
 import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
+import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier";
+import { withEventSessionIdentityRetry } from "../../lib/event-session-identity";
+import { isEventSessionIdentityUniqueViolation } from "../../lib/event-session-identity-db-error";
 import { withSessionCodeCollisionRetry } from "../../lib/session-code";
 import { isSessionCodeUniqueViolation } from "../../lib/session-code-db-error";
+import {
+  insertEventSessionIdentity,
+  lockEventSessionIdentity,
+  publishEventSessionInvalidation,
+} from "../event-session-identity-store";
 import { OperatorApiError } from "./errors";
 import type {
   CreateDashboardEventInput,
@@ -58,6 +74,7 @@ export type DashboardOrganization = {
 
 export type DashboardOrganizationEvent = {
   id: number;
+  publicId: string;
   name: string;
   slug: string | null;
   venue: string | null;
@@ -75,6 +92,7 @@ export type DashboardOrganizationEvent = {
   autoCloseAt: Date | null;
   endsAt: Date;
   closedAt: Date | null;
+  closeReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -107,6 +125,7 @@ const workspaceSelection = {
 
 const dashboardEventSelection = {
   id: events.id,
+  publicId: events.publicId,
   name: events.name,
   slug: events.slug,
   venue: events.venue,
@@ -124,6 +143,7 @@ const dashboardEventSelection = {
   autoCloseAt: events.autoCloseAt,
   endsAt: events.endsAt,
   closedAt: events.closedAt,
+  closeReason: events.closeReason,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
 };
@@ -246,7 +266,7 @@ export function canShareDashboardOrganizationEvent(
 export async function getDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
 }) {
   const organization = await getDashboardOrganizationForAuthUser(
     input.authUserId,
@@ -260,7 +280,12 @@ export async function getDashboardOrganizationEventForAuthUser(input: {
   const [event] = await getDb()
     .select(dashboardEventSelection)
     .from(events)
-    .where(and(eq(events.workspaceId, organization.id), eq(events.id, input.eventId)))
+    .where(
+      and(
+        eq(events.workspaceId, organization.id),
+        getEventIdentifierCondition(input.eventId),
+      ),
+    )
     .limit(1);
 
   if (!event) {
@@ -279,7 +304,7 @@ export async function getDashboardOrganizationEventForAuthUser(input: {
 export async function getDashboardOrganizationEventSessionAccessForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
 }) {
   const result = await getDashboardOrganizationEventForAuthUser(input);
 
@@ -287,7 +312,21 @@ export async function getDashboardOrganizationEventSessionAccessForAuthUser(inpu
     return null;
   }
 
-  return result;
+  const [identity] = await getDb()
+    .select({ publicToken: eventSessions.publicToken })
+    .from(eventSessions)
+    .where(eq(eventSessions.eventId, result.event.id))
+    .limit(1);
+
+  if (!identity) return null;
+
+  return {
+    ...result,
+    event: {
+      ...result.event,
+      publicToken: identity.publicToken,
+    },
+  };
 }
 
 export async function createDashboardOrganizationEventForAuthUser(input: {
@@ -295,9 +334,12 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
   organizationId: string;
   event: CreateDashboardEventInput;
 }) {
-  return withSessionCodeCollisionRetry(
-    (sessionCode) =>
-      getDb().transaction(async (transaction) => {
+  return mapActivePublicEventUniqueViolation(() =>
+    withEventSessionIdentityRetry(
+      (identity) =>
+        withSessionCodeCollisionRetry(
+          (sessionCode) =>
+            getDb().transaction(async (transaction) => {
         const organization =
           await requireEventCreatorOrganizationInTransaction(
             transaction,
@@ -315,6 +357,7 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       .insert(events)
       .values({
         workspaceId: organization.id,
+        publicId: identity.eventPublicId,
         name: input.event.title,
         venue: input.event.venue,
         city: input.event.city,
@@ -363,6 +406,14 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       throw new Error("Event catalog metadata could not be created.");
     }
 
+    await insertEventSessionIdentity(transaction, {
+      eventId: event.id,
+      publicToken: identity.publicToken,
+      sessionCode,
+      createdByOperatorId: organization.operatorId,
+      createdAt: event.createdAt,
+    });
+
     await transaction.insert(operatorAuditLog).values({
       actorKind: "operator",
       operatorId: organization.operatorId,
@@ -383,19 +434,22 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       },
     });
 
-        return {
-          organization,
-          event,
-        };
-      }),
-    isSessionCodeUniqueViolation,
+            return {
+              organization,
+              event,
+            };
+            }),
+          isSessionCodeUniqueViolation,
+        ),
+      isEventSessionIdentityUniqueViolation,
+    ),
   );
 }
 
 export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
   event: UpdateDashboardEventAutoCloseAtInput;
 }) {
   return getDb().transaction(async (transaction) => {
@@ -448,6 +502,8 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
       },
     });
 
+    await publishEventSessionInvalidation(transaction, event.id);
+
     return {
       organization,
       event: updatedEvent,
@@ -458,17 +514,18 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
 export async function updateDashboardOrganizationEventDetailsForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
   event: UpdateDashboardEventDetailsInput;
 }) {
-  return getDb().transaction(async (transaction) => {
-    const { organization, event } =
-      await requireEventManagerOrganizationEventInTransaction(
-        transaction,
-        input.authUserId,
-        input.organizationId,
-        input.eventId,
-      );
+  return mapActivePublicEventUniqueViolation(() =>
+    getDb().transaction(async (transaction) => {
+      const { organization, event } =
+        await requireEventManagerOrganizationEventInTransaction(
+          transaction,
+          input.authUserId,
+          input.organizationId,
+          input.eventId,
+        );
     const now = new Date();
 
     assertDashboardEventCanBeManaged(event, now);
@@ -563,17 +620,20 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
       },
     });
 
-    return {
-      organization,
-      event: updatedEvent,
-    };
-  });
+    await publishEventSessionInvalidation(transaction, event.id);
+
+      return {
+        organization,
+        event: updatedEvent,
+      };
+    }),
+  );
 }
 
 export async function extendDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
   extension: ExtendDashboardEventInput;
 }) {
   return getDb().transaction(async (transaction) => {
@@ -588,13 +648,17 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
 
     assertDashboardEventCanBeManaged(event, now);
 
-    const autoCloseAt = calculateDashboardEventExtendedAutoCloseAt({
+    const autoCloseAt = resolveDashboardEventCloseAt({
       autoCloseAt: event.autoCloseAt,
       minutes: input.extension.minutes,
+      closesAt: input.extension.closesAt,
       now,
     });
 
-    if (autoCloseAt.getTime() <= event.startsAt.getTime()) {
+    if (
+      autoCloseAt.getTime() <= event.startsAt.getTime() ||
+      autoCloseAt.getTime() <= now.getTime()
+    ) {
       throw new OperatorApiError(
         400,
         "EVENT_AUTO_CLOSE_BEFORE_START",
@@ -624,14 +688,27 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
       actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
-      action: "extend_dashboard_event",
+      action: "event.extend",
       entityId: String(event.id),
       payload: {
+        schemaVersion: 1,
+        targetType: "event",
+        outcome: "success",
+        operation: "extend",
+        reason:
+          input.extension.closesAt === null
+            ? "duration_extension"
+            : "custom_close_time",
         minutes: input.extension.minutes,
-        previousAutoCloseAt: event.autoCloseAt?.toISOString() ?? null,
-        autoCloseAt: autoCloseAt.toISOString(),
+        customCloseAt: input.extension.closesAt !== null,
+        previousCloseAt: (
+          event.autoCloseAt ?? event.endsAt
+        ).toISOString(),
+        newCloseAt: autoCloseAt.toISOString(),
       },
     });
+
+    await publishEventSessionInvalidation(transaction, event.id);
 
     return {
       organization,
@@ -643,7 +720,7 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
 export async function closeDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string | number;
 }) {
   return getDb().transaction(async (transaction) => {
     const { organization, event } =
@@ -663,6 +740,7 @@ export async function closeDashboardOrganizationEventForAuthUser(input: {
         status: "closed",
         isActivePublicEvent: false,
         closedAt: now,
+        closeReason: "manual",
         updatedAt: now,
       })
       .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
@@ -689,11 +767,207 @@ export async function closeDashboardOrganizationEventForAuthUser(input: {
       },
     });
 
+    await publishEventSessionInvalidation(transaction, event.id);
+
     return {
       organization,
       event: closedEvent,
     };
   });
+}
+
+export async function reopenDashboardOrganizationEventForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: string | number;
+  extension: ExtendDashboardEventInput;
+}) {
+  return mapActivePublicEventUniqueViolation(() =>
+    getDb().transaction(async (transaction) => {
+      const { organization, event } =
+        await requireEventManagerOrganizationEventInTransaction(
+          transaction,
+          input.authUserId,
+          input.organizationId,
+          input.eventId,
+        );
+    const now = new Date();
+
+    if (!canReopenEvent(event, now)) {
+      throw new OperatorApiError(
+        409,
+        "EVENT_REOPEN_WINDOW_EXPIRED",
+        "The event can no longer be reopened.",
+      );
+    }
+
+    const autoCloseAt = resolveDashboardEventCloseAt({
+      autoCloseAt: null,
+      minutes: input.extension.minutes,
+      closesAt: input.extension.closesAt,
+      now,
+    });
+
+    if (autoCloseAt.getTime() <= now.getTime()) {
+      throw new OperatorApiError(
+        400,
+        "EVENT_CLOSE_TIME_INVALID",
+        "The new event close time must be in the future.",
+      );
+    }
+
+    await assertNoActivePublicEventConflictInTransaction(transaction, {
+      workspaceId: organization.id,
+      nextIsActivePublicEvent: true,
+      eventId: event.id,
+    });
+
+    const [reopenedEvent] = await transaction
+      .update(events)
+      .set({
+        status: "active",
+        isActivePublicEvent: true,
+        autoCloseAt,
+        endsAt: autoCloseAt,
+        closedAt: null,
+        closeReason: null,
+        updatedAt: now,
+      })
+      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+      .returning(dashboardEventSelection);
+
+    if (!reopenedEvent) {
+      throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "event.reopen",
+      entityId: String(event.id),
+      payload: {
+        schemaVersion: 1,
+        targetType: "event",
+        outcome: "success",
+        operation: "reopen",
+        reason: "operator_requested",
+        previousCloseAt:
+          getEffectiveEventCloseInstant(event)?.toISOString() ?? null,
+        newCloseAt: autoCloseAt.toISOString(),
+        previousCloseReason: event.closeReason,
+        minutes: input.extension.minutes,
+        customCloseAt: input.extension.closesAt !== null,
+      },
+    });
+
+    await publishEventSessionInvalidation(transaction, event.id);
+
+      return { organization, event: reopenedEvent };
+    }),
+  );
+}
+
+export async function rotateDashboardOrganizationEventSessionCodeForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: string | number;
+  expectedSessionCode: string;
+}) {
+  return withSessionCodeCollisionRetry(
+    (sessionCode) =>
+      getDb().transaction(async (transaction) => {
+        const { organization, event } =
+          await requireEventManagerOrganizationEventInTransaction(
+            transaction,
+            input.authUserId,
+            input.organizationId,
+            input.eventId,
+          );
+        const now = new Date();
+
+        if (!canResolveEventJoinCode(event, now)) {
+          throw new OperatorApiError(
+            409,
+            "EVENT_SESSION_CODE_FINALIZED",
+            "The event join code can no longer be rotated.",
+          );
+        }
+
+        const identity = await lockEventSessionIdentity(transaction, event.id);
+        if (!identity) {
+          throw new OperatorApiError(
+            409,
+            "EVENT_SESSION_IDENTITY_MISSING",
+            "The event session identity is unavailable.",
+          );
+        }
+
+        if (identity.sessionCode !== input.expectedSessionCode) {
+          throw new OperatorApiError(
+            409,
+            "EVENT_SESSION_CODE_STALE",
+            "The event join code changed. Refresh and try again.",
+          );
+        }
+
+        await transaction
+          .update(eventSessionCodes)
+          .set({
+            validUntil: now,
+            revokedAt: now,
+            releaseAfter: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1_000),
+            revokedByOperatorId: organization.operatorId,
+          })
+          .where(eq(eventSessionCodes.id, identity.codeId));
+
+        await transaction.insert(eventSessionCodes).values({
+          sessionId: identity.sessionId,
+          code: sessionCode,
+          validFrom: now,
+          createdByOperatorId: organization.operatorId,
+          rotationReason: "operator_rotation",
+          createdAt: now,
+        });
+
+        const [updatedEvent] = await transaction
+          .update(events)
+          .set({ sessionCode, updatedAt: now })
+          .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+          .returning(dashboardEventSelection);
+
+        if (!updatedEvent) {
+          throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+        }
+
+        await transaction.insert(operatorAuditLog).values({
+          actorKind: "operator",
+          operatorId: organization.operatorId,
+          eventId: event.id,
+          action: "event.session_code.rotate",
+          entityId: String(event.id),
+          payload: {
+            schemaVersion: 1,
+            targetType: "event",
+            outcome: "success",
+            operation: "session_code_rotation",
+            reason: "operator_requested",
+          },
+        });
+
+        await publishEventSessionInvalidation(
+          transaction,
+          event.id,
+          identity.publicToken,
+        );
+
+        return {
+          organization,
+          event: { ...updatedEvent, publicToken: identity.publicToken },
+        };
+      }),
+    isSessionCodeUniqueViolation,
+  );
 }
 
 export async function listDashboardOrganizationMembersForAuthUser(
@@ -1008,6 +1282,24 @@ async function mapEventSlugUniqueViolation<T>(action: () => Promise<T>) {
   }
 }
 
+async function mapActivePublicEventUniqueViolation<T>(
+  action: () => Promise<T>,
+) {
+  try {
+    return await action();
+  } catch (error) {
+    if (isActivePublicEventUniqueViolation(error)) {
+      throw new OperatorApiError(
+        409,
+        "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
+        "Another public event is already active for this organization.",
+      );
+    }
+
+    throw error;
+  }
+}
+
 async function requireOwnerOrganizationInTransaction(
   transaction: DatabaseTransaction,
   authUserId: string,
@@ -1106,7 +1398,7 @@ async function requireEventManagerOrganizationEventInTransaction(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
-  eventId: number,
+  eventId: string | number,
 ) {
   if (!isOrganizationPublicId(organizationId)) {
     throw new OperatorApiError(
@@ -1161,7 +1453,12 @@ async function requireEventManagerOrganizationEventInTransaction(
   const [event] = await transaction
     .select(dashboardEventSelection)
     .from(events)
-    .where(and(eq(events.workspaceId, organization.id), eq(events.id, eventId)))
+    .where(
+      and(
+        eq(events.workspaceId, organization.id),
+        getEventIdentifierCondition(eventId),
+      ),
+    )
     .for("update")
     .limit(1);
 
@@ -1177,6 +1474,15 @@ async function requireEventManagerOrganizationEventInTransaction(
     organization,
     event,
   };
+}
+
+function getEventIdentifierCondition(eventId: string | number) {
+  const identifier = parseDashboardEventIdentifier(eventId);
+
+  if (!identifier) return sql`false`;
+  return identifier.kind === "public"
+    ? eq(events.publicId, identifier.value)
+    : eq(events.id, identifier.value);
 }
 
 function assertDashboardEventCanBeManaged(

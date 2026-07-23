@@ -1,22 +1,47 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionRequestPage } from "@/components/public/session-request-page";
 
-const { createRequest, searchSongs, toastSuccess, toastError } = vi.hoisted(
-  () => ({
+const {
+  createRequest,
+  getEvent,
+  getQueue,
+  realtime,
+  refreshRouter,
+  searchSongs,
+  toastSuccess,
+  toastError,
+} = vi.hoisted(() => ({
     createRequest: vi.fn(),
+    getEvent: vi.fn(),
+    getQueue: vi.fn(),
+    realtime: {
+      onInvalidate: null as
+        | ((
+            reason: "broadcast" | "subscribe" | "reconnect",
+            signal: AbortSignal,
+          ) => void | Promise<void>)
+        | null,
+    },
+    refreshRouter: vi.fn(),
     searchSongs: vi.fn(),
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
-  }),
-);
+  }));
 
 vi.mock("@/components/public/session-api", () => ({
   createSessionRequest: createRequest,
-  getSessionQueue: vi.fn(),
+  getSessionEvent: getEvent,
+  getSessionQueue: getQueue,
   searchSessionSongs: searchSongs,
   SessionClientError: class SessionClientError extends Error {
     constructor(
@@ -30,7 +55,17 @@ vi.mock("@/components/public/session-api", () => ({
 }));
 
 vi.mock("@/components/public/use-public-queue-realtime", () => ({
-  usePublicQueueRealtime: () => "disconnected",
+  usePublicQueueRealtime: (
+    _token: string | null,
+    onInvalidate: NonNullable<typeof realtime.onInvalidate>,
+  ) => {
+    realtime.onInvalidate = onInvalidate;
+    return "disconnected";
+  },
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: refreshRouter }),
 }));
 
 vi.mock("sonner", () => ({
@@ -38,7 +73,6 @@ vi.mock("sonner", () => ({
 }));
 
 const event = {
-  id: 1,
   name: "Test Event",
   venue: "Test Venue",
   startsAt: "2026-07-18T18:00:00.000Z",
@@ -66,14 +100,23 @@ const song = {
 describe("session request feedback", () => {
   beforeEach(() => {
     createRequest.mockReset();
+    getEvent.mockReset();
+    getQueue.mockReset();
+    realtime.onInvalidate = null;
+    refreshRouter.mockReset();
     searchSongs.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
+    getQueue.mockResolvedValue({
+      enabled: true,
+      showSongTitles: true,
+      items: [],
+    });
     searchSongs.mockResolvedValue([song]);
   });
 
   it("keeps field validation inline without a toast", () => {
-    render(<SessionRequestPage code="01234567" event={event} />);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
     const submit = screen.getByRole("button", { name: "Dodaj do kolejki" });
     fireEvent.submit(submit.closest("form")!);
@@ -87,7 +130,7 @@ describe("session request feedback", () => {
 
   it("shows a success toast and a durable pending request state", async () => {
     createRequest.mockResolvedValue({});
-    render(<SessionRequestPage code="01234567" event={event} />);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
     await completeRequestForm();
 
     await waitFor(() => expect(createRequest).toHaveBeenCalledOnce());
@@ -111,7 +154,7 @@ describe("session request feedback", () => {
         "safe duplicate",
       ),
     );
-    render(<SessionRequestPage code="01234567" event={event} />);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
     await completeRequestForm();
 
     expect(
@@ -128,7 +171,7 @@ describe("session request feedback", () => {
     createRequest.mockRejectedValue(
       new SessionClientError(429, "SESSION_RATE_LIMITED", "safe rate limit"),
     );
-    render(<SessionRequestPage code="01234567" event={event} />);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
     await completeRequestForm();
 
     expect(await screen.findByText("Zbyt wiele prób")).toBeVisible();
@@ -137,7 +180,7 @@ describe("session request feedback", () => {
 
   it("shows a transient error toast for a non-persistent write failure", async () => {
     createRequest.mockRejectedValue(new Error("network"));
-    render(<SessionRequestPage code="01234567" event={event} />);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
     await completeRequestForm();
 
     await waitFor(() => expect(createRequest).toHaveBeenCalledOnce());
@@ -145,6 +188,31 @@ describe("session request feedback", () => {
       "Nie udało się dodać zgłoszenia",
       expect.objectContaining({ description: expect.any(String) }),
     );
+  });
+  it("refreshes the page lifecycle without fetching a closed queue", async () => {
+    getEvent.mockResolvedValue({
+      accessStatus: "closed",
+      event: { ...event, status: "closed" },
+    });
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={{ ...event, publicQueueEnabled: true }}
+      />,
+    );
+
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
+    getQueue.mockClear();
+
+    await act(async () => {
+      await realtime.onInvalidate?.(
+        "broadcast",
+        new AbortController().signal,
+      );
+    });
+
+    expect(refreshRouter).toHaveBeenCalledOnce();
+    expect(getQueue).not.toHaveBeenCalled();
   });
 });
 

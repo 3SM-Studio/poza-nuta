@@ -4,7 +4,7 @@ import { useQueueRealtime } from "@/components/realtime/use-queue-realtime";
 import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 
 export function usePublicQueueRealtime(
-  eventId: number | null | undefined,
+  publicToken: string | null | undefined,
   onInvalidate: (
     reason: QueueRealtimeInvalidateReason,
     signal: AbortSignal,
@@ -12,7 +12,7 @@ export function usePublicQueueRealtime(
 ) {
   return useQueueRealtime({
     audience: "public",
-    eventId,
+    identity: publicToken,
     onInvalidate,
   });
 }

@@ -137,7 +137,7 @@ async function createEvent(
     redirect(
       getDashboardOrganizationEventPath(
         result.organization.publicId,
-        result.event.id,
+        result.event.publicId,
       ),
     );
   } catch (error) {

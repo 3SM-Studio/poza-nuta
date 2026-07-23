@@ -187,7 +187,7 @@ function AvailableEventSessionAccessPanel({
                 <img
                   className="block h-auto w-full max-w-full"
                   src={qrDataUrl}
-                  alt={`Kod QR prowadzący do sesji ${sessionCode}`}
+                  alt="Kod QR prowadzący do stałego adresu sesji"
                 />
               ) : null}
             </div>

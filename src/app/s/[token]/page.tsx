@@ -2,47 +2,49 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 
 import { SessionRequestPage } from "@/components/public/session-request-page";
 import { SessionStateAlert } from "@/components/public/session-state-alert";
 import type { SessionEvent } from "@/components/public/session-api";
 import styles from "@/components/public/public.module.css";
-import { resolveSessionEventAccess } from "@/server/session-api/service";
 import { consumeSessionRequestRateLimit } from "@/server/session-api/rate-limit";
-import type { PublicSessionEvent } from "@/server/session-api/service";
+import {
+  resolvePublicSessionEventAccess,
+  type PublicSessionEvent,
+} from "@/server/session-api/service";
 
 export const metadata: Metadata = {
   title: "Sesja karaoke | Poza Nutą",
+  robots: { index: false, follow: false },
 };
-
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-type SessionPageProps = {
-  params: Promise<{
-    code: string;
-  }>;
-};
-
-export default async function SessionPage({ params }: SessionPageProps) {
-  const { code } = await params;
+export default async function PublicSessionPage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
+  const { token } = await params;
   const rateLimit = consumeSessionRequestRateLimit(await headers(), "page");
   const access = rateLimit.allowed
-    ? await resolveSessionEventAccess(code)
+    ? await resolvePublicSessionEventAccess(token)
     : ({ status: "rate_limited" } as const);
   const event =
     access.status === "invalid" || access.status === "rate_limited"
       ? null
       : access.event;
 
+  if (access.status === "invalid") {
+    notFound();
+  }
+
   return (
     <main className={styles.publicPage}>
       <div className={styles.publicShell}>
         <header className={styles.publicHeader}>
-          <Link
-            className={styles.brand}
-            href="/"
-            aria-label="Przejdź na stronę główną"
-          >
+          <Link className={styles.brand} href="/" aria-label="Strona główna">
             <Image
               className={styles.brandLogo}
               src="/brand/poza_nuta_logo-white.png"
@@ -58,7 +60,7 @@ export default async function SessionPage({ params }: SessionPageProps) {
 
         {access.status === "active" ? (
           <SessionRequestPage
-            code={code}
+            sessionToken={token}
             event={serializeSessionEvent(access.event)}
           />
         ) : (
@@ -74,7 +76,6 @@ export default async function SessionPage({ params }: SessionPageProps) {
 
 function serializeSessionEvent(event: PublicSessionEvent): SessionEvent {
   return {
-    id: event.id,
     name: event.name,
     venue: event.venue,
     startsAt: event.startsAt.toISOString(),

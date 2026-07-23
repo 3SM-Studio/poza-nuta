@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { EventSessionAccessPanel } from "@/components/operator/event-session-access-panel";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import {
   getDashboardEventLifecycleStatus,
   type DashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
+import { getDashboardOrganizationEventSharePath } from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { tryBuildCanonicalSiteUrl } from "@/server/canonical-site-origin";
 import {
@@ -21,7 +22,7 @@ import {
   getDashboardOrganizationEventSessionAccessForAuthUser,
 } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateEventId } from "@/server/operator-api/validation";
+import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
   title: "Udostępnij wydarzenie | Poza Nutą",
@@ -37,7 +38,7 @@ export default async function OrganizationEventSharePage({
   params,
 }: OrganizationEventSharePageProps) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateEventId(eventId);
+  const eventIdValidation = validateDashboardEventIdentifier(eventId);
   if (!eventIdValidation.success) notFound();
 
   const session = await requireOperatorSession();
@@ -51,9 +52,18 @@ export default async function OrganizationEventSharePage({
     notFound();
   }
 
+  if (eventId !== result.event.publicId) {
+    redirect(
+      getDashboardOrganizationEventSharePath(
+        result.organization.publicId,
+        result.event.publicId,
+      ),
+    );
+  }
+
   const lifecycleStatus = getDashboardEventLifecycleStatus(result.event);
   const sessionUrl = tryBuildCanonicalSiteUrl(
-    `/session/${result.event.sessionCode}`,
+    `/s/${result.event.publicToken}`,
   );
 
   return (

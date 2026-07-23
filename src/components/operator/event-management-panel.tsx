@@ -1,9 +1,26 @@
 "use client";
 
-import { useActionState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useState,
+  type MouseEvent,
+} from "react";
+import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -57,6 +74,12 @@ export function EventManagementPanel({
   detailsAction,
   extendAction,
   closeAction,
+  reopenAction,
+  rotateCodeAction,
+  canReopen,
+  reopenDeadline,
+  canRotateCode,
+  successMessage,
 }: {
   canManage: boolean;
   manageBlockedReason: string;
@@ -65,6 +88,12 @@ export function EventManagementPanel({
   detailsAction: EventManagementAction;
   extendAction: EventManagementAction;
   closeAction: EventManagementAction;
+  reopenAction: EventManagementAction;
+  rotateCodeAction: EventManagementAction;
+  canReopen: boolean;
+  reopenDeadline: string | null;
+  canRotateCode: boolean;
+  successMessage: string | null;
 }) {
   const [detailsState, detailsFormAction, isSavingDetails] = useActionState(
     detailsAction,
@@ -78,8 +107,22 @@ export function EventManagementPanel({
     closeAction,
     initialState,
   );
+  const [reopenState, reopenFormAction, isReopening] = useActionState(
+    reopenAction,
+    initialState,
+  );
+  const [rotateState, rotateFormAction, isRotating] = useActionState(
+    rotateCodeAction,
+    initialState,
+  );
 
-  if (!canManage) {
+  useEffect(() => {
+    if (successMessage) {
+      toast.success(successMessage);
+    }
+  }, [successMessage]);
+
+  if (!canManage && !canReopen && !canRotateCode) {
     return (
       <Card>
         <CardHeader>
@@ -87,6 +130,36 @@ export function EventManagementPanel({
           <CardDescription>{manageBlockedReason}</CardDescription>
         </CardHeader>
       </Card>
+    );
+  }
+
+  if (!canManage) {
+    return (
+      <div className="grid gap-4">
+        {canReopen ? (
+          <>
+            <ReopenWindowAlert deadline={reopenDeadline} />
+            <LifecycleTimeCard
+              title="Przywrócenie wydarzenia"
+              description="Wybierz nowy przyszły czas zamknięcia. Kolejka i zgłoszenia pozostaną bez zmian."
+              action={reopenFormAction}
+              state={reopenState}
+              pending={isReopening}
+              submitLabel="Przywróć wydarzenie"
+              formId="event-reopen-form"
+              confirmationTitle="Przywrócić wydarzenie?"
+              confirmationDescription="Sesja ponownie zacznie przyjmować zgłoszenia, a dotychczasowa kolejka pozostanie bez zmian."
+            />
+          </>
+        ) : null}
+        {canRotateCode ? (
+          <SessionCodeRotationCard
+            action={rotateFormAction}
+            state={rotateState}
+            pending={isRotating}
+          />
+        ) : null}
+      </div>
     );
   }
 
@@ -98,8 +171,15 @@ export function EventManagementPanel({
             Wydarzenie kończy się za mniej niż 30 minut. Wydłużyć?
           </AlertTitle>
           <AlertDescription>
-            <form className={"flex flex-wrap gap-2"} action={extendFormAction}>
-              <ExtendButtons disabled={isExtending} />
+            <form
+              id="event-warning-extend-form"
+              className={"flex flex-wrap gap-2"}
+              action={extendFormAction}
+            >
+              <ExtendButtons
+                disabled={isExtending}
+                formId="event-warning-extend-form"
+              />
             </form>
           </AlertDescription>
         </Alert>
@@ -303,6 +383,14 @@ export function EventManagementPanel({
         </CardContent>
       </Card>
 
+      {canRotateCode ? (
+        <SessionCodeRotationCard
+          action={rotateFormAction}
+          state={rotateState}
+          pending={isRotating}
+        />
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Szybkie wydłużenie</CardTitle>
@@ -312,10 +400,33 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={"grid gap-4 [&_button]:justify-self-start"} action={extendFormAction}>
+          <form
+            id="event-extend-form"
+            className={"grid gap-4 [&_button]:justify-self-start"}
+            action={extendFormAction}
+          >
             <ActionMessage state={extendState} />
             <div className={"flex flex-wrap gap-2"}>
-              <ExtendButtons disabled={isExtending} />
+              <ExtendButtons disabled={isExtending} formId="event-extend-form" />
+            </div>
+            <div className="grid gap-2 sm:max-w-sm">
+              <label htmlFor="event-extend-closes-at">Własny czas zamknięcia</label>
+              <input
+                id="event-extend-closes-at"
+                name="closesAt"
+                type="datetime-local"
+                className="min-h-11 rounded-md border border-input bg-background px-3 py-2"
+                aria-invalid={hasIssue(extendState, "closesAt") || undefined}
+              />
+              <FieldIssue state={extendState} field="closesAt" />
+              <ConfirmedSubmitButton
+                formId="event-extend-form"
+                pending={isExtending}
+                triggerLabel="Ustaw własny czas"
+                pendingLabel="Zapisywanie..."
+                title="Przedłużyć wydarzenie?"
+                description="Nowy czas zamknięcia zostanie ustawiony, a sesja i kolejka pozostaną bez zmian."
+              />
             </div>
           </form>
         </CardContent>
@@ -330,12 +441,22 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={"grid gap-4 [&_button]:justify-self-start"} action={closeFormAction}>
+          <form
+            id="event-close-form"
+            className={"grid gap-4 [&_button]:justify-self-start"}
+            action={closeFormAction}
+          >
             <ActionMessage state={closeState} />
             <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
-              <Button type="submit" variant="destructive" disabled={isClosing}>
-                {isClosing ? "Zamykanie..." : "Zamknij wydarzenie teraz"}
-              </Button>
+              <ConfirmedSubmitButton
+                formId="event-close-form"
+                pending={isClosing}
+                triggerLabel="Zamknij wydarzenie teraz"
+                pendingLabel="Zamykanie..."
+                title="Zamknąć wydarzenie?"
+                description="Nowe zgłoszenia zostaną zablokowane. Kolejka i historia zgłoszeń nie zostaną usunięte."
+                destructive
+              />
             </div>
           </form>
         </CardContent>
@@ -344,31 +465,235 @@ export function EventManagementPanel({
   );
 }
 
-function ExtendButtons({ disabled }: { disabled: boolean }) {
+function ExtendButtons({
+  disabled,
+  formId,
+}: {
+  disabled: boolean;
+  formId: string;
+}) {
   return (
     <>
       {DASHBOARD_EVENT_EXTENSION_MINUTES.map((minutes) => (
-        <Button
+        <ConfirmedSubmitButton
           key={minutes}
+          formId={formId}
+          pending={disabled}
+          triggerLabel={`+${minutes} min`}
+          pendingLabel="Zapisywanie..."
+          title="Przedłużyć wydarzenie?"
+          description={`Czas zamknięcia zostanie przedłużony o ${minutes} minut. Sesja i kolejka pozostaną bez zmian.`}
           name="minutes"
-          type="submit"
-          value={minutes}
-          variant="outline"
-          disabled={disabled}
-        >
-          +{minutes} min
-        </Button>
+          value={String(minutes)}
+        />
       ))}
     </>
   );
 }
 
+function LifecycleTimeCard({
+  title,
+  description,
+  action,
+  state,
+  pending,
+  submitLabel,
+  formId,
+  confirmationTitle,
+  confirmationDescription,
+}: {
+  title: string;
+  description: string;
+  action: (formData: FormData) => void;
+  state: EventManagementActionState;
+  pending: boolean;
+  submitLabel: string;
+  formId: string;
+  confirmationTitle: string;
+  confirmationDescription: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form id={formId} className="grid gap-4" action={action}>
+          <ActionMessage state={state} />
+          <div className="flex flex-wrap gap-2">
+            <ExtendButtons disabled={pending} formId={formId} />
+          </div>
+          <div className="grid gap-2 sm:max-w-sm">
+            <label htmlFor={`${title}-closes-at`}>Własny czas zamknięcia</label>
+            <input
+              id={`${title}-closes-at`}
+              name="closesAt"
+              type="datetime-local"
+              className="min-h-11 rounded-md border border-input bg-background px-3 py-2"
+              aria-invalid={hasIssue(state, "closesAt") || undefined}
+            />
+            <FieldIssue state={state} field="closesAt" />
+            <ConfirmedSubmitButton
+              formId={formId}
+              pending={pending}
+              triggerLabel={submitLabel}
+              pendingLabel="Zapisywanie..."
+              title={confirmationTitle}
+              description={confirmationDescription}
+            />
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SessionCodeRotationCard({
+  action,
+  state,
+  pending,
+}: {
+  action: (formData: FormData) => void;
+  state: EventManagementActionState;
+  pending: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Kod dołączenia</CardTitle>
+        <CardDescription>
+          Rotacja natychmiast wyłącza poprzedni kod. Stały link i kod QR nie
+          zmieniają się.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form id="event-session-code-rotation-form" className="grid gap-4" action={action}>
+          <ActionMessage state={state} />
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button type="button" variant="outline">Zmień kod sesji</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent data-management-theme="true">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Zmienić kod sesji?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Poprzedni kod przestanie działać od razu. Kanoniczny link i QR
+                  pozostaną bez zmian.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                <AlertDialogAction
+                  type="submit"
+                  form="event-session-code-rotation-form"
+                  disabled={pending}
+                  onClick={submitAssociatedForm}
+                >
+                  {pending ? "Zmienianie..." : "Zmień kod"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ActionMessage({ state }: { state: EventManagementActionState }) {
   return state.message ? (
-    <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
-      {state.message}
-    </p>
+    <Alert variant="destructive" role="alert">
+      <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
+      <AlertDescription>{state.message}</AlertDescription>
+    </Alert>
   ) : null;
+}
+
+function ReopenWindowAlert({ deadline }: { deadline: string | null }) {
+  const [remaining, setRemaining] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deadline) {
+      return;
+    }
+
+    const update = () => {
+      const remainingSeconds = Math.max(
+        0,
+        Math.ceil((new Date(deadline).getTime() - Date.now()) / 1_000),
+      );
+      const minutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      setRemaining(`${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`);
+    };
+
+    update();
+    const interval = window.setInterval(update, 1_000);
+    return () => window.clearInterval(interval);
+  }, [deadline]);
+
+  return (
+    <Alert>
+      <AlertTitle>Wydarzenie zostało zakończone</AlertTitle>
+      <AlertDescription>
+        Możesz je przywrócić jeszcze przez {remaining ?? "--:--"}. Decyzja
+        zostanie ponownie sprawdzona przez serwer.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function ConfirmedSubmitButton({
+  formId,
+  pending,
+  triggerLabel,
+  pendingLabel,
+  title,
+  description,
+  name,
+  value,
+  destructive = false,
+}: {
+  formId: string;
+  pending: boolean;
+  triggerLabel: string;
+  pendingLabel: string;
+  title: string;
+  description: string;
+  name?: string;
+  value?: string;
+  destructive?: boolean;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button type="button" variant={destructive ? "destructive" : "outline"}>
+          {triggerLabel}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent data-management-theme="true">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Anuluj</AlertDialogCancel>
+          <AlertDialogAction
+            type="submit"
+            form={formId}
+            name={name}
+            value={value}
+            variant={destructive ? "destructive" : "default"}
+            disabled={pending}
+            onClick={submitAssociatedForm}
+          >
+            {pending ? pendingLabel : triggerLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 function FieldIssue({
@@ -385,4 +710,9 @@ function FieldIssue({
 
 function hasIssue(state: EventManagementActionState, field: string) {
   return state.issues.some((issue) => issue.field === field);
+}
+
+function submitAssociatedForm(event: MouseEvent<HTMLButtonElement>) {
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit(event.currentTarget);
 }

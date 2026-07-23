@@ -281,8 +281,9 @@ test("event queue reads and writes are scoped to the resolved event", () => {
   );
   assert.match(
     serviceSource,
-    /eq\(events\.id, eventId\), eq\(events\.workspaceId, organization\.id\)/,
+    /getEventIdentifierCondition\(eventId\),\s*eq\(events\.workspaceId, organization\.id\)/s,
   );
+  assert.match(serviceSource, /parseDashboardEventIdentifier\(eventId\)/);
 });
 
 test("event queue mutations recheck the effective lifecycle while holding the event lock", () => {
@@ -410,15 +411,19 @@ test("starting a request completes the previous current request in the same even
 test("public queue broadcast migration does not expose song requests to browsers", () => {
   const source = readFileSync(
     new URL(
-      "../drizzle/0008_public_queue_realtime_broadcast.sql",
+      "../drizzle/0021_public_event_session_identity_expand.sql",
       import.meta.url,
     ),
     "utf8",
   );
-  const publicTopicIndex = source.indexOf("'public:event:'");
-  const publicPayloadSource = source.slice(
+  const publicTopicIndex = source.indexOf("'public:session:'");
+  const publicSendSource = source.slice(
     source.lastIndexOf("PERFORM", publicTopicIndex),
     source.indexOf(");", publicTopicIndex) + 2,
+  );
+  const publicPayloadSource = publicSendSource.slice(
+    publicSendSource.indexOf("jsonb_build_object"),
+    publicSendSource.indexOf("),", publicSendSource.indexOf("jsonb_build_object")) + 1,
   );
 
   assert.match(
@@ -431,10 +436,10 @@ test("public queue broadcast migration does not expose song requests to browsers
   );
   assert.match(
     source,
-    /'public:event:' \|\| changed_event_id::text \|\| ':queue'/,
+    /'public:session:' \|\| changed_public_token \|\| ':queue'/,
   );
   assert.match(source, /FOR SELECT\s+TO "anon", "authenticated"/);
-  assert.match(source, /\^public:event:\[0-9\]\+:queue\$/);
+  assert.match(source, /\^public:session:\[A-Za-z0-9_-\]\{22\}:queue\$/);
   assert.doesNotMatch(source, /ALTER\s+PUBLICATION\s+supabase_realtime/i);
   assert.doesNotMatch(
     source,

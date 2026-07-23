@@ -148,6 +148,13 @@
       "when": 1784316785661,
       "tag": "0020_canonical_session_access",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784367510314,
+      "tag": "0021_public_event_session_identity_expand",
+      "breakpoints": true
     }
   ]
 }

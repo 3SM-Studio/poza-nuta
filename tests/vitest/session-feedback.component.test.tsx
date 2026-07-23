@@ -34,7 +34,7 @@ describe("session action feedback", () => {
       <AppThemeProvider>
         <EventSessionAccessPanel
           sessionCode="01234567"
-          sessionUrl="https://example.test/session/01234567"
+          sessionUrl="https://example.test/s/AbCdEfGhIjKlMnOpQrStUv"
           isClosed={false}
         />
         <Toaster />
@@ -67,7 +67,7 @@ describe("session action feedback", () => {
       <AppThemeProvider>
         <EventSessionAccessPanel
           sessionCode="01234567"
-          sessionUrl="https://example.test/session/01234567"
+          sessionUrl="https://example.test/s/AbCdEfGhIjKlMnOpQrStUv"
           isClosed={false}
         />
         <Toaster />
@@ -102,7 +102,7 @@ describe("session action feedback", () => {
       <AppThemeProvider>
         <EventSessionAccessPanel
           sessionCode="01234567"
-          sessionUrl="https://example.test/session/01234567"
+          sessionUrl="https://example.test/s/AbCdEfGhIjKlMnOpQrStUv"
           isClosed={false}
         />
         <Toaster />

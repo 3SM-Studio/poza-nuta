@@ -1,8 +1,16 @@
 import "server-only";
 
-import { and, eq, ilike, inArray, max, sql } from "drizzle-orm";
+import { and, eq, gt, ilike, inArray, isNull, lte, max, or, sql } from "drizzle-orm";
 
-import { events, songRequests, songs } from "../../db/schema";
+import {
+  eventSessionCodes,
+  eventSessions,
+  events,
+  songRequests,
+  songs,
+} from "../../db/schema";
+import { canResolveEventJoinCode } from "../../lib/event-session-lifecycle";
+import { isEventSessionPublicToken } from "../../lib/event-session-identity";
 import {
   canUseSessionPublicQueue,
   canUseSessionSongRequests,
@@ -34,6 +42,7 @@ const sessionEventSelection = {
   autoCloseAt: events.autoCloseAt,
   endsAt: events.endsAt,
   closedAt: events.closedAt,
+  closeReason: events.closeReason,
 };
 
 const ACTIVE_SESSION_REQUEST_STATUSES = [
@@ -42,18 +51,7 @@ const ACTIVE_SESSION_REQUEST_STATUSES = [
   "now",
 ] as const;
 
-type SessionEventRow = {
-  event: PublicSessionEvent;
-};
-
-export type SessionEventAccess =
-  | { status: "invalid" }
-  | {
-      status: Exclude<SessionEventAccessStatus, "invalid">;
-      event: PublicSessionEvent;
-    };
-
-export type PublicSessionEvent = {
+type SessionEventRecord = {
   id: number;
   name: string;
   venue: string | null;
@@ -65,13 +63,44 @@ export type PublicSessionEvent = {
   autoCloseAt: Date | null;
   endsAt: Date;
   closedAt: Date | null;
+  closeReason: string | null;
+};
+
+type SessionEventRow = {
+  event: SessionEventRecord;
+  publicToken: string;
+};
+
+type SessionLookup =
+  | { kind: "code"; value: string }
+  | { kind: "token"; value: string };
+
+export type SessionEventAccess =
+  | { status: "invalid" }
+  | {
+      status: Exclude<SessionEventAccessStatus, "invalid">;
+      event: PublicSessionEvent;
+    };
+
+export type PublicSessionEvent = {
+  name: string;
+  venue: string | null;
+  startsAt: Date;
+  status: "draft" | "active" | "closed" | "cancelled";
+  publicQueueEnabled: boolean;
+  songRequestsEnabled: boolean;
+  publicShowSongTitles: boolean;
+  autoCloseAt: Date | null;
+  endsAt: Date;
+  closedAt: Date | null;
+  closeReason: string | null;
 };
 
 export async function resolveSessionEventAccess(
   code: string,
   now = new Date(),
 ): Promise<SessionEventAccess> {
-  const row = await findSessionEventByCode(code);
+  const row = await findSessionEvent({ kind: "code", value: code }, now);
   const status = getSessionEventAccessStatus({
     event: row?.event ?? null,
     now,
@@ -87,11 +116,55 @@ export async function resolveSessionEventAccess(
   };
 }
 
+export async function resolvePublicSessionEventAccess(
+  publicToken: string,
+  now = new Date(),
+): Promise<SessionEventAccess> {
+  const row = await findSessionEvent({ kind: "token", value: publicToken }, now);
+  const status = getSessionEventAccessStatus({
+    event: row?.event ?? null,
+    now,
+  });
+
+  if (!row || status === "invalid") return { status: "invalid" };
+  return { status, event: toPublicSessionEvent(row.event) };
+}
+
+export async function resolveJoinCode(code: string, now = new Date()) {
+  const row = await findSessionEvent({ kind: "code", value: code }, now);
+
+  if (!row || !canResolveEventJoinCode(row.event, now)) {
+    return { status: "invalid" as const };
+  }
+
+  return {
+    status: "resolved" as const,
+    publicToken: row.publicToken,
+  };
+}
+
 export async function getSessionEvent(code: string) {
-  const session = await requireLiveSession(code);
+  const session = await requireLiveSession({ kind: "code", value: code });
 
   return {
     event: toPublicSessionEvent(session.event),
+  };
+}
+
+export async function getPublicSessionEvent(publicToken: string) {
+  const access = await resolvePublicSessionEventAccess(publicToken);
+
+  if (access.status === "invalid") {
+    throw new PublicApiError(
+      404,
+      "SESSION_LINK_INVALID",
+      "The session link is invalid or expired.",
+    );
+  }
+
+  return {
+    accessStatus: access.status,
+    event: access.event,
   };
 }
 
@@ -99,7 +172,21 @@ export async function searchSessionSongs(
   code: string,
   query: string | null,
 ) {
-  await requireSongRequestSession(code);
+  await requireSongRequestSession({ kind: "code", value: code });
+
+  return searchSongs(query);
+}
+
+export async function searchPublicSessionSongs(
+  publicToken: string,
+  query: string | null,
+) {
+  await requireSongRequestSession({ kind: "token", value: publicToken });
+
+  return searchSongs(query);
+}
+
+function searchSongs(query: string | null) {
 
   if (query === null) {
     return [];
@@ -126,11 +213,18 @@ export async function searchSessionSongs(
 }
 
 export async function getSessionQueue(code: string) {
-  const session = await requireLiveSession(code);
+  return getQueueForLookup({ kind: "code", value: code });
+}
+
+export async function getPublicSessionQueue(publicToken: string) {
+  return getQueueForLookup({ kind: "token", value: publicToken });
+}
+
+async function getQueueForLookup(lookup: SessionLookup) {
+  const session = await requireLiveSession(lookup);
 
   if (!canUseSessionPublicQueue(session.event)) {
     return {
-      eventId: session.event.id,
       enabled: false as const,
       showSongTitles: session.event.publicShowSongTitles,
       items: [],
@@ -159,7 +253,6 @@ export async function getSessionQueue(code: string) {
       .orderBy(songRequests.position, songRequests.id);
 
     return {
-      eventId: session.event.id,
       enabled: true as const,
       showSongTitles: true as const,
       items,
@@ -184,7 +277,6 @@ export async function getSessionQueue(code: string) {
     .orderBy(songRequests.position, songRequests.id);
 
   return {
-    eventId: session.event.id,
     enabled: true as const,
     showSongTitles: false as const,
     items,
@@ -195,10 +287,24 @@ export async function createSessionRequest(
   code: string,
   input: SessionRequestInput,
 ) {
+  return createRequestForLookup({ kind: "code", value: code }, input);
+}
+
+export async function createPublicSessionRequest(
+  publicToken: string,
+  input: SessionRequestInput,
+) {
+  return createRequestForLookup({ kind: "token", value: publicToken }, input);
+}
+
+async function createRequestForLookup(
+  lookup: SessionLookup,
+  input: SessionRequestInput,
+) {
   return getDb().transaction(async (transaction) => {
     const session = await requireSongRequestSessionInTransaction(
       transaction,
-      code,
+      lookup,
     );
 
     const [song] = await transaction
@@ -257,33 +363,32 @@ export async function createSessionRequest(
         updatedAt: now,
       })
       .returning({
-        id: songRequests.id,
-        eventId: songRequests.eventId,
-        songId: songRequests.songId,
         status: songRequests.status,
-        position: songRequests.position,
-        createdAt: songRequests.createdAt,
       });
+
+    if (!request) {
+      throw new Error("Session request could not be created.");
+    }
 
     return request;
   });
 }
 
-async function requireLiveSession(code: string) {
-  const row = await findSessionEventByCode(code);
+async function requireLiveSession(lookup: SessionLookup) {
+  const row = await findSessionEvent(lookup);
   return requireLiveSessionRow(row);
 }
 
-async function requireSongRequestSession(code: string) {
-  const session = await requireLiveSession(code);
+async function requireSongRequestSession(lookup: SessionLookup) {
+  const session = await requireLiveSession(lookup);
   return requireSongRequestsEnabled(session);
 }
 
 async function requireSongRequestSessionInTransaction(
   transaction: DatabaseTransaction,
-  code: string,
+  lookup: SessionLookup,
 ) {
-  const row = await findSessionEventByCodeInTransaction(transaction, code);
+  const row = await findSessionEventInTransaction(transaction, lookup);
   return requireSongRequestsEnabled(requireLiveSessionRow(row));
 }
 
@@ -331,45 +436,91 @@ function requireSongRequestsEnabled(row: SessionEventRow) {
   return row;
 }
 
-async function findSessionEventByCode(code: string) {
-  if (!isValidSessionCodeFormat(code)) {
-    return null;
-  }
+async function findSessionEvent(lookup: SessionLookup, now = new Date()) {
+  if (!isValidLookup(lookup)) return null;
 
-  const [row] = await getDb()
+  const query = getDb()
     .select({
       event: sessionEventSelection,
+      publicToken: eventSessions.publicToken,
     })
-    .from(events)
-    .where(eq(events.sessionCode, code))
-    .limit(1);
+    .from(eventSessions)
+    .innerJoin(events, eq(events.id, eventSessions.eventId));
+
+  const [row] =
+    lookup.kind === "token"
+      ? await query.where(eq(eventSessions.publicToken, lookup.value)).limit(1)
+      : await query
+          .innerJoin(
+            eventSessionCodes,
+            eq(eventSessionCodes.sessionId, eventSessions.id),
+          )
+          .where(
+            and(
+              eq(eventSessionCodes.code, lookup.value),
+              lte(eventSessionCodes.validFrom, now),
+              isNull(eventSessionCodes.revokedAt),
+              or(
+                isNull(eventSessionCodes.validUntil),
+                gt(eventSessionCodes.validUntil, now),
+              ),
+            ),
+          )
+          .limit(1);
 
   return row ?? null;
 }
 
-async function findSessionEventByCodeInTransaction(
+async function findSessionEventInTransaction(
   transaction: DatabaseTransaction,
-  code: string,
+  lookup: SessionLookup,
 ) {
-  if (!isValidSessionCodeFormat(code)) {
-    return null;
-  }
+  if (!isValidLookup(lookup)) return null;
 
-  const [row] = await transaction
+  const query = transaction
     .select({
       event: sessionEventSelection,
+      publicToken: eventSessions.publicToken,
     })
-    .from(events)
-    .where(eq(events.sessionCode, code))
-    .for("update")
-    .limit(1);
+    .from(eventSessions)
+    .innerJoin(events, eq(events.id, eventSessions.eventId));
+
+  const [row] =
+    lookup.kind === "token"
+      ? await query
+          .where(eq(eventSessions.publicToken, lookup.value))
+          .for("update")
+          .limit(1)
+      : await query
+          .innerJoin(
+            eventSessionCodes,
+            eq(eventSessionCodes.sessionId, eventSessions.id),
+          )
+          .where(
+            and(
+              eq(eventSessionCodes.code, lookup.value),
+              lte(eventSessionCodes.validFrom, new Date()),
+              isNull(eventSessionCodes.revokedAt),
+              or(
+                isNull(eventSessionCodes.validUntil),
+                gt(eventSessionCodes.validUntil, new Date()),
+              ),
+            ),
+          )
+          .for("update")
+          .limit(1);
 
   return row ?? null;
 }
 
-function toPublicSessionEvent(event: PublicSessionEvent): PublicSessionEvent {
+function isValidLookup(lookup: SessionLookup) {
+  return lookup.kind === "token"
+    ? isEventSessionPublicToken(lookup.value)
+    : isValidSessionCodeFormat(lookup.value);
+}
+
+function toPublicSessionEvent(event: SessionEventRecord): PublicSessionEvent {
   return {
-    id: event.id,
     name: event.name,
     venue: event.venue,
     startsAt: event.startsAt,
@@ -380,6 +531,7 @@ function toPublicSessionEvent(event: PublicSessionEvent): PublicSessionEvent {
     autoCloseAt: event.autoCloseAt,
     endsAt: event.endsAt,
     closedAt: event.closedAt,
+    closeReason: event.closeReason,
   };
 }
 

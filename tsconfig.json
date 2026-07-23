@@ -42,7 +42,9 @@
     "drizzle/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    ".next-p3-e2e/types/**/*.ts",
+    ".next-p3-e2e/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

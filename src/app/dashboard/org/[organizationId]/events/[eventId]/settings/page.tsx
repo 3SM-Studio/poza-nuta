@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 
 import { EventManagementPanel } from "@/components/operator/event-management-panel";
 import type { EventManagementActionState } from "@/components/operator/event-management-panel";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -19,6 +18,11 @@ import {
   getDashboardEventLifecycleStatus,
   shouldShowDashboardEventClosingWarning,
 } from "@/lib/dashboard-event-lifecycle";
+import {
+  canReopenEvent,
+  canResolveEventJoinCode,
+  getEventReopenDeadline,
+} from "@/lib/event-session-lifecycle";
 import {
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
@@ -36,11 +40,13 @@ import {
   closeDashboardOrganizationEventForAuthUser,
   extendDashboardOrganizationEventForAuthUser,
   getDashboardOrganizationEventSessionAccessForAuthUser,
+  reopenDashboardOrganizationEventForAuthUser,
+  rotateDashboardOrganizationEventSessionCodeForAuthUser,
   updateDashboardOrganizationEventDetailsForAuthUser,
 } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 import {
-  validateEventId,
+  validateDashboardEventIdentifier,
   validateExtendDashboardEventInput,
   validateUpdateDashboardEventDetailsInput,
 } from "@/server/operator-api/validation";
@@ -59,7 +65,12 @@ type OrganizationEventDetailPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type EventAction = "details-updated" | "extended" | "closed";
+type EventAction =
+  | "details-updated"
+  | "extended"
+  | "closed"
+  | "reopened"
+  | "code-rotated";
 
 const emptyActionState: EventManagementActionState = {
   issues: [],
@@ -71,7 +82,7 @@ export default async function OrganizationEventDetailPage({
   searchParams,
 }: OrganizationEventDetailPageProps) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateEventId(eventId);
+  const eventIdValidation = validateDashboardEventIdentifier(eventId);
 
   if (!eventIdValidation.success) {
     notFound();
@@ -88,6 +99,15 @@ export default async function OrganizationEventDetailPage({
     notFound();
   }
 
+  if (eventId !== result.event.publicId) {
+    redirect(
+      getDashboardOrganizationEventSettingsPath(
+        result.organization.publicId,
+        result.event.publicId,
+      ),
+    );
+  }
+
   const now = new Date();
   const lifecycleStatus = getDashboardEventLifecycleStatus(result.event, now);
   const requestsOpen = areDashboardEventRequestsOpen(result.event, now);
@@ -99,6 +119,10 @@ export default async function OrganizationEventDetailPage({
     now,
   );
   const canManage = roleCanManage && lifecycleCanManage;
+  const canReopen = roleCanManage && canReopenEvent(result.event, now);
+  const canRotateCode =
+    roleCanManage && canResolveEventJoinCode(result.event, now);
+  const reopenDeadline = getEventReopenDeadline(result.event);
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const actionMessage = getActionMessage(resolvedSearchParams.eventAction);
 
@@ -116,12 +140,6 @@ export default async function OrganizationEventDetailPage({
             </Badge>
           </div>
         </header>
-
-        {actionMessage ? (
-          <Alert className={"mb-4"} role="status">
-            <AlertDescription>{actionMessage}</AlertDescription>
-          </Alert>
-        ) : null}
 
         <div className={"grid min-w-0 gap-4"}>
           <Card>
@@ -197,18 +215,35 @@ export default async function OrganizationEventDetailPage({
             detailsAction={updateEventDetails.bind(
               null,
               result.organization.publicId,
-              result.event.id,
+              result.event.publicId,
             )}
             extendAction={extendEvent.bind(
               null,
               result.organization.publicId,
-              result.event.id,
+              result.event.publicId,
             )}
             closeAction={closeEvent.bind(
               null,
               result.organization.publicId,
-              result.event.id,
+              result.event.publicId,
             )}
+            reopenAction={reopenEvent.bind(
+              null,
+              result.organization.publicId,
+              result.event.publicId,
+            )}
+            rotateCodeAction={rotateSessionCode.bind(
+              null,
+              result.organization.publicId,
+              result.event.publicId,
+              result.event.sessionCode,
+            )}
+            canReopen={canReopen}
+            reopenDeadline={
+              reopenDeadline ? reopenDeadline.toISOString() : null
+            }
+            canRotateCode={canRotateCode}
+            successMessage={actionMessage}
           />
         </div>
       </section>
@@ -218,7 +253,7 @@ export default async function OrganizationEventDetailPage({
 
 async function updateEventDetails(
   organizationId: string,
-  eventId: number,
+  eventId: string,
   _state: EventManagementActionState,
   formData: FormData,
 ): Promise<EventManagementActionState> {
@@ -257,7 +292,7 @@ async function updateEventDetails(
     });
     const path = getDashboardOrganizationEventSettingsPath(
       result.organization.publicId,
-      result.event.id,
+      result.event.publicId,
     );
 
     revalidateManagedEventPaths(result);
@@ -269,7 +304,7 @@ async function updateEventDetails(
 
 async function extendEvent(
   organizationId: string,
-  eventId: number,
+  eventId: string,
   _state: EventManagementActionState,
   formData: FormData,
 ): Promise<EventManagementActionState> {
@@ -277,6 +312,7 @@ async function extendEvent(
 
   const validation = validateExtendDashboardEventInput({
     minutes: formData.get("minutes"),
+    closesAt: formData.get("closesAt"),
   });
 
   if (!validation.success) {
@@ -297,7 +333,7 @@ async function extendEvent(
     });
     const path = getDashboardOrganizationEventSettingsPath(
       result.organization.publicId,
-      result.event.id,
+      result.event.publicId,
     );
 
     revalidateManagedEventPaths(result);
@@ -307,9 +343,75 @@ async function extendEvent(
   }
 }
 
+async function reopenEvent(
+  organizationId: string,
+  eventId: string,
+  _state: EventManagementActionState,
+  formData: FormData,
+): Promise<EventManagementActionState> {
+  "use server";
+
+  const validation = validateExtendDashboardEventInput({
+    minutes: formData.get("minutes"),
+    closesAt: formData.get("closesAt"),
+  });
+  if (!validation.success) {
+    return { issues: validation.issues, message: "Wybierz nowy czas zamknięcia." };
+  }
+
+  const session = await requireOperatorSession();
+  try {
+    const result = await reopenDashboardOrganizationEventForAuthUser({
+      authUserId: session.authUser.id,
+      organizationId,
+      eventId,
+      extension: validation.data,
+    });
+    const path = getDashboardOrganizationEventSettingsPath(
+      result.organization.publicId,
+      result.event.publicId,
+    );
+    revalidateManagedEventPaths(result);
+    redirect(`${path}?eventAction=reopened`);
+  } catch (error) {
+    return mapEventManagementActionError(error);
+  }
+}
+
+async function rotateSessionCode(
+  organizationId: string,
+  eventId: string,
+  expectedSessionCode: string,
+  _state: EventManagementActionState,
+  _formData: FormData,
+): Promise<EventManagementActionState> {
+  "use server";
+
+  void _state;
+  void _formData;
+
+  const session = await requireOperatorSession();
+  try {
+    const result = await rotateDashboardOrganizationEventSessionCodeForAuthUser({
+      authUserId: session.authUser.id,
+      organizationId,
+      eventId,
+      expectedSessionCode,
+    });
+    const path = getDashboardOrganizationEventSettingsPath(
+      result.organization.publicId,
+      result.event.publicId,
+    );
+    revalidateManagedEventPaths(result);
+    redirect(`${path}?eventAction=code-rotated`);
+  } catch (error) {
+    return mapEventManagementActionError(error);
+  }
+}
+
 async function closeEvent(
   organizationId: string,
-  eventId: number,
+  eventId: string,
 ): Promise<EventManagementActionState> {
   "use server";
 
@@ -323,7 +425,7 @@ async function closeEvent(
     });
     const path = getDashboardOrganizationEventSettingsPath(
       result.organization.publicId,
-      result.event.id,
+      result.event.publicId,
     );
 
     revalidateManagedEventPaths(result);
@@ -335,24 +437,30 @@ async function closeEvent(
 
 function revalidateManagedEventPaths(input: {
   organization: { publicId: string };
-  event: { id: number; sessionCode: string; slug: string | null };
+  event: {
+    id: number;
+    publicId: string;
+    sessionCode: string;
+    slug: string | null;
+  };
 }) {
   const { event, organization } = input;
 
   revalidatePath(getDashboardOrganizationEventsPath(organization.publicId));
   revalidatePath(
-    getDashboardOrganizationEventPath(organization.publicId, event.id),
+    getDashboardOrganizationEventPath(organization.publicId, event.publicId),
   );
   revalidatePath(
-    getDashboardOrganizationEventQueuePath(organization.publicId, event.id),
+    getDashboardOrganizationEventQueuePath(organization.publicId, event.publicId),
   );
   revalidatePath(
-    getDashboardOrganizationEventSharePath(organization.publicId, event.id),
+    getDashboardOrganizationEventSharePath(organization.publicId, event.publicId),
   );
   revalidatePath(
-    getDashboardOrganizationEventSettingsPath(organization.publicId, event.id),
+    getDashboardOrganizationEventSettingsPath(organization.publicId, event.publicId),
   );
-  revalidatePath(`/session/${event.sessionCode}`);
+  revalidatePath(`/join/${event.sessionCode}`);
+  revalidatePath("/s/[token]", "page");
 
   if (event.slug) {
     revalidatePath(`/events/${event.slug}`);
@@ -405,8 +513,7 @@ function mapEventManagementActionError(
 
       return {
         ...emptyActionState,
-        message:
-          "To wydarzenie jest już zamknięte albo anulowane. W MVP nie otwieramy go ponownie.",
+        message: "Stan wydarzenia zmienił się. Odśwież stronę i spróbuj ponownie.",
       };
     }
 
@@ -476,7 +583,7 @@ function getManageBlockedReason({
   }
 
   if (lifecycleStatus === "closed") {
-    return "Wydarzenie jest zamknięte, więc w MVP nie otwieramy go ponownie przez zmianę czasu zamknięcia.";
+    return "Minęło okno bezpiecznego przywrócenia tego wydarzenia.";
   }
 
   return "Zarządzanie tym wydarzeniem jest obecnie niedostępne.";
@@ -492,6 +599,10 @@ function getActionMessage(value: string | string[] | undefined) {
       return "Wydarzenie zostało wydłużone.";
     case "closed":
       return "Wydarzenie zostało zamknięte.";
+    case "reopened":
+      return "Wydarzenie zostało ponownie otwarte.";
+    case "code-rotated":
+      return "Kod dołączenia został zmieniony.";
     default:
       return null;
   }
