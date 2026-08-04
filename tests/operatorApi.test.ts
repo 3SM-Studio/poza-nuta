@@ -9,10 +9,6 @@ import {
   resolveSignInPageAccess,
 } from "../src/server/operator-api/auth-policy.ts";
 import {
-  canApplyQueueAction,
-  getTargetStatus,
-} from "../src/server/operator-api/transitions.ts";
-import {
   validateLoginInput,
   validateRequestId,
 } from "../src/server/operator-api/validation.ts";
@@ -247,22 +243,4 @@ test("validateRequestId accepts only safe positive integer path values", () => {
   assert.equal(validateRequestId("0").success, false);
   assert.equal(validateRequestId("1.5").success, false);
   assert.equal(validateRequestId("abc").success, false);
-});
-
-test("operator queue transition policy matches the API contract", () => {
-  assert.equal(canApplyQueueAction("approve", "pending"), true);
-  assert.equal(canApplyQueueAction("approve", "approved"), false);
-  assert.equal(canApplyQueueAction("reject", "pending"), true);
-  assert.equal(canApplyQueueAction("reject", "approved"), true);
-  assert.equal(canApplyQueueAction("start", "approved"), true);
-  assert.equal(canApplyQueueAction("done", "now"), true);
-  assert.equal(canApplyQueueAction("skip", "approved"), true);
-  assert.equal(canApplyQueueAction("skip", "now"), true);
-  assert.equal(canApplyQueueAction("skip", "pending"), false);
-
-  assert.equal(getTargetStatus("approve"), "approved");
-  assert.equal(getTargetStatus("reject"), "rejected");
-  assert.equal(getTargetStatus("start"), "now");
-  assert.equal(getTargetStatus("done"), "done");
-  assert.equal(getTargetStatus("skip"), "skipped");
 });

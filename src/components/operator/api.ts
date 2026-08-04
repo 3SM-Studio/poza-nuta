@@ -1,18 +1,3 @@
-export type OperatorRequestStatus =
-  | "pending"
-  | "approved"
-  | "now"
-  | "done"
-  | "skipped"
-  | "rejected";
-
-export type OperatorQueueAction =
-  | "approve"
-  | "reject"
-  | "start"
-  | "done"
-  | "skip";
-
 export type SongSource = "ising" | "karafun" | "manual";
 
 export type OperatorIdentity = {
@@ -21,60 +6,6 @@ export type OperatorIdentity = {
   displayName: string | null;
   profileCompletedAt: string | null;
   active: true;
-};
-
-export type DashboardEvent = {
-  id: number;
-  name: string;
-  venue: string | null;
-  startsAt: string;
-  status: "draft" | "active" | "closed" | "cancelled";
-  isActivePublicEvent: boolean;
-  songRequestsEnabled: boolean;
-  publicQueueEnabled: boolean;
-  publicShowSongTitles: boolean;
-  autoCloseAt: string | null;
-  endsAt: string;
-  closedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type OperatorQueueItem = {
-  id: number;
-  eventId: number;
-  songId: number;
-  singerName: string;
-  displayName: string;
-  note: string | null;
-  status: OperatorRequestStatus;
-  position: number;
-  requestedBy: "public" | "operator";
-  createdByOperatorId: number | null;
-  version: number;
-  createdAt: string;
-  updatedAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  song: {
-    title: string;
-    artist: string;
-    durationSeconds: number | null;
-    source: SongSource;
-  };
-};
-
-export type OperatorQueueResponse = {
-  event: {
-    id: number;
-    name: string;
-    venue: string | null;
-    startsAt: string;
-    status: "active";
-    autoCloseAt: string | null;
-    closedAt: string | null;
-  };
-  queue: Record<OperatorRequestStatus, OperatorQueueItem[]>;
 };
 
 type OperatorMeResponse = {
@@ -113,11 +44,6 @@ export const dashboardApiPaths = {
   signup: "/api/dashboard/signup",
   logout: "/api/dashboard/logout",
   me: "/api/dashboard/me",
-  queue: "/api/dashboard/queue",
-  event: "/api/dashboard/event",
-  extendEvent: "/api/dashboard/event/extend",
-  closeEvent: "/api/dashboard/event/close",
-  startEvent: "/api/dashboard/event/start",
 } as const;
 
 export class OperatorClientError extends Error {
@@ -158,75 +84,6 @@ export function logoutOperator() {
 
 export function getCurrentOperator() {
   return requestJson<OperatorMeResponse>(dashboardApiPaths.me);
-}
-
-export function getOperatorQueue() {
-  return requestJson<OperatorQueueResponse>(dashboardApiPaths.queue);
-}
-
-export function getDashboardEvent() {
-  return requestJson<{ event: DashboardEvent | null }>(
-    dashboardApiPaths.event,
-  );
-}
-
-export function updateDashboardEventSettings(input: {
-  name: string;
-  venue: string | null;
-  songRequestsEnabled: boolean;
-  publicQueueEnabled: boolean;
-  publicShowSongTitles: boolean;
-}) {
-  return requestJson<{ event: DashboardEvent }>(dashboardApiPaths.event, {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  });
-}
-
-export function extendDashboardEvent(hours: 1 | 2) {
-  return requestJson<{ event: DashboardEvent }>(
-    dashboardApiPaths.extendEvent,
-    {
-      method: "POST",
-      body: JSON.stringify({ hours }),
-    },
-  );
-}
-
-export function closeDashboardEvent() {
-  return requestJson<{ event: DashboardEvent }>(
-    dashboardApiPaths.closeEvent,
-    { method: "POST" },
-  );
-}
-
-export function startDashboardEvent(input: {
-  name: string;
-  venue: string | null;
-}) {
-  return requestJson<{ event: DashboardEvent }>(
-    dashboardApiPaths.startEvent,
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
-}
-
-export function runOperatorQueueAction(
-  requestId: number,
-  action: OperatorQueueAction,
-) {
-  return requestJson(getDashboardRequestActionPath(requestId, action), {
-    method: "POST",
-  });
-}
-
-export function getDashboardRequestActionPath(
-  requestId: number,
-  action: OperatorQueueAction,
-) {
-  return `/api/dashboard/requests/${encodeURIComponent(requestId)}/${action}`;
 }
 
 export function formatDuration(durationSeconds: number | null) {

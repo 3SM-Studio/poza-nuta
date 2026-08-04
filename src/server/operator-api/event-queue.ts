@@ -81,7 +81,7 @@ export type DashboardEventQueueItem = ReturnType<
 export async function getDashboardOrganizationEventQueueForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
 }) {
   const result = await getDashboardOrganizationEventForAuthUser(input);
 
@@ -108,7 +108,7 @@ export async function getDashboardOrganizationEventQueueForAuthUser(input: {
 export async function applyDashboardOrganizationEventQueueActionForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
   requestId: number;
   action: DashboardEventQueueAction;
 }) {
@@ -258,7 +258,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
 export async function moveDashboardOrganizationEventQueueRequestForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
   requestId: number;
   direction: DashboardEventQueueMoveDirection;
 }) {
@@ -455,7 +455,7 @@ async function requireEventQueueManagerContext(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
-  eventId: string | number,
+  eventId: string,
 ) {
   if (!isOrganizationPublicId(organizationId)) {
     throw new OperatorApiError(
@@ -503,6 +503,11 @@ async function requireEventQueueManagerContext(
     );
   }
 
+  const eventIdentifier = parseDashboardEventIdentifier(eventId);
+  if (!eventIdentifier) {
+    throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+  }
+
   const [event] = await transaction
     .select({
       id: events.id,
@@ -516,7 +521,7 @@ async function requireEventQueueManagerContext(
     .from(events)
     .where(
       and(
-        getEventIdentifierCondition(eventId),
+        eq(events.publicId, eventIdentifier.value),
         eq(events.workspaceId, organization.id),
       ),
     )
@@ -531,6 +536,24 @@ async function requireEventQueueManagerContext(
     );
   }
 
+  const recheckedOrganization = await findEventQueueManagerOrganization(
+    transaction,
+    authUserId,
+    organizationId,
+  );
+
+  if (
+    !recheckedOrganization ||
+    recheckedOrganization.id !== organization.id ||
+    !canManageDashboardEventQueue(recheckedOrganization.role)
+  ) {
+    throw new OperatorApiError(
+      403,
+      "WORKSPACE_EVENT_QUEUE_MANAGE_FORBIDDEN",
+      "Only an owner, manager, or operator can manage the event queue.",
+    );
+  }
+
   if (getEffectiveEventLifecycleStatus(event) !== "active") {
     throw new OperatorApiError(
       409,
@@ -540,18 +563,44 @@ async function requireEventQueueManagerContext(
   }
 
   return {
-    organization,
+    organization: recheckedOrganization,
     event,
   };
 }
 
-function getEventIdentifierCondition(eventId: string | number) {
-  const identifier = parseDashboardEventIdentifier(eventId);
-  if (!identifier) return sql`false`;
+async function findEventQueueManagerOrganization(
+  transaction: DatabaseTransaction,
+  authUserId: string,
+  organizationId: string,
+) {
+  const [organization] = await transaction
+    .select({
+      id: workspaces.id,
+      publicId: workspaces.publicId,
+      role: workspaceMembers.role,
+      operatorId: operatorUsers.id,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      eq(workspaceMembers.workspaceId, workspaces.id),
+    )
+    .innerJoin(
+      operatorUsers,
+      eq(operatorUsers.id, workspaceMembers.operatorUserId),
+    )
+    .where(
+      and(
+        eq(workspaces.publicId, organizationId),
+        eq(workspaces.active, true),
+        eq(operatorUsers.authUserId, authUserId),
+        eq(operatorUsers.active, true),
+        eq(workspaceMembers.active, true),
+      ),
+    )
+    .limit(1);
 
-  return identifier.kind === "public"
-    ? eq(events.publicId, identifier.value)
-    : eq(events.id, identifier.value);
+  return organization ?? null;
 }
 
 async function requireDashboardEventQueueItem(

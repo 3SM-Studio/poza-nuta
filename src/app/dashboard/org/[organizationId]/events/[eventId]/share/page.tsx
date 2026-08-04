@@ -14,15 +14,15 @@ import {
   getDashboardEventLifecycleStatus,
   type DashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
-import { getDashboardOrganizationEventSharePath } from "@/lib/dashboard-routes";
+import { getDashboardOrganizationEventCompatibilityRedirectPath } from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { tryBuildCanonicalSiteUrl } from "@/server/canonical-site-origin";
+import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/event-route-compatibility";
 import {
   canShareDashboardOrganizationEvent,
   getDashboardOrganizationEventSessionAccessForAuthUser,
 } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
   title: "Udostępnij wydarzenie | Poza Nutą",
@@ -38,14 +38,27 @@ export default async function OrganizationEventSharePage({
   params,
 }: OrganizationEventSharePageProps) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateDashboardEventIdentifier(eventId);
-  if (!eventIdValidation.success) notFound();
-
   const session = await requireOperatorSession();
+  const routeResolution = await resolveDashboardEventRouteForAuthUser({
+    authUserId: session.authUser.id,
+    organizationId,
+    routeEventId: eventId,
+  });
+  if (routeResolution.kind === "not_found") notFound();
+  if (routeResolution.kind === "legacy_redirect") {
+    redirect(
+      getDashboardOrganizationEventCompatibilityRedirectPath(
+        routeResolution.organizationPublicId,
+        routeResolution.event.publicId,
+        "share",
+      ),
+    );
+  }
+
   const result = await getDashboardOrganizationEventSessionAccessForAuthUser({
     authUserId: session.authUser.id,
     organizationId,
-    eventId: eventIdValidation.data,
+    eventId: routeResolution.eventPublicId,
   });
 
   if (!result || !canShareDashboardOrganizationEvent(result.organization.role)) {
@@ -54,9 +67,10 @@ export default async function OrganizationEventSharePage({
 
   if (eventId !== result.event.publicId) {
     redirect(
-      getDashboardOrganizationEventSharePath(
+      getDashboardOrganizationEventCompatibilityRedirectPath(
         result.organization.publicId,
         result.event.publicId,
+        "share",
       ),
     );
   }

@@ -109,12 +109,9 @@ test("runtime event creation is atomic and retries only code collisions", () => 
     "src/server/operator-api/organizations.ts",
     "utf8",
   );
-  const legacyLifecycle = readFileSync("src/server/event-lifecycle.ts", "utf8");
 
-  for (const source of [organizations, legacyLifecycle]) {
-    assert.match(source, /withSessionCodeCollisionRetry/);
-    assert.match(source, /isSessionCodeUniqueViolation/);
-    assert.match(source, /sessionCode/);
-    assert.match(source, /\.transaction\(/);
-  }
+  assert.match(organizations, /withSessionCodeCollisionRetry/);
+  assert.match(organizations, /isSessionCodeUniqueViolation/);
+  assert.match(organizations, /sessionCode/);
+  assert.match(organizations, /\.transaction\(/);
 });

@@ -28,7 +28,9 @@ test("feedback integrations preserve field errors and use transient action toast
   const accessPanel = source(
     "src/components/operator/event-session-access-panel.tsx",
   );
-  const eventSettings = source("src/components/operator/event-settings.tsx");
+  const eventSettings = source(
+    "src/components/operator/event-management-panel.tsx",
+  );
   const imports = source(
     "src/components/platform-admin/admin-imports-panel.tsx",
   );
@@ -38,7 +40,8 @@ test("feedback integrations preserve field errors and use transient action toast
   assert.match(sessionRequest, /toast\.success\("Dodano zgłoszenie"/);
   assert.match(sessionRequest, /toast\.error\("Nie udało się dodać zgłoszenia"/);
   assert.match(accessPanel, /toast\.success\(message\)/);
-  assert.match(eventSettings, /toast\.success\("Ustawienia wydarzenia/);
+  assert.match(eventSettings, /toast\.success\(successMessage\)/);
+  assert.match(eventSettings, /<FieldIssue state=\{detailsState\}/);
   assert.match(imports, /toast\.success\("Gotowe"/);
   assert.match(imports, /toast\.error\("Operacja nieudana"/);
 });

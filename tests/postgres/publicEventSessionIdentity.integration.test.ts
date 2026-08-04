@@ -790,6 +790,7 @@ async function assertConcurrentRotation(
   const eventId = fixture.eventIds[0];
   const beforeClient = createPostgresTestClient(harness, "postgres", 1);
   const before = await getIdentityState(beforeClient, eventId);
+  const eventPublicId = await resolveEventPublicId(beforeClient, eventId);
   await beforeClient.end({ timeout: 5 });
   const blocker = createPostgresTestClient(harness, "postgres", 1);
   const observer = createPostgresTestClient(harness, "postgres", 1);
@@ -829,7 +830,7 @@ async function assertConcurrentRotation(
     const input = {
       authUserId: fixture.authUserId,
       organizationId: fixture.workspacePublicId,
-      eventId,
+      eventId: eventPublicId,
       expectedSessionCode: before.code,
     };
     first = rotateDashboardOrganizationEventSessionCodeForAuthUser(input);
@@ -931,6 +932,9 @@ async function assertConcurrentActivePublicEventReopen(
       autoCloseAt: null,
     }),
   ]);
+  const eventPublicIds = await Promise.all(
+    eventIds.map((eventId) => resolveEventPublicId(sql, eventId)),
+  );
   const barrierKey = 2_100_021;
   await sql`
     CREATE FUNCTION public.block_p3_concurrent_event_activation()
@@ -981,7 +985,7 @@ async function assertConcurrentActivePublicEventReopen(
       const { reopenDashboardOrganizationEventForAuthUser } =
         await import("../../src/server/operator-api/organizations.ts");
       const closesAt = new Date(Date.now() + 60 * 60 * 1_000);
-      const attempts = eventIds.map((eventId) =>
+      const attempts = eventPublicIds.map((eventId) =>
         reopenDashboardOrganizationEventForAuthUser({
           authUserId: fixture.authUserId,
           organizationId: fixture.workspacePublicId,
@@ -1106,6 +1110,7 @@ async function assertCloseReopenPreservesQueue(
   sessionService: typeof import("../../src/server/session-api/service.ts"),
 ) {
   const eventId = fixture.eventIds[1];
+  const eventPublicId = await resolveEventPublicId(sql, eventId);
   const reference = new Date();
   const newCloseAt = new Date(reference.getTime() + 2 * 60 * 60 * 1_000);
   await prepareActiveEvent(sql, eventId, reference);
@@ -1118,13 +1123,13 @@ async function assertCloseReopenPreservesQueue(
       services.closeDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
       }),
     () =>
       services.reopenDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
         extension: { minutes: null, closesAt: newCloseAt },
       }),
   );
@@ -1197,6 +1202,7 @@ async function assertConcurrentReopenRechecksState(
     closeReason: "manual",
     autoCloseAt: null,
   });
+  const eventPublicId = await resolveEventPublicId(sql, eventId);
   const firstCloseAt = new Date(Date.now() + 2 * 60 * 60 * 1_000);
   const secondCloseAt = new Date(Date.now() + 3 * 60 * 60 * 1_000);
 
@@ -1207,14 +1213,14 @@ async function assertConcurrentReopenRechecksState(
       services.reopenDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
         extension: { minutes: null, closesAt: firstCloseAt },
       }),
     () =>
       services.reopenDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
         extension: { minutes: null, closesAt: secondCloseAt },
       }),
   );
@@ -1237,6 +1243,7 @@ async function assertConcurrentCloseExtendRechecksState(
     closeReason: null,
     autoCloseAt: new Date(Date.now() + 2 * 60 * 60 * 1_000),
   });
+  const eventPublicId = await resolveEventPublicId(sql, eventId);
   const results = await runBlockedProductionEventRace(
     harness,
     eventId,
@@ -1244,13 +1251,13 @@ async function assertConcurrentCloseExtendRechecksState(
       services.closeDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
       }),
     () =>
       services.extendDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
         extension: { minutes: 60, closesAt: null },
       }),
   );
@@ -1271,6 +1278,7 @@ async function assertConcurrentExtensionsSerialize(
     closeReason: null,
     autoCloseAt: originalCloseAt,
   });
+  const eventPublicId = await resolveEventPublicId(sql, eventId);
   const results = await runBlockedProductionEventRace(
     harness,
     eventId,
@@ -1278,14 +1286,14 @@ async function assertConcurrentExtensionsSerialize(
       services.extendDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
         extension: { minutes: 60, closesAt: null },
       }),
     () =>
       services.extendDashboardOrganizationEventForAuthUser({
         authUserId: fixture.authUserId,
         organizationId: fixture.workspacePublicId,
-        eventId,
+        eventId: eventPublicId,
         extension: { minutes: 60, closesAt: null },
       }),
   );
@@ -1440,6 +1448,16 @@ async function requestFingerprint(sql: postgres.Sql, eventId: number) {
     WHERE event_id = ${eventId}
   `;
   return state;
+}
+
+async function resolveEventPublicId(sql: postgres.Sql, eventId: number) {
+  const [event] = await sql<{ public_id: string }[]>`
+    SELECT public_id::text
+    FROM public.events
+    WHERE id = ${eventId}
+  `;
+  assert.ok(event);
+  return event.public_id;
 }
 
 async function reopenEventInTransaction(

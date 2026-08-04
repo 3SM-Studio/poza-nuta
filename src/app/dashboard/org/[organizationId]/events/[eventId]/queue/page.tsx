@@ -14,11 +14,11 @@ import {
   getDashboardEventLifecycleStatus,
   type DashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
-import { getDashboardOrganizationEventQueuePath } from "@/lib/dashboard-routes";
+import { getDashboardOrganizationEventCompatibilityRedirectPath } from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { getDashboardOrganizationEventQueueForAuthUser } from "@/server/operator-api/event-queue";
+import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/event-route-compatibility";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
   title: "Kolejka wydarzenia | Poza Nutą",
@@ -37,17 +37,27 @@ export default async function OrganizationEventQueuePage({
   params,
 }: OrganizationEventQueuePageProps) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateDashboardEventIdentifier(eventId);
-
-  if (!eventIdValidation.success) {
-    notFound();
+  const session = await requireOperatorSession();
+  const routeResolution = await resolveDashboardEventRouteForAuthUser({
+    authUserId: session.authUser.id,
+    organizationId,
+    routeEventId: eventId,
+  });
+  if (routeResolution.kind === "not_found") notFound();
+  if (routeResolution.kind === "legacy_redirect") {
+    redirect(
+      getDashboardOrganizationEventCompatibilityRedirectPath(
+        routeResolution.organizationPublicId,
+        routeResolution.event.publicId,
+        "queue",
+      ),
+    );
   }
 
-  const session = await requireOperatorSession();
   const result = await getDashboardOrganizationEventQueueForAuthUser({
     authUserId: session.authUser.id,
     organizationId,
-    eventId: eventIdValidation.data,
+    eventId: routeResolution.eventPublicId,
   });
 
   if (!result) {
@@ -56,9 +66,10 @@ export default async function OrganizationEventQueuePage({
 
   if (eventId !== result.event.publicId) {
     redirect(
-      getDashboardOrganizationEventQueuePath(
+      getDashboardOrganizationEventCompatibilityRedirectPath(
         result.organization.publicId,
         result.event.publicId,
+        "queue",
       ),
     );
   }

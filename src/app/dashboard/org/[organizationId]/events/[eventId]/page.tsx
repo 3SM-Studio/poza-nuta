@@ -14,11 +14,11 @@ import {
   areDashboardEventRequestsOpen,
   getDashboardEventLifecycleStatus,
 } from "@/lib/dashboard-event-lifecycle";
-import { getDashboardOrganizationEventPath } from "@/lib/dashboard-routes";
+import { getDashboardOrganizationEventCompatibilityRedirectPath } from "@/lib/dashboard-routes";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
+import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/event-route-compatibility";
 import { getDashboardOrganizationEventSessionAccessForAuthUser } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
-import { validateDashboardEventIdentifier } from "@/server/operator-api/validation";
 
 export const metadata: Metadata = {
   title: "Wydarzenie | Poza Nutą",
@@ -32,22 +32,36 @@ export default async function OrganizationEventDetailPage({
   params: Promise<{ organizationId: string; eventId: string }>;
 }) {
   const { organizationId, eventId } = await params;
-  const eventIdValidation = validateDashboardEventIdentifier(eventId);
-  if (!eventIdValidation.success) notFound();
-
   const session = await requireOperatorSession();
+  const routeResolution = await resolveDashboardEventRouteForAuthUser({
+    authUserId: session.authUser.id,
+    organizationId,
+    routeEventId: eventId,
+  });
+  if (routeResolution.kind === "not_found") notFound();
+  if (routeResolution.kind === "legacy_redirect") {
+    redirect(
+      getDashboardOrganizationEventCompatibilityRedirectPath(
+        routeResolution.organizationPublicId,
+        routeResolution.event.publicId,
+        "detail",
+      ),
+    );
+  }
+
   const result = await getDashboardOrganizationEventSessionAccessForAuthUser({
     authUserId: session.authUser.id,
     organizationId,
-    eventId: eventIdValidation.data,
+    eventId: routeResolution.eventPublicId,
   });
   if (!result) notFound();
 
   if (eventId !== result.event.publicId) {
     redirect(
-      getDashboardOrganizationEventPath(
+      getDashboardOrganizationEventCompatibilityRedirectPath(
         result.organization.publicId,
         result.event.publicId,
+        "detail",
       ),
     );
   }

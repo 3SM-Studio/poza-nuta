@@ -144,14 +144,12 @@ test("journal, package, schema, creation flows, and canonical routes expose 0021
   assert.match(schema, /export const eventSessions = pgTable/);
   assert.match(schema, /export const eventSessionCodes = pgTable/);
 
-  for (const path of [
-    "src/server/event-lifecycle.ts",
+  const organizations = readFileSync(
     "src/server/operator-api/organizations.ts",
-  ]) {
-    const source = readFileSync(path, "utf8");
-    assert.match(source, /withEventSessionIdentityRetry/);
-    assert.match(source, /insertEventSessionIdentity/);
-  }
+    "utf8",
+  );
+  assert.match(organizations, /withEventSessionIdentityRetry/);
+  assert.match(organizations, /insertEventSessionIdentity/);
 
   const share = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",

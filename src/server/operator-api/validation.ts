@@ -34,19 +34,6 @@ export type OperatorProfileInput = {
   displayName: string;
 };
 
-export type EventSettingsInput = {
-  name: string;
-  venue: string | null;
-  songRequestsEnabled: boolean;
-  publicQueueEnabled: boolean;
-  publicShowSongTitles: boolean;
-};
-
-export type StartEventInput = {
-  name: string;
-  venue: string | null;
-};
-
 export type CreateDashboardEventInput = {
   title: string;
   venue: string | null;
@@ -87,10 +74,6 @@ export type ExtendDashboardEventInput = {
 } | {
   minutes: null;
   closesAt: Date;
-};
-
-export type ExtendEventInput = {
-  hours: 1 | 2;
 };
 
 export type ValidationIssue = {
@@ -161,14 +144,16 @@ export function validateEventId(value: string): ValidationResult<number> {
 export function validateDashboardEventIdentifier(
   value: string,
 ): ValidationResult<string> {
-  if (!parseDashboardEventIdentifier(value)) {
+  const identifier = parseDashboardEventIdentifier(value);
+
+  if (!identifier) {
     return {
       success: false,
       issues: [{ field: "eventId", message: "eventId is invalid." }],
     };
   }
 
-  return { success: true, data: value };
+  return { success: true, data: identifier.value };
 }
 
 function validatePositiveSafeInteger(
@@ -202,75 +187,6 @@ function validatePositiveSafeInteger(
   }
 
   return { success: true, data: parsedId };
-}
-
-export function validateEventSettingsInput(
-  input: unknown,
-): ValidationResult<EventSettingsInput> {
-  if (!isRecord(input)) {
-    return invalidBodyResult();
-  }
-
-  const eventFields = validateEventNameAndVenue(input);
-  const issues = [...eventFields.issues];
-
-  if (typeof input.publicQueueEnabled !== "boolean") {
-    issues.push({
-      field: "publicQueueEnabled",
-      message: "publicQueueEnabled must be a boolean.",
-    });
-  }
-
-  if (typeof input.songRequestsEnabled !== "boolean") {
-    issues.push({
-      field: "songRequestsEnabled",
-      message: "songRequestsEnabled must be a boolean.",
-    });
-  }
-
-  if (typeof input.publicShowSongTitles !== "boolean") {
-    issues.push({
-      field: "publicShowSongTitles",
-      message: "publicShowSongTitles must be a boolean.",
-    });
-  }
-
-  if (issues.length > 0) {
-    return { success: false, issues };
-  }
-
-  return {
-    success: true,
-    data: {
-      name: eventFields.name,
-      venue: eventFields.venue,
-      songRequestsEnabled: input.songRequestsEnabled as boolean,
-      publicQueueEnabled: input.publicQueueEnabled as boolean,
-      publicShowSongTitles: input.publicShowSongTitles as boolean,
-    },
-  };
-}
-
-export function validateStartEventInput(
-  input: unknown,
-): ValidationResult<StartEventInput> {
-  if (!isRecord(input)) {
-    return invalidBodyResult();
-  }
-
-  const eventFields = validateEventNameAndVenue(input);
-
-  if (eventFields.issues.length > 0) {
-    return { success: false, issues: eventFields.issues };
-  }
-
-  return {
-    success: true,
-    data: {
-      name: eventFields.name,
-      venue: eventFields.venue,
-    },
-  };
 }
 
 export function validateSignupInput(
@@ -650,31 +566,6 @@ export function validateExtendDashboardEventInput(
   };
 }
 
-export function validateExtendInput(
-  input: unknown,
-): ValidationResult<ExtendEventInput> {
-  if (!isRecord(input)) {
-    return invalidBodyResult();
-  }
-
-  if (input.hours !== 1 && input.hours !== 2) {
-    return {
-      success: false,
-      issues: [
-        {
-          field: "hours",
-          message: "hours must be either 1 or 2.",
-        },
-      ],
-    };
-  }
-
-  return {
-    success: true,
-    data: { hours: input.hours },
-  };
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -793,38 +684,4 @@ function parseBooleanInput(value: unknown, fallback: boolean) {
   }
 
   return value === "on" || value === "true" || value === "1";
-}
-
-function validateEventNameAndVenue(input: Record<string, unknown>) {
-  const issues: ValidationIssue[] = [];
-  const name = typeof input.name === "string" ? input.name.trim() : "";
-  const venue =
-    typeof input.venue === "string" ? input.venue.trim() || null : null;
-
-  if (typeof input.name !== "string" || name.length === 0) {
-    issues.push({ field: "name", message: "name is required." });
-  } else if (name.length > MAX_EVENT_NAME_LENGTH) {
-    issues.push({
-      field: "name",
-      message: `name must contain at most ${MAX_EVENT_NAME_LENGTH} characters.`,
-    });
-  }
-
-  if (
-    input.venue !== undefined &&
-    input.venue !== null &&
-    typeof input.venue !== "string"
-  ) {
-    issues.push({
-      field: "venue",
-      message: "venue must be a string or null.",
-    });
-  } else if (venue && venue.length > MAX_EVENT_VENUE_LENGTH) {
-    issues.push({
-      field: "venue",
-      message: `venue must contain at most ${MAX_EVENT_VENUE_LENGTH} characters.`,
-    });
-  }
-
-  return { name, venue, issues };
 }

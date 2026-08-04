@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   dashboardApiPaths,
   formatDuration,
   getCurrentOperator,
-  getDashboardRequestActionPath,
 } from "../src/components/operator/api.ts";
 import {
   getDashboardQueueRealtimeTopic,
@@ -28,27 +27,10 @@ test("operator UI client uses canonical dashboard API paths", () => {
     signup: "/api/dashboard/signup",
     logout: "/api/dashboard/logout",
     me: "/api/dashboard/me",
-    queue: "/api/dashboard/queue",
-    event: "/api/dashboard/event",
-    extendEvent: "/api/dashboard/event/extend",
-    closeEvent: "/api/dashboard/event/close",
-    startEvent: "/api/dashboard/event/start",
   });
-  assert.equal(
-    getDashboardRequestActionPath(42, "approve"),
-    "/api/dashboard/requests/42/approve",
-  );
 });
 
-test("legacy global operator queue routes are tombstones or redirects", () => {
-  const dashboardQueueRoute = readFileSync(
-    new URL("../src/app/api/dashboard/queue/route.ts", import.meta.url),
-    "utf8",
-  );
-  const operatorQueueRoute = readFileSync(
-    new URL("../src/app/api/operator/queue/route.ts", import.meta.url),
-    "utf8",
-  );
+test("legacy global operator queue APIs are removed and pages redirect", () => {
   const dashboardQueuePage = readFileSync(
     new URL("../src/app/dashboard/queue/page.tsx", import.meta.url),
     "utf8",
@@ -57,21 +39,25 @@ test("legacy global operator queue routes are tombstones or redirects", () => {
     new URL("../src/app/operator/queue/page.tsx", import.meta.url),
     "utf8",
   );
-  const dashboardActionRoute = readFileSync(
-    new URL(
-      "../src/app/api/dashboard/requests/[requestId]/approve/route.ts",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-
-  assert.match(dashboardQueueRoute, /DASHBOARD_QUEUE_ENDPOINT_GONE/);
-  assert.match(operatorQueueRoute, /dashboard\/queue\/route/);
   assert.match(dashboardQueuePage, /redirect\("\/dashboard"\)/);
   assert.match(operatorQueuePage, /redirect\("\/dashboard"\)/);
-  assert.match(dashboardActionRoute, /DASHBOARD_QUEUE_ACTION_ENDPOINT_GONE/);
-  assert.doesNotMatch(dashboardQueueRoute, /getOperatorQueue/);
-  assert.doesNotMatch(dashboardActionRoute, /handleOperatorQueueAction/);
+
+  for (const path of [
+    "../src/app/api/dashboard/queue/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/approve/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/done/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/reject/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/skip/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/start/route.ts",
+    "../src/app/api/operator/queue/route.ts",
+    "../src/app/api/operator/requests/[requestId]/approve/route.ts",
+    "../src/app/api/operator/requests/[requestId]/done/route.ts",
+    "../src/app/api/operator/requests/[requestId]/reject/route.ts",
+    "../src/app/api/operator/requests/[requestId]/skip/route.ts",
+    "../src/app/api/operator/requests/[requestId]/start/route.ts",
+  ]) {
+    assert.equal(existsSync(new URL(path, import.meta.url)), false, path);
+  }
 });
 
 test("operator me request stays on a same-origin relative API path", async (t) => {

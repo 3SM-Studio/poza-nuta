@@ -124,15 +124,12 @@ test("automatic closure measures grace from the scheduled close instant", () => 
   assert.equal(canReopenEvent(event, new Date("2026-07-18T12:20:00.000Z")), false);
 });
 
-test("dashboard event identifiers distinguish public UUIDs from legacy numeric IDs", () => {
+test("dashboard event identifiers accept only public UUIDs", () => {
   assert.deepEqual(
-    parseDashboardEventIdentifier("123e4567-e89b-42d3-a456-426614174000"),
+    parseDashboardEventIdentifier("123E4567-E89B-42D3-A456-426614174000"),
     { kind: "public", value: "123e4567-e89b-42d3-a456-426614174000" },
   );
-  assert.deepEqual(parseDashboardEventIdentifier("42"), {
-    kind: "legacy",
-    value: 42,
-  });
+  assert.equal(parseDashboardEventIdentifier("42"), null);
   assert.equal(parseDashboardEventIdentifier("0"), null);
   assert.equal(parseDashboardEventIdentifier("not-an-id"), null);
 });

@@ -266,7 +266,7 @@ export function canShareDashboardOrganizationEvent(
 export async function getDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
 }) {
   const organization = await getDashboardOrganizationForAuthUser(
     input.authUserId,
@@ -304,7 +304,7 @@ export async function getDashboardOrganizationEventForAuthUser(input: {
 export async function getDashboardOrganizationEventSessionAccessForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
 }) {
   const result = await getDashboardOrganizationEventForAuthUser(input);
 
@@ -347,11 +347,6 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
             input.organizationId,
           );
         const now = new Date();
-
-    await assertNoActivePublicEventConflictInTransaction(transaction, {
-      workspaceId: organization.id,
-      nextIsActivePublicEvent: input.event.isActivePublicEvent,
-    });
 
     const [createdEvent] = await transaction
       .insert(events)
@@ -449,7 +444,7 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
 export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
   event: UpdateDashboardEventAutoCloseAtInput;
 }) {
   return getDb().transaction(async (transaction) => {
@@ -514,7 +509,7 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
 export async function updateDashboardOrganizationEventDetailsForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
   event: UpdateDashboardEventDetailsInput;
 }) {
   return mapActivePublicEventUniqueViolation(() =>
@@ -537,12 +532,6 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
         "Event close time must be after the start time.",
       );
     }
-
-    await assertNoActivePublicEventConflictInTransaction(transaction, {
-      workspaceId: organization.id,
-      nextIsActivePublicEvent: input.event.isActivePublicEvent,
-      eventId: event.id,
-    });
 
     const catalogFields = await resolveDashboardEventCatalogFieldsInTransaction(
       transaction,
@@ -633,7 +622,7 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
 export async function extendDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
   extension: ExtendDashboardEventInput;
 }) {
   return getDb().transaction(async (transaction) => {
@@ -720,7 +709,7 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
 export async function closeDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
 }) {
   return getDb().transaction(async (transaction) => {
     const { organization, event } =
@@ -779,7 +768,7 @@ export async function closeDashboardOrganizationEventForAuthUser(input: {
 export async function reopenDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
   extension: ExtendDashboardEventInput;
 }) {
   return mapActivePublicEventUniqueViolation(() =>
@@ -815,12 +804,6 @@ export async function reopenDashboardOrganizationEventForAuthUser(input: {
         "The new event close time must be in the future.",
       );
     }
-
-    await assertNoActivePublicEventConflictInTransaction(transaction, {
-      workspaceId: organization.id,
-      nextIsActivePublicEvent: true,
-      eventId: event.id,
-    });
 
     const [reopenedEvent] = await transaction
       .update(events)
@@ -871,7 +854,7 @@ export async function reopenDashboardOrganizationEventForAuthUser(input: {
 export async function rotateDashboardOrganizationEventSessionCodeForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: string | number;
+  eventId: string;
   expectedSessionCode: string;
 }) {
   return withSessionCodeCollisionRetry(
@@ -1398,7 +1381,7 @@ async function requireEventManagerOrganizationEventInTransaction(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
-  eventId: string | number,
+  eventId: string,
 ) {
   if (!isOrganizationPublicId(organizationId)) {
     throw new OperatorApiError(
@@ -1450,13 +1433,18 @@ async function requireEventManagerOrganizationEventInTransaction(
     );
   }
 
+  const eventIdentifier = parseDashboardEventIdentifier(eventId);
+  if (!eventIdentifier) {
+    throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+  }
+
   const [event] = await transaction
     .select(dashboardEventSelection)
     .from(events)
     .where(
       and(
         eq(events.workspaceId, organization.id),
-        getEventIdentifierCondition(eventId),
+        eq(events.publicId, eventIdentifier.value),
       ),
     )
     .for("update")
@@ -1470,19 +1458,32 @@ async function requireEventManagerOrganizationEventInTransaction(
     );
   }
 
+  const recheckedOrganization =
+    await findEventManagerOrganizationInTransaction(
+      transaction,
+      authUserId,
+      organizationId,
+    );
+
+  if (!recheckedOrganization || recheckedOrganization.id !== organization.id) {
+    throw new OperatorApiError(
+      403,
+      "WORKSPACE_EVENT_MANAGE_FORBIDDEN",
+      "Only an owner or manager can manage events.",
+    );
+  }
+
   return {
-    organization,
+    organization: recheckedOrganization,
     event,
   };
 }
 
-function getEventIdentifierCondition(eventId: string | number) {
+function getEventIdentifierCondition(eventId: string) {
   const identifier = parseDashboardEventIdentifier(eventId);
 
   if (!identifier) return sql`false`;
-  return identifier.kind === "public"
-    ? eq(events.publicId, identifier.value)
-    : eq(events.id, identifier.value);
+  return eq(events.publicId, identifier.value);
 }
 
 function assertDashboardEventCanBeManaged(
@@ -1500,40 +1501,44 @@ function assertDashboardEventCanBeManaged(
   );
 }
 
-async function assertNoActivePublicEventConflictInTransaction(
+async function findEventManagerOrganizationInTransaction(
   transaction: DatabaseTransaction,
-  input: {
-    workspaceId: number;
-    nextIsActivePublicEvent: boolean;
-    eventId?: number;
-  },
+  authUserId: string,
+  organizationId: string,
 ) {
-  if (!input.nextIsActivePublicEvent) {
-    return;
-  }
-
-  const filters = [
-    eq(events.workspaceId, input.workspaceId),
-    eq(events.isActivePublicEvent, true),
-  ];
-
-  if (input.eventId !== undefined) {
-    filters.push(ne(events.id, input.eventId));
-  }
-
-  const [activePublicEvent] = await transaction
-    .select({ id: events.id })
-    .from(events)
-    .where(and(...filters))
+  const [organization] = await transaction
+    .select({
+      id: workspaces.id,
+      publicId: workspaces.publicId,
+      name: workspaces.name,
+      handle: workspaces.handle,
+      active: workspaces.active,
+      role: workspaceMembers.role,
+      operatorId: operatorUsers.id,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      eq(workspaceMembers.workspaceId, workspaces.id),
+    )
+    .innerJoin(
+      operatorUsers,
+      eq(operatorUsers.id, workspaceMembers.operatorUserId),
+    )
+    .where(
+      and(
+        eq(workspaces.publicId, organizationId),
+        eq(workspaces.active, true),
+        eq(operatorUsers.authUserId, authUserId),
+        eq(operatorUsers.active, true),
+        eq(workspaceMembers.active, true),
+        or(
+          eq(workspaceMembers.role, "owner"),
+          eq(workspaceMembers.role, "manager"),
+        ),
+      ),
+    )
     .limit(1);
 
-  if (!activePublicEvent) {
-    return;
-  }
-
-  throw new OperatorApiError(
-    409,
-    "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
-    "Another public event is already active for this organization.",
-  );
+  return organization ?? null;
 }

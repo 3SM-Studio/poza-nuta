@@ -20,6 +20,7 @@ import {
 import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
+  getDashboardOrganizationEventCompatibilityRedirectPath,
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
   getDashboardOrganizationEventSettingsPath,
@@ -95,6 +96,113 @@ test("organization route helpers encode organizationId values", () => {
     getDashboardOrganizationTeamPath(exampleOrganizationId),
     `/dashboard/org/${exampleOrganizationId}/team`,
   );
+});
+
+test("legacy numeric event routes preserve their suffix when redirecting to the public UUID", () => {
+  const expectedBase =
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}`;
+
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "detail",
+    ),
+    expectedBase,
+  );
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "queue",
+    ),
+    `${expectedBase}/queue`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "share",
+    ),
+    `${expectedBase}/share`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "settings",
+    ),
+    `${expectedBase}/settings`,
+  );
+});
+
+test("legacy numeric event compatibility is authorized at the routing edge", () => {
+  const compatibilitySource = readFileSync(
+    "src/server/operator-api/event-route-compatibility.ts",
+    "utf8",
+  );
+  const routeSources = [
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+      suffix: "detail",
+    },
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
+      suffix: "queue",
+    },
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+      suffix: "share",
+    },
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
+      suffix: "settings",
+    },
+  ] as const;
+
+  assert.match(compatibilitySource, /import "server-only"/);
+  assert.match(compatibilitySource, /\^\[1-9\]\\d\*\$/);
+  assert.match(
+    compatibilitySource,
+    /getDashboardOrganizationForAuthUser\([\s\S]*eq\(events\.workspaceId, organization\.id\)[\s\S]*eq\(events\.id, numericEventId\)/,
+  );
+  assert.ok(
+    compatibilitySource.indexOf("getDashboardOrganizationForAuthUser(") <
+      compatibilitySource.indexOf("eq(events.id, numericEventId)"),
+  );
+  assert.equal(
+    (compatibilitySource.match(/return \{ kind: "not_found" \}/g) ?? [])
+      .length,
+    3,
+  );
+
+  for (const route of routeSources) {
+    const source = readFileSync(route.path, "utf8");
+    const auth = source.indexOf("requireOperatorSession()");
+    const resolution = source.indexOf(
+      "resolveDashboardEventRouteForAuthUser({",
+    );
+
+    assert.ok(auth >= 0 && resolution > auth, route.path);
+    assert.match(source, /routeResolution\.kind === "legacy_redirect"/);
+    assert.match(
+      source,
+      new RegExp(
+        `getDashboardOrganizationEventCompatibilityRedirectPath\\([\\s\\S]*"${route.suffix}"`,
+      ),
+    );
+    assert.match(source, /eventId: routeResolution\.eventPublicId/);
+  }
+
+  const layoutSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/layout.tsx",
+    "utf8",
+  );
+  assert.ok(
+    layoutSource.indexOf("requireOperatorSession()") <
+      layoutSource.indexOf("resolveDashboardEventRouteForAuthUser({"),
+  );
+  assert.match(layoutSource, /eventId: routeResolution\.eventPublicId/);
 });
 
 test("dashboard home redirects users without organizations to onboarding", () => {

@@ -281,9 +281,10 @@ test("event queue reads and writes are scoped to the resolved event", () => {
   );
   assert.match(
     serviceSource,
-    /getEventIdentifierCondition\(eventId\),\s*eq\(events\.workspaceId, organization\.id\)/s,
+    /eq\(events\.publicId, eventIdentifier\.value\),\s*eq\(events\.workspaceId, organization\.id\)/s,
   );
   assert.match(serviceSource, /parseDashboardEventIdentifier\(eventId\)/);
+  assert.doesNotMatch(serviceSource, /eq\(events\.id, identifier\.value\)/);
 });
 
 test("event queue mutations recheck the effective lifecycle while holding the event lock", () => {
@@ -357,6 +358,11 @@ test("event queue mutations require active workspace membership", () => {
   assert.match(contextSource, /eq\(operatorUsers\.active, true\)/);
   assert.match(contextSource, /eq\(workspaceMembers\.active, true\)/);
   assert.match(contextSource, /canManageDashboardEventQueue\(organization\.role\)/);
+  assert.match(contextSource, /const recheckedOrganization = await findEventQueueManagerOrganization/);
+  assert.ok(
+    contextSource.indexOf('for("update")') <
+      contextSource.indexOf("const recheckedOrganization"),
+  );
 });
 
 test("approved queue reorder is transactional and event-scoped", () => {
@@ -386,26 +392,24 @@ test("starting a request completes the previous current request in the same even
     new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
     "utf8",
   );
-  const serviceSource = readFileSync(
-    new URL("../src/server/operator-api/service.ts", import.meta.url),
-    "utf8",
-  );
 
   assert.match(eventQueueSource, /completeCurrentEventQueueRequests/);
 
-  for (const source of [eventQueueSource, serviceSource]) {
-    assert.match(source, /eq\(songRequests\.status, "now"\)/);
-    assert.match(source, /\.orderBy\(asc\(songRequests\.id\)\)\s*\.for\("update"\)/s);
-    assert.match(source, /status: "done"/);
-    assert.match(source, /completedAt: changedAt/);
-    assert.match(source, /startedAt: changedAt/);
-    assert.match(source, /version: sql`\$\{songRequests\.version\} \+ 1`/);
-  }
+  assert.match(eventQueueSource, /eq\(songRequests\.status, "now"\)/);
+  assert.match(
+    eventQueueSource,
+    /\.orderBy\(asc\(songRequests\.id\)\)\s*\.for\("update"\)/s,
+  );
+  assert.match(eventQueueSource, /status: "done"/);
+  assert.match(eventQueueSource, /completedAt: changedAt/);
+  assert.match(eventQueueSource, /startedAt: changedAt/);
+  assert.match(
+    eventQueueSource,
+    /version: sql`\$\{songRequests\.version\} \+ 1`/,
+  );
 
   assert.match(eventQueueSource, /status: targetStatus/);
-  assert.match(serviceSource, /status: targetStatus/);
   assert.match(eventQueueSource, /eq\(songRequests\.eventId, context\.event\.id\)/);
-  assert.match(serviceSource, /eq\(songRequests\.eventId, event\.id\)/);
 });
 
 test("public queue broadcast migration does not expose song requests to browsers", () => {
