@@ -24,7 +24,6 @@ import {
 } from "../../lib/organization-workspace";
 import {
   canManageDashboardEventLifecycle,
-  isActivePublicEventUniqueViolation,
   resolveDashboardEventCloseAt,
 } from "../../lib/dashboard-event-lifecycle";
 import {
@@ -334,8 +333,7 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
   organizationId: string;
   event: CreateDashboardEventInput;
 }) {
-  return mapActivePublicEventUniqueViolation(() =>
-    withEventSessionIdentityRetry(
+  return withEventSessionIdentityRetry(
       (identity) =>
         withSessionCodeCollisionRetry(
           (sessionCode) =>
@@ -437,7 +435,6 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
           isSessionCodeUniqueViolation,
         ),
       isEventSessionIdentityUniqueViolation,
-    ),
   );
 }
 
@@ -512,8 +509,7 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
   eventId: string;
   event: UpdateDashboardEventDetailsInput;
 }) {
-  return mapActivePublicEventUniqueViolation(() =>
-    getDb().transaction(async (transaction) => {
+  return getDb().transaction(async (transaction) => {
       const { organization, event } =
         await requireEventManagerOrganizationEventInTransaction(
           transaction,
@@ -615,8 +611,7 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
         organization,
         event: updatedEvent,
       };
-    }),
-  );
+    });
 }
 
 export async function extendDashboardOrganizationEventForAuthUser(input: {
@@ -771,8 +766,7 @@ export async function reopenDashboardOrganizationEventForAuthUser(input: {
   eventId: string;
   extension: ExtendDashboardEventInput;
 }) {
-  return mapActivePublicEventUniqueViolation(() =>
-    getDb().transaction(async (transaction) => {
+  return getDb().transaction(async (transaction) => {
       const { organization, event } =
         await requireEventManagerOrganizationEventInTransaction(
           transaction,
@@ -847,8 +841,7 @@ export async function reopenDashboardOrganizationEventForAuthUser(input: {
     await publishEventSessionInvalidation(transaction, event.id);
 
       return { organization, event: reopenedEvent };
-    }),
-  );
+    });
 }
 
 export async function rotateDashboardOrganizationEventSessionCodeForAuthUser(input: {
@@ -1258,24 +1251,6 @@ async function mapEventSlugUniqueViolation<T>(action: () => Promise<T>) {
         409,
         "EVENT_SLUG_ALREADY_EXISTS",
         "Event slug is already used by another event.",
-      );
-    }
-
-    throw error;
-  }
-}
-
-async function mapActivePublicEventUniqueViolation<T>(
-  action: () => Promise<T>,
-) {
-  try {
-    return await action();
-  } catch (error) {
-    if (isActivePublicEventUniqueViolation(error)) {
-      throw new OperatorApiError(
-        409,
-        "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
-        "Another public event is already active for this organization.",
       );
     }
 

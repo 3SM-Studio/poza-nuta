@@ -153,10 +153,10 @@ drop columns/tables or restore schema 0020 in place. Keep maintenance enabled,
 restore the full pre-migration backup only if no accepted post-migration writes
 must survive, or ship a reviewed forward-fix migration and code correction.
 
-## Future contract 0022
+## Future code-reuse contract
 
-Migration 0022 is not part of this release. A future review may activate code
-reuse only after `release_after`, at least 365 days after final revocation. It
+A future review may activate code reuse only after `release_after`, at least
+365 days after final revocation. It
 must reconcile the legacy unique column/index, preserve immutable public tokens
 and history, prove no active/historical collision, and provide its own backup,
 restore, rollout, and rollback plan.

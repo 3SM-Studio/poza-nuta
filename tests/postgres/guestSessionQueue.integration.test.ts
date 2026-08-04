@@ -5,6 +5,7 @@ import type postgres from "postgres";
 import { test, vi } from "vitest";
 
 import {
+  applyPostgresMigration,
   applyPostgresMigrations,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
@@ -31,7 +32,14 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
   try {
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, 21);
-    await sql`DROP INDEX public.events_one_active_public_per_workspace_idx`;
+    const legacyFixture = await seedLegacyActiveEvent(sql);
+    const legacyBefore = await eventDataFingerprint(sql, legacyFixture.workspaceId);
+    await assertMigrationFailFast(sql);
+    await applyPostgresMigration(sql, 22);
+    assert.deepEqual(
+      await eventDataFingerprint(sql, legacyFixture.workspaceId),
+      legacyBefore,
+    );
     const fixture = await seedFixture(sql);
     process.env.DATABASE_URL = makeDatabaseUrl(harness);
 
@@ -42,6 +50,21 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
     );
     const { getDb } = await import("../../src/server/db.ts");
     applicationDatabase = getDb() as unknown as typeof applicationDatabase;
+
+    await assertLegacyActiveEventDoesNotBlockCreate(
+      sql,
+      legacyFixture,
+      eventService,
+    );
+
+    await assertConcurrentMultiActiveLifecycle(
+      harness,
+      sql,
+      fixture,
+      sessionService,
+      queueService,
+      eventService,
+    );
 
     await assertEventScopedIsolation(
       harness,
@@ -203,6 +226,160 @@ type Fixture = {
   sessionCode: string;
 };
 
+type LegacyFixture = {
+  authUserId: string;
+  organizationId: string;
+  workspaceId: number;
+  eventId: number;
+};
+
+async function seedLegacyActiveEvent(sql: postgres.Sql): Promise<LegacyFixture> {
+  const authUserId = randomUUID();
+  const organizationId = "legacyactiveevent000";
+  await sql`INSERT INTO auth.users (id) VALUES (${authUserId})`;
+  const [workspace] = await sql<{ id: number }[]>`
+    INSERT INTO public.workspaces (name, handle, public_id)
+    VALUES ('Legacy active event', 'legacy-active-event', ${organizationId})
+    RETURNING id::integer
+  `;
+  const [operator] = await sql<{ id: number }[]>`
+    INSERT INTO public.operator_users (
+      name, display_name, profile_completed_at, auth_user_id, password_hash
+    )
+    VALUES ('legacy_active_operator', 'Legacy Operator', now(), ${authUserId}, 'test-only')
+    RETURNING id::integer
+  `;
+  await sql`
+    INSERT INTO public.workspace_members (workspace_id, operator_user_id, role)
+    VALUES (${workspace.id}, ${operator.id}, 'owner')
+  `;
+  const [event] = await sql<{ id: number; session_code: string }[]>`
+    INSERT INTO public.events (
+      workspace_id, name, starts_at, ends_at, auto_close_at, status,
+      is_active_public_event, song_requests_enabled, public_queue_enabled
+    )
+    VALUES (
+      ${workspace.id}, 'Saved active event', now() - interval '1 hour',
+      now() + interval '2 hours', now() + interval '2 hours', 'active', true,
+      true, true
+    )
+    RETURNING id::integer, session_code
+  `;
+  const [session] = await sql<{ id: number }[]>`
+    INSERT INTO public.event_sessions (event_id, public_token)
+    VALUES (${event.id}, ${makePublicToken()})
+    RETURNING id::integer
+  `;
+  await sql`
+    INSERT INTO public.event_session_codes (session_id, code, rotation_reason)
+    VALUES (${session.id}, ${event.session_code}, 'initial')
+  `;
+  return {
+    authUserId,
+    organizationId,
+    workspaceId: workspace.id,
+    eventId: event.id,
+  };
+}
+
+async function assertMigrationFailFast(sql: postgres.Sql) {
+  await sql`DROP INDEX public.events_one_active_public_per_workspace_idx`;
+  await sql`
+    CREATE INDEX events_one_active_public_per_workspace_idx
+    ON public.events USING btree (workspace_id)
+    WHERE is_active_public_event = true
+  `;
+  await assert.rejects(
+    applyPostgresMigration(sql, 22),
+    (error: unknown) =>
+      isPostgresError(
+        error,
+        "23514",
+        "events_one_active_public_per_workspace_idx_contract",
+      ),
+  );
+  const [unchanged] = await sql<{ exists: boolean; unique: boolean }[]>`
+    SELECT
+      to_regclass('public.events_one_active_public_per_workspace_idx') IS NOT NULL AS exists,
+      i.indisunique AS unique
+    FROM pg_index i
+    JOIN pg_class c ON c.oid = i.indexrelid
+    WHERE c.oid = 'public.events_one_active_public_per_workspace_idx'::regclass
+  `;
+  assert.deepEqual(unchanged, { exists: true, unique: false });
+  await sql`DROP INDEX public.events_one_active_public_per_workspace_idx`;
+  await sql`
+    CREATE UNIQUE INDEX events_one_active_public_per_workspace_idx
+    ON public.events USING btree (workspace_id)
+    WHERE is_active_public_event = true
+  `;
+}
+
+async function assertLegacyActiveEventDoesNotBlockCreate(
+  sql: postgres.Sql,
+  fixture: LegacyFixture,
+  eventService: typeof import("../../src/server/operator-api/organizations.ts"),
+) {
+  const startsAt = new Date(Date.now() - 60_000);
+  const autoCloseAt = new Date(Date.now() + 2 * 60 * 60 * 1_000);
+  const created = await eventService.createDashboardOrganizationEventForAuthUser({
+    authUserId: fixture.authUserId,
+    organizationId: fixture.organizationId,
+    event: {
+      title: "New event beside legacy active",
+      venue: null,
+      city: null,
+      slug: null,
+      visibility: "private",
+      startsAt,
+      autoCloseAt,
+      facebookUrl: null,
+      songRequestsEnabled: true,
+      publicQueueEnabled: true,
+      publicShowSongTitles: false,
+      isActivePublicEvent: true,
+    },
+  });
+  assert.notEqual(created.event.id, fixture.eventId);
+  const [state] = await sql<{
+    active: number;
+    sessions: number;
+    tokens: number;
+    codes: number;
+  }[]>`
+    SELECT
+      count(*) FILTER (WHERE e.is_active_public_event)::integer AS active,
+      count(s.id)::integer AS sessions,
+      count(DISTINCT s.public_token)::integer AS tokens,
+      count(DISTINCT c.code)::integer AS codes
+    FROM public.events e
+    JOIN public.event_sessions s ON s.event_id = e.id
+    JOIN public.event_session_codes c
+      ON c.session_id = s.id
+     AND c.valid_until IS NULL
+     AND c.revoked_at IS NULL
+    WHERE e.workspace_id = ${fixture.workspaceId}
+  `;
+  assert.deepEqual(state, { active: 2, sessions: 2, tokens: 2, codes: 2 });
+}
+
+async function eventDataFingerprint(sql: postgres.Sql, workspaceId: number) {
+  const [state] = await sql<{ count: number; fingerprint: string | null }[]>`
+    SELECT
+      count(*)::integer AS count,
+      md5(string_agg(
+        row_to_json(event_row)::text,
+        ',' ORDER BY event_row.id
+      )) AS fingerprint
+    FROM (
+      SELECT *
+      FROM public.events
+      WHERE workspace_id = ${workspaceId}
+    ) AS event_row
+  `;
+  return state;
+}
+
 async function seedFixture(sql: postgres.Sql): Promise<Fixture> {
   const authUserId = randomUUID();
   const organizationId = "guestqueuee2etest000";
@@ -322,6 +499,240 @@ async function seedFixture(sql: postgres.Sql): Promise<Fixture> {
     songId: song.id,
     sessionCode: event.session_code,
   };
+}
+
+async function assertConcurrentMultiActiveLifecycle(
+  harness: Awaited<ReturnType<typeof startPostgresTestHarness>>,
+  sql: postgres.Sql,
+  fixture: Fixture,
+  sessionService: typeof import("../../src/server/session-api/service.ts"),
+  queueService: typeof import("../../src/server/operator-api/event-queue.ts"),
+  eventService: typeof import("../../src/server/operator-api/organizations.ts"),
+) {
+  await sql`
+    CREATE FUNCTION public.block_0022_event_activation()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' THEN
+        IF NEW.is_active_public_event THEN
+          PERFORM pg_advisory_xact_lock(2200022);
+        END IF;
+      ELSIF NEW.is_active_public_event AND NOT OLD.is_active_public_event THEN
+        PERFORM pg_advisory_xact_lock(2200022);
+      END IF;
+      RETURN NEW;
+    END
+    $$
+  `;
+  await sql`
+    CREATE TRIGGER block_0022_event_activation
+    BEFORE INSERT OR UPDATE ON public.events
+    FOR EACH ROW
+    EXECUTE FUNCTION public.block_0022_event_activation()
+  `;
+
+  try {
+    const startsAt = new Date(Date.now() - 60_000);
+    const autoCloseAt = new Date(Date.now() + 2 * 60 * 60 * 1_000);
+    const createResults = await runBlockedActivationRace(
+      harness,
+      sql,
+      ["Concurrent event A", "Concurrent event B"].map((title) => () =>
+        eventService.createDashboardOrganizationEventForAuthUser({
+          authUserId: fixture.authUserId,
+          organizationId: fixture.organizationId,
+          event: {
+            title,
+            venue: null,
+            city: null,
+            slug: null,
+            visibility: "private",
+            startsAt,
+            autoCloseAt,
+            facebookUrl: null,
+            songRequestsEnabled: true,
+            publicQueueEnabled: true,
+            publicShowSongTitles: true,
+            isActivePublicEvent: true,
+          },
+        }),
+      ),
+    );
+    assert.equal(createResults[0]?.status, "fulfilled");
+    assert.equal(createResults[1]?.status, "fulfilled");
+    if (
+      createResults[0]?.status !== "fulfilled" ||
+      createResults[1]?.status !== "fulfilled"
+    ) {
+      assert.fail("Both concurrent event creations must succeed.");
+    }
+
+    const createdEvents = [
+      createResults[0].value.event,
+      createResults[1].value.event,
+    ];
+    const createdIds = createdEvents.map(({ id }) => id);
+    assert.equal(new Set(createdIds).size, 2);
+    assert.equal(
+      new Set(createdEvents.map(({ publicId }) => publicId)).size,
+      2,
+    );
+    assert.equal(createdEvents.every(({ isActivePublicEvent }) => isActivePublicEvent), true);
+
+    const identities = await sql<{
+      event_id: number;
+      session_code: string;
+      public_token: string;
+    }[]>`
+      SELECT
+        e.id::integer AS event_id,
+        e.session_code,
+        s.public_token
+      FROM public.events e
+      JOIN public.event_sessions s ON s.event_id = e.id
+      WHERE e.id = ANY(${createdIds})
+      ORDER BY e.id
+    `;
+    assert.equal(identities.length, 2);
+    assert.equal(new Set(identities.map(({ session_code }) => session_code)).size, 2);
+    assert.equal(new Set(identities.map(({ public_token }) => public_token)).size, 2);
+
+    const [activeState] = await sql<{ active: number }[]>`
+      SELECT count(*)::integer AS active
+      FROM public.events
+      WHERE workspace_id = ${fixture.workspaceId}
+        AND is_active_public_event
+    `;
+    assert.equal(activeState.active, 4);
+
+    await Promise.all(
+      identities.map(({ public_token }, index) =>
+        sessionService.createPublicSessionRequest(public_token, {
+          songId: fixture.songId,
+          singerName: `Scoped Guest ${index + 1}`,
+          note: null,
+        }),
+      ),
+    );
+    const requests = await sql<{ id: number; event_id: number; status: string }[]>`
+      SELECT id::integer, event_id::integer, status::text
+      FROM public.song_requests
+      WHERE event_id = ANY(${createdIds})
+      ORDER BY event_id
+    `;
+    assert.equal(requests.length, 2);
+    assert.deepEqual(
+      new Set(requests.map(({ event_id }) => event_id)),
+      new Set(createdIds),
+    );
+
+    const queues = await Promise.all(
+      createdEvents.map(({ publicId }) =>
+        queueService.getDashboardOrganizationEventQueueForAuthUser({
+          authUserId: fixture.authUserId,
+          organizationId: fixture.organizationId,
+          eventId: publicId,
+        }),
+      ),
+    );
+    assert.deepEqual(
+      queues.map((queue) => queue?.items.length),
+      [1, 1],
+    );
+    await assert.rejects(
+      queueService.applyDashboardOrganizationEventQueueActionForAuthUser({
+        authUserId: fixture.authUserId,
+        organizationId: fixture.organizationId,
+        eventId: createdEvents[0].publicId,
+        requestId: requests.find(({ event_id }) => event_id === createdIds[1])!.id,
+        action: "approve",
+      }),
+      (error: unknown) =>
+        getErrorStatus(error) === 404 &&
+        getErrorCode(error) === "REQUEST_NOT_FOUND",
+    );
+
+    await Promise.all(
+      createdEvents.map(({ publicId }) =>
+        eventService.closeDashboardOrganizationEventForAuthUser({
+          authUserId: fixture.authUserId,
+          organizationId: fixture.organizationId,
+          eventId: publicId,
+        }),
+      ),
+    );
+    const reopenedAt = new Date(Date.now() + 3 * 60 * 60 * 1_000);
+    const reopenResults = await runBlockedActivationRace(
+      harness,
+      sql,
+      createdEvents.map(({ publicId }) => () =>
+        eventService.reopenDashboardOrganizationEventForAuthUser({
+          authUserId: fixture.authUserId,
+          organizationId: fixture.organizationId,
+          eventId: publicId,
+          extension: { minutes: null, closesAt: reopenedAt },
+        }),
+      ),
+    );
+    assert.equal(reopenResults[0]?.status, "fulfilled");
+    assert.equal(reopenResults[1]?.status, "fulfilled");
+
+    const [reopenedState] = await sql<{ active: number; audits: number }[]>`
+      SELECT
+        count(*) FILTER (WHERE is_active_public_event)::integer AS active,
+        (
+          SELECT count(*)::integer
+          FROM public.operator_audit_log
+          WHERE event_id = ANY(${createdIds})
+            AND action = 'event.reopen'
+        ) AS audits
+      FROM public.events
+      WHERE id = ANY(${createdIds})
+    `;
+    assert.deepEqual(reopenedState, { active: 2, audits: 2 });
+  } finally {
+    await sql`DROP TRIGGER IF EXISTS block_0022_event_activation ON public.events`;
+    await sql`DROP FUNCTION IF EXISTS public.block_0022_event_activation()`;
+  }
+}
+
+async function runBlockedActivationRace<T>(
+  harness: Awaited<ReturnType<typeof startPostgresTestHarness>>,
+  observer: postgres.Sql,
+  operations: Array<() => Promise<T>>,
+) {
+  const blocker = createPostgresTestClient(harness, "postgres", 1);
+  const blockerReady = deferred<number>();
+  const releaseBlocker = deferred<void>();
+  const heldLock = blocker.begin(async (transaction) => {
+    const [backend] = await transaction<{ pid: number }[]>`
+      SELECT pg_backend_pid()::integer AS pid
+    `;
+    assert.ok(backend);
+    await transaction`SELECT pg_advisory_xact_lock(2200022)`;
+    blockerReady.resolve(backend.pid);
+    await releaseBlocker.promise;
+  });
+  void heldLock.catch(() => undefined);
+  const attempts: Array<Promise<T>> = [];
+
+  try {
+    const blockerPid = await withDeadline(
+      blockerReady.promise,
+      "Activation barrier was not acquired.",
+    );
+    attempts.push(...operations.map((operation) => operation()));
+    for (const attempt of attempts) void attempt.catch(() => undefined);
+    await waitForBlockedApplicationQuery(observer, blockerPid, operations.length);
+    releaseBlocker.resolve();
+    return await Promise.allSettled(attempts);
+  } finally {
+    releaseBlocker.resolve();
+    await Promise.allSettled([heldLock, ...attempts]);
+    await blocker.end({ timeout: 5 });
+  }
 }
 
 async function assertEventScopedIsolation(
@@ -597,6 +1008,7 @@ async function assertQueueRbacRecheckAfterEventLock(
 async function waitForBlockedApplicationQuery(
   sql: postgres.Sql,
   blockerPid: number,
+  minimumBlocked = 1,
 ) {
   await withDeadline(
     (async () => {
@@ -607,7 +1019,7 @@ async function waitForBlockedApplicationQuery(
           WHERE datname = current_database()
             AND ${blockerPid} = ANY(pg_blocking_pids(pid))
         `;
-        if (state.blocked > 0) return;
+        if (state.blocked >= minimumBlocked) return;
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
     })(),
@@ -720,6 +1132,17 @@ function getErrorStatus(error: unknown) {
   return typeof error === "object" && error !== null && "status" in error
     ? error.status
     : undefined;
+}
+
+function isPostgresError(error: unknown, code: string, constraint: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code &&
+    (("constraint_name" in error && error.constraint_name === constraint) ||
+      ("constraint" in error && error.constraint === constraint))
+  );
 }
 
 function requireId(ids: Map<string, number>, name: string) {

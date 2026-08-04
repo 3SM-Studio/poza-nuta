@@ -368,8 +368,7 @@ export function EventManagementPanel({
                 <span>Event aktywny publicznie</span>
               </label>
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Ten event jest używany przez publiczny widok /queue. Organizacja
-                może mieć tylko jeden aktywny publicznie event.
+                Udostępnia publiczną sesję i kolejkę tego wydarzenia.
               </p>
               <FieldIssue state={detailsState} field="isActivePublicEvent" />
             </div>

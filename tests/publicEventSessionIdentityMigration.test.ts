@@ -125,9 +125,10 @@ test("journal, package, schema, creation flows, and canonical routes expose 0021
   const journal = JSON.parse(readFileSync("drizzle/meta/_journal.json", "utf8")) as {
     entries: Array<{ idx: number; tag: string }>;
   };
-  assert.equal(journal.entries.at(-1)?.idx, 21);
+  const migration21 = journal.entries.find(({ idx }) => idx === 21);
+  assert.ok(migration21);
   assert.equal(
-    journal.entries.at(-1)?.tag,
+    migration21.tag,
     "0021_public_event_session_identity_expand",
   );
 

@@ -57,7 +57,7 @@ test("production event services never select the first active workspace event", 
   }
 
   const schema = readFileSync("src/db/schema.ts", "utf8");
-  assert.match(schema, /events_one_active_public_per_workspace_idx/);
+  assert.doesNotMatch(schema, /events_one_active_public_per_workspace_idx/);
 });
 
 test("lifecycle and queue mutations resolve a public event UUID and recheck RBAC after locking it", () => {

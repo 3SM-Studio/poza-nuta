@@ -1011,10 +1011,13 @@ async function assertConcurrentActivePublicEventReopen(
     );
     const rejected = results.find((result) => result.status === "rejected");
     assert.ok(rejected && rejected.status === "rejected");
-    assert.equal(getErrorStatus(rejected.reason), 409);
     assert.equal(
-      getErrorCode(rejected.reason),
-      "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
+      isPostgresError(
+        rejected.reason,
+        "23505",
+        "events_one_active_public_per_workspace_idx",
+      ),
+      true,
     );
 
     const [state] = await sql<{ active: number; audits: number }[]>`

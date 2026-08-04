@@ -16,7 +16,6 @@ import {
   getEventReopenDeadline,
 } from "../src/lib/event-session-lifecycle.ts";
 import { parseDashboardEventIdentifier } from "../src/lib/dashboard-event-identifier.ts";
-import { isActivePublicEventUniqueViolation } from "../src/lib/dashboard-event-lifecycle.ts";
 
 test("event session identities use UUID plus exactly 16 CSPRNG bytes as Base64URL", () => {
   const identities = Array.from({ length: 64 }, generateEventSessionIdentity);
@@ -58,32 +57,6 @@ test("identity generation retries only bounded collisions", async () => {
       { attempts: 8 },
     ),
     /not a collision/,
-  );
-});
-
-test("active public event conflicts recognize only the guarded unique index", () => {
-  assert.equal(
-    isActivePublicEventUniqueViolation({
-      cause: {
-        code: "23505",
-        constraint: "events_one_active_public_per_workspace_idx",
-      },
-    }),
-    true,
-  );
-  assert.equal(
-    isActivePublicEventUniqueViolation({
-      code: "23505",
-      constraint: "events_public_id_idx",
-    }),
-    false,
-  );
-  assert.equal(
-    isActivePublicEventUniqueViolation({
-      code: "23514",
-      constraint: "events_one_active_public_per_workspace_idx",
-    }),
-    false,
   );
 });
 

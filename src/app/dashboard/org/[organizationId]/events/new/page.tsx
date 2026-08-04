@@ -148,19 +148,6 @@ async function createEvent(
       };
     }
 
-    if (error instanceof OperatorApiError && error.status === 409) {
-      return {
-        issues: [
-          {
-            field: "isActivePublicEvent",
-            message:
-              "Ta organizacja ma już aktywny publicznie event. Wyłącz go przed ustawieniem kolejnego.",
-          },
-        ],
-        message: "Nie można ustawić dwóch aktywnych publicznie eventów.",
-      };
-    }
-
     throw error;
   }
 }

@@ -498,19 +498,6 @@ function mapEventManagementActionError(
     }
 
     if (error.status === 409) {
-      if (error.code === "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS") {
-        return {
-          issues: [
-            {
-              field: "isActivePublicEvent",
-              message:
-                "Ta organizacja ma już aktywny publicznie event. Wyłącz go przed ustawieniem kolejnego.",
-            },
-          ],
-          message: "Nie można ustawić dwóch aktywnych publicznie eventów.",
-        };
-      }
-
       if (error.code === "EVENT_SLUG_ALREADY_EXISTS") {
         return {
           issues: [

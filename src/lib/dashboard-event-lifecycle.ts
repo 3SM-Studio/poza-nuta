@@ -5,10 +5,6 @@ import {
 
 export const DASHBOARD_EVENT_CLOSING_WARNING_MINUTES = 30;
 export const DASHBOARD_EVENT_EXTENSION_MINUTES = [20, 30, 60] as const;
-const ACTIVE_PUBLIC_EVENT_INDEX_NAME =
-  "events_one_active_public_per_workspace_idx";
-const UNIQUE_VIOLATION_CODE = "23505";
-const MAX_ERROR_CAUSE_DEPTH = 5;
 
 export type DashboardEventExtensionMinutes =
   (typeof DASHBOARD_EVENT_EXTENSION_MINUTES)[number];
@@ -105,36 +101,4 @@ export function resolveDashboardEventCloseAt({
     minutes,
     now,
   });
-}
-
-export function isActivePublicEventUniqueViolation(error: unknown) {
-  const seen = new Set<unknown>();
-  let current: unknown = error;
-
-  for (let depth = 0; depth < MAX_ERROR_CAUSE_DEPTH; depth += 1) {
-    if (!isRecord(current) || seen.has(current)) return false;
-    seen.add(current);
-
-    const constraint =
-      typeof current.constraint === "string"
-        ? current.constraint
-        : typeof current.constraint_name === "string"
-          ? current.constraint_name
-          : null;
-
-    if (
-      current.code === UNIQUE_VIOLATION_CODE &&
-      constraint === ACTIVE_PUBLIC_EVENT_INDEX_NAME
-    ) {
-      return true;
-    }
-
-    current = current.cause;
-  }
-
-  return false;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

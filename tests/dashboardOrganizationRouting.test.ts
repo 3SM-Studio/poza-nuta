@@ -1059,7 +1059,7 @@ test("organization event create persists scheduling and public visibility fields
     organizationsSource,
     /isActivePublicEvent: input\.event\.isActivePublicEvent/,
   );
-  assert.match(organizationsSource, /ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS/);
+  assert.doesNotMatch(organizationsSource, /ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS/);
   assert.match(organizationsSource, /withSessionCodeCollisionRetry/);
   assert.match(organizationsSource, /sessionCode/);
 });

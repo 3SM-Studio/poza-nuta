@@ -175,9 +175,6 @@ export const events = pgTable(
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("events_one_active_public_per_workspace_idx")
-      .on(table.workspaceId)
-      .where(sql`${table.isActivePublicEvent} = true`),
     uniqueIndex("events_slug_idx")
       .on(table.slug)
       .where(sql`${table.slug} is not null`),

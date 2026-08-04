@@ -155,6 +155,13 @@
       "when": 1784367510314,
       "tag": "0021_public_event_session_identity_expand",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785875185006,
+      "tag": "0022_multi_active_public_events",
+      "breakpoints": true
     }
   ]
 }
