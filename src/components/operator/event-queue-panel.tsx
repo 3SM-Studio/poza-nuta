@@ -60,10 +60,7 @@ import {
 import {
   applyOptimisticDashboardEventQueueAction,
   applyOptimisticDashboardEventQueueMove,
-  getDashboardEventQueueActionOperationKey,
   getDashboardEventQueueChangedRequestIds,
-  getDashboardEventQueueMoveOperationKey,
-  isDashboardEventQueueRequestPending,
   reconcileDashboardEventQueueItem,
   restoreDashboardEventQueueItems,
 } from "@/lib/dashboard-event-queue-optimistic";
@@ -98,14 +95,6 @@ const actionLabels: Record<DashboardEventQueueAction, string> = {
   restore: "Przywróć",
 };
 
-const actionSuccessMessages: Record<DashboardEventQueueAction, string> = {
-  approve: "Zgłoszenie zostało zaakceptowane.",
-  start: "Zgłoszenie ustawiono jako aktualnie śpiewane.",
-  reject: "Zgłoszenie zostało odrzucone.",
-  done: "Zgłoszenie oznaczono jako zagrane.",
-  restore: "Zgłoszenie przywrócono do oczekujących.",
-};
-
 type EventQueuePanelProps = {
   organizationId: string;
   eventId: string;
@@ -113,6 +102,8 @@ type EventQueuePanelProps = {
   canManage: boolean;
   initialItems: DashboardEventQueueItemDto[];
 };
+
+type QueueRefreshReason = QueueRealtimeInvalidateReason | "local";
 
 export function EventQueuePanel({
   organizationId,
@@ -124,9 +115,6 @@ export function EventQueuePanel({
   const [items, setItems] = useState(initialItems);
   const [activeFilter, setActiveFilter] =
     useState<DashboardEventQueueFilter>("all");
-  const [pendingOperations, setPendingOperations] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,9 +122,10 @@ export function EventQueuePanel({
   const localMutationVersionRef = useRef(0);
   const realtimeRefreshInFlightRef = useRef(false);
   const realtimeRefreshQueuedRef = useRef(false);
+  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const refreshFromRealtimeRef = useRef<
     | ((
-        reason: QueueRealtimeInvalidateReason,
+        reason: QueueRefreshReason,
         signal: AbortSignal,
       ) => Promise<void>)
     | null
@@ -174,13 +163,13 @@ export function EventQueuePanel({
 
     realtimeRefreshQueuedRef.current = false;
     void refreshFromRealtimeRef.current?.(
-      "broadcast",
+      "local",
       new AbortController().signal,
     );
   }, []);
   const refreshFromRealtime = useCallback(
     async (
-      reason: QueueRealtimeInvalidateReason,
+      reason: QueueRefreshReason,
       signal: AbortSignal,
     ) => {
       if (
@@ -192,7 +181,7 @@ export function EventQueuePanel({
       }
 
       const mutationVersionAtStart = localMutationVersionRef.current;
-      const showSyncIndicator = reason !== "subscribe";
+      const showSyncIndicator = reason !== "subscribe" && reason !== "local";
       realtimeRefreshInFlightRef.current = true;
 
       if (showSyncIndicator) {
@@ -291,119 +280,127 @@ export function EventQueuePanel({
     }
   }
 
-  async function handleAction(
+  function handleAction(
     requestId: number,
     action: DashboardEventQueueAction,
   ) {
-    const operationKey = getDashboardEventQueueActionOperationKey(
-      requestId,
-      action,
-    );
-    const previousItems = items;
-    const optimisticItems = applyOptimisticDashboardEventQueueAction(
-      previousItems,
-      requestId,
-      action,
-    );
-    const changedRequestIds = getDashboardEventQueueChangedRequestIds(
-      previousItems,
-      optimisticItems,
-    );
-    const rollbackItems = previousItems.filter((item) =>
-      changedRequestIds.includes(item.id),
-    );
+    const mutationVersion = beginLocalMutation();
+    let rollbackItems: DashboardEventQueueItemDto[] = [];
 
-    beginLocalMutation();
-    markOperationPending(operationKey);
-    setItems(optimisticItems);
-    setError(null);
-
-    try {
-      const result = await runDashboardEventQueueAction(
-        organizationId,
-        eventId,
+    setItems((currentItems) => {
+      const optimisticItems = applyOptimisticDashboardEventQueueAction(
+        currentItems,
         requestId,
         action,
       );
-
-      setItems((currentItems) =>
-        reconcileDashboardEventQueueItem(currentItems, result.request),
+      const changedRequestIds = getDashboardEventQueueChangedRequestIds(
+        currentItems,
+        optimisticItems,
       );
-      toast.success("Zmieniono status", {
-        description: actionSuccessMessages[action],
-      });
-    } catch (caughtError) {
-      if (!handleAuthenticationError(caughtError)) {
-        setItems((currentItems) =>
-          restoreDashboardEventQueueItems(currentItems, rollbackItems),
+
+      rollbackItems = currentItems.filter((item) =>
+        changedRequestIds.includes(item.id),
+      );
+      return optimisticItems;
+    });
+    setError(null);
+
+    scheduleMutation(async () => {
+      try {
+        const result = await runDashboardEventQueueAction(
+          organizationId,
+          eventId,
+          requestId,
+          action,
         );
-        setError(getClientErrorMessage(caughtError));
+
+        if (mutationVersion === localMutationVersionRef.current) {
+          setItems((currentItems) =>
+            reconcileDashboardEventQueueItem(currentItems, result.request),
+          );
+        }
+      } catch (caughtError) {
+        if (!handleAuthenticationError(caughtError)) {
+          if (mutationVersion === localMutationVersionRef.current) {
+            setItems((currentItems) =>
+              restoreDashboardEventQueueItems(currentItems, rollbackItems),
+            );
+          }
+          setError(getClientErrorMessage(caughtError));
+        }
       }
-    } finally {
-      clearOperationPending(operationKey);
-      finishLocalMutation();
-    }
+    });
   }
 
-  async function handleMove(
+  function handleMove(
     requestId: number,
     direction: DashboardEventQueueMoveDirection,
   ) {
-    const operationKey = getDashboardEventQueueMoveOperationKey(
-      requestId,
-      direction,
-    );
-    const previousItems = items;
-    const optimisticItems = applyOptimisticDashboardEventQueueMove(
-      previousItems,
-      requestId,
-      direction,
-    );
-    const changedRequestIds = getDashboardEventQueueChangedRequestIds(
-      previousItems,
-      optimisticItems,
-    );
-    const rollbackItems = previousItems.filter((item) =>
-      changedRequestIds.includes(item.id),
-    );
+    const mutationVersion = beginLocalMutation();
+    let rollbackItems: DashboardEventQueueItemDto[] = [];
 
-    beginLocalMutation();
-    markOperationPending(operationKey);
-    setItems(optimisticItems);
-    setError(null);
-
-    try {
-      const result = await moveDashboardEventQueueRequest(
-        organizationId,
-        eventId,
+    setItems((currentItems) => {
+      const optimisticItems = applyOptimisticDashboardEventQueueMove(
+        currentItems,
         requestId,
         direction,
       );
-
-      setItems((currentItems) =>
-        reconcileDashboardEventQueueItem(currentItems, result.request),
+      const changedRequestIds = getDashboardEventQueueChangedRequestIds(
+        currentItems,
+        optimisticItems,
       );
-      if (!result.moved) {
-        toast.info("Zgłoszenie jest już na skraju kolejki");
-      } else {
-        toast.success("Kolejność zgłoszeń została zmieniona");
-      }
-    } catch (caughtError) {
-      if (!handleAuthenticationError(caughtError)) {
-        setItems((currentItems) =>
-          restoreDashboardEventQueueItems(currentItems, rollbackItems),
+
+      rollbackItems = currentItems.filter((item) =>
+        changedRequestIds.includes(item.id),
+      );
+      return optimisticItems;
+    });
+    setError(null);
+
+    scheduleMutation(async () => {
+      try {
+        const result = await moveDashboardEventQueueRequest(
+          organizationId,
+          eventId,
+          requestId,
+          direction,
         );
-        setError(getClientErrorMessage(caughtError));
+
+        if (
+          !result.moved &&
+          mutationVersion === localMutationVersionRef.current
+        ) {
+          setItems((currentItems) =>
+            restoreDashboardEventQueueItems(currentItems, rollbackItems),
+          );
+        }
+      } catch (caughtError) {
+        if (!handleAuthenticationError(caughtError)) {
+          if (mutationVersion === localMutationVersionRef.current) {
+            setItems((currentItems) =>
+              restoreDashboardEventQueueItems(currentItems, rollbackItems),
+            );
+          }
+          setError(getClientErrorMessage(caughtError));
+        }
       }
-    } finally {
-      clearOperationPending(operationKey);
-      finishLocalMutation();
-    }
+    });
   }
 
   function beginLocalMutation() {
     pendingMutationCountRef.current += 1;
     localMutationVersionRef.current += 1;
+    realtimeRefreshQueuedRef.current = true;
+    return localMutationVersionRef.current;
+  }
+
+  function scheduleMutation(task: () => Promise<void>) {
+    const queuedTask = mutationQueueRef.current.then(task, task);
+
+    mutationQueueRef.current = queuedTask.then(
+      () => finishLocalMutation(),
+      () => finishLocalMutation(),
+    );
   }
 
   function finishLocalMutation() {
@@ -412,24 +409,6 @@ export function EventQueuePanel({
       pendingMutationCountRef.current - 1,
     );
     flushQueuedRealtimeRefresh();
-  }
-
-  function markOperationPending(operationKey: string) {
-    setPendingOperations((currentOperations) => {
-      const nextOperations = new Set(currentOperations);
-
-      nextOperations.add(operationKey);
-      return nextOperations;
-    });
-  }
-
-  function clearOperationPending(operationKey: string) {
-    setPendingOperations((currentOperations) => {
-      const nextOperations = new Set(currentOperations);
-
-      nextOperations.delete(operationKey);
-      return nextOperations;
-    });
   }
 
   function handleAuthenticationError(caughtError: unknown) {
@@ -449,7 +428,7 @@ export function EventQueuePanel({
       <CardHeader>
         <CardTitle>Zgłoszenia</CardTitle>
         <CardDescription>
-          Zmiany są pobierane przez API po sygnale Supabase Realtime.
+          Zmiany pojawiają się od razu, a zapis odbywa się w tle.
         </CardDescription>
         <CardAction>
           <div className={"flex flex-wrap items-center justify-end gap-2"}>
@@ -463,7 +442,7 @@ export function EventQueuePanel({
               variant="outline"
               type="button"
               onClick={() => void refreshQueue()}
-              disabled={isRefreshing || pendingOperations.size > 0}
+              disabled={isRefreshing}
             >
               <RefreshCw aria-hidden="true" data-icon="inline-start" />
               {isRefreshing ? "Synchronizuję..." : "Odśwież"}
@@ -503,7 +482,6 @@ export function EventQueuePanel({
               canManage={canManage}
               canMoveUp={false}
               canMoveDown={false}
-              pendingOperations={pendingOperations}
               onAction={handleAction}
               onMove={handleMove}
             />
@@ -556,7 +534,6 @@ export function EventQueuePanel({
                     approvedIndex >= 0 &&
                     approvedIndex < approvedItems.length - 1
                   }
-                  pendingOperations={pendingOperations}
                   onAction={handleAction}
                   onMove={handleMove}
                 />
@@ -580,15 +557,14 @@ type EventQueueRequestRowProps = {
   canManage: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
-  pendingOperations: ReadonlySet<string>;
   onAction: (
     requestId: number,
     action: DashboardEventQueueAction,
-  ) => Promise<void>;
+  ) => void;
   onMove: (
     requestId: number,
     direction: DashboardEventQueueMoveDirection,
-  ) => Promise<void>;
+  ) => void;
 };
 
 function EventQueueRequestRow({
@@ -596,16 +572,11 @@ function EventQueueRequestRow({
   canManage,
   canMoveUp,
   canMoveDown,
-  pendingOperations,
   onAction,
   onMove,
 }: EventQueueRequestRowProps) {
   const actions = getAvailableActions(item.status);
   const duration = formatDuration(item.song.durationSeconds);
-  const isRequestPending = isDashboardEventQueueRequestPending(
-    pendingOperations,
-    item.id,
-  );
 
   return (
     <article className={"grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 px-4 py-3 sm:grid-cols-[minmax(12rem,1fr)_auto] [&+&]:border-t [&+&]:border-border"}>
@@ -643,7 +614,7 @@ function EventQueueRequestRow({
                 title="Przesuń w górę"
                 aria-label="Przesuń zgłoszenie w górę"
                 onClick={() => void onMove(item.id, "up")}
-                disabled={isRequestPending || !canMoveUp}
+                disabled={!canMoveUp}
               >
                 <ArrowUp aria-hidden="true" data-icon="inline-start" />
               </Button>
@@ -654,7 +625,7 @@ function EventQueueRequestRow({
                 title="Przesuń w dół"
                 aria-label="Przesuń zgłoszenie w dół"
                 onClick={() => void onMove(item.id, "down")}
-                disabled={isRequestPending || !canMoveDown}
+                disabled={!canMoveDown}
               >
                 <ArrowDown aria-hidden="true" data-icon="inline-start" />
               </Button>
@@ -662,12 +633,6 @@ function EventQueueRequestRow({
           ) : null}
 
           {actions.map((action) => {
-            const operationKey = getDashboardEventQueueActionOperationKey(
-              item.id,
-              action,
-            );
-            const isCurrentActionPending = pendingOperations.has(operationKey);
-
             if (action === "reject") {
               return (
                 <AlertDialog key={action}>
@@ -676,12 +641,9 @@ function EventQueueRequestRow({
                       size="sm"
                       variant="destructive"
                       type="button"
-                      disabled={isRequestPending}
                     >
                       {getActionIcon(action)}
-                      {isCurrentActionPending
-                        ? "Zapisywanie..."
-                        : actionLabels[action]}
+                      {actionLabels[action]}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent data-management-theme="true">
@@ -713,12 +675,9 @@ function EventQueueRequestRow({
                 variant="default"
                 type="button"
                 onClick={() => void onAction(item.id, action)}
-                disabled={isRequestPending}
               >
                 {getActionIcon(action)}
-                {isCurrentActionPending
-                  ? "Zapisywanie..."
-                  : actionLabels[action]}
+                {actionLabels[action]}
               </Button>
             );
           })}

@@ -16,35 +16,6 @@ export type DashboardEventQueueOptimisticItem = {
   completedAt: string | null;
 };
 
-export function getDashboardEventQueueActionOperationKey(
-  requestId: number,
-  action: DashboardEventQueueAction,
-) {
-  return `${requestId}:${action}`;
-}
-
-export function getDashboardEventQueueMoveOperationKey(
-  requestId: number,
-  direction: DashboardEventQueueMoveDirection,
-) {
-  return `${requestId}:move:${direction}`;
-}
-
-export function isDashboardEventQueueRequestPending(
-  pendingOperations: ReadonlySet<string>,
-  requestId: number,
-) {
-  const requestPrefix = `${requestId}:`;
-
-  for (const operation of pendingOperations) {
-    if (operation.startsWith(requestPrefix)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 export function applyOptimisticDashboardEventQueueAction<
   TItem extends DashboardEventQueueOptimisticItem,
 >(

@@ -11,8 +11,6 @@ import {
 } from "../src/lib/dashboard-event-queue.ts";
 import {
   applyOptimisticDashboardEventQueueAction,
-  getDashboardEventQueueActionOperationKey,
-  isDashboardEventQueueRequestPending,
   reconcileDashboardEventQueueItem,
   restoreDashboardEventQueueItems,
   type DashboardEventQueueOptimisticItem,
@@ -80,7 +78,7 @@ test("event queue actions preserve the existing request status model", () => {
   assert.equal(getDashboardEventQueueTargetStatus("restore"), "pending");
 });
 
-test("queue feedback uses semantic badges, Sonner, and destructive confirmation", () => {
+test("queue feedback is immediate and keeps destructive confirmation", () => {
   const panel = readFileSync(
     "src/components/operator/event-queue-panel.tsx",
     "utf8",
@@ -90,11 +88,12 @@ test("queue feedback uses semantic badges, Sonner, and destructive confirmation"
     "utf8",
   );
 
-  assert.match(panel, /toast\.success\("Zmieniono status"/);
+  assert.match(panel, /toast\.success\("Kolejka zaktualizowana"/);
   assert.match(panel, /<AlertDialog key=\{action\}>/);
   assert.match(panel, /<AlertDialogCancel>Anuluj<\/AlertDialogCancel>/);
   assert.match(panel, /<RequestStatusBadge status=\{item\.status\}/);
   assert.doesNotMatch(panel, /setMessage\(/);
+  assert.doesNotMatch(panel, /Zmieniono status|Zapisywanie\.\.\./);
 
   for (const status of [
     "pending",
@@ -117,19 +116,6 @@ test("queue feedback uses semantic badges, Sonner, and destructive confirmation"
   ]) {
     assert.match(badge, new RegExp(label));
   }
-});
-
-test("event queue pending keys are scoped per request and action", () => {
-  const pendingOperations = new Set([
-    getDashboardEventQueueActionOperationKey(10, "approve"),
-  ]);
-
-  assert.equal(
-    getDashboardEventQueueActionOperationKey(10, "approve"),
-    "10:approve",
-  );
-  assert.equal(isDashboardEventQueueRequestPending(pendingOperations, 10), true);
-  assert.equal(isDashboardEventQueueRequestPending(pendingOperations, 11), false);
 });
 
 test("optimistic accept moves a pending request into the approved queue", () => {
@@ -505,8 +491,6 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
 
   assert.match(panelSource, /onClick=\{\(\) => void refreshQueue\(\)\}/);
   assert.match(panelSource, /useDashboardQueueRealtime/);
-  assert.match(panelSource, /pendingOperations/);
-  assert.match(panelSource, /getDashboardEventQueueActionOperationKey/);
   assert.match(panelSource, /applyOptimisticDashboardEventQueueAction/);
   assert.match(panelSource, /restoreDashboardEventQueueItems/);
   assert.match(panelSource, /reconcileDashboardEventQueueItem/);
@@ -514,12 +498,16 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
   assert.match(panelSource, /localMutationVersionRef/);
   assert.match(panelSource, /realtimeRefreshQueuedRef/);
   assert.match(panelSource, /flushQueuedRealtimeRefresh/);
+  assert.match(panelSource, /mutationQueueRef/);
+  assert.match(panelSource, /scheduleMutation/);
   assert.match(
     panelSource,
     /getDashboardEventQueue\(\s*organizationId,\s*eventId,\s*signal/s,
   );
   assert.doesNotMatch(panelSource, /const isBusy = pendingOperation !== null/);
   assert.doesNotMatch(panelSource, /disabled=\{pendingOperation !== null\}/);
+  assert.doesNotMatch(panelSource, /pendingOperations|Zapisywanie\.\.\./);
+  assert.doesNotMatch(panelSource, /disabled=\{isRequestPending/);
   assert.doesNotMatch(panelSource, /setInterval|setTimeout/);
   assert.match(panelSource, /Nie ma jeszcze zgłoszeń z linku sesji/);
 });
@@ -532,9 +520,9 @@ test("event queue panel does not refetch the whole queue after each mutation", (
     ),
     "utf8",
   );
-  const actionStart = panelSource.indexOf("async function handleAction");
-  const moveStart = panelSource.indexOf("async function handleMove");
-  const pendingStart = panelSource.indexOf("function markOperationPending");
+  const actionStart = panelSource.indexOf("function handleAction");
+  const moveStart = panelSource.indexOf("function handleMove");
+  const pendingStart = panelSource.indexOf("function beginLocalMutation");
   const actionSource = panelSource.slice(actionStart, moveStart);
   const moveSource = panelSource.slice(moveStart, pendingStart);
 

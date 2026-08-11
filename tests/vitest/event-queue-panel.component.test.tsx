@@ -99,9 +99,11 @@ describe("EventQueuePanel", () => {
 
   it("requires destructive confirmation before rejecting a request", async () => {
     const pending = makeItem(1, "pending");
+    const rejected = { ...pending, status: "rejected" as const, version: 2 };
     runAction.mockResolvedValue({
-      request: { ...pending, status: "rejected", version: 2 },
+      request: rejected,
     });
+    getQueue.mockResolvedValue({ items: [rejected] });
     renderPanel([pending]);
 
     fireEvent.click(screen.getByRole("button", { name: "Odrzuć" }));
@@ -120,9 +122,9 @@ describe("EventQueuePanel", () => {
     );
 
     await waitFor(() => expect(runAction).toHaveBeenCalledOnce());
-    expect(toastSuccess).toHaveBeenCalledWith("Zmieniono status", {
-      description: "Zgłoszenie zostało odrzucone.",
-    });
+    expect(
+      await screen.findByRole("button", { name: /Przywr/ }),
+    ).toBeEnabled();
     expect(screen.queryByText(/Zmieniono status/)).not.toBeInTheDocument();
   });
 
@@ -148,7 +150,8 @@ describe("EventQueuePanel", () => {
       await screen.findByRole("button", {
         name: /Ustaw jako aktualnie/,
       }),
-    ).toBeInTheDocument();
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Odśwież/ })).toBeEnabled();
     expect(runAction).toHaveBeenCalledOnce();
 
     await realtime.invalidate?.("broadcast", new AbortController().signal);
@@ -162,6 +165,52 @@ describe("EventQueuePanel", () => {
         name: /Ustaw jako aktualnie/,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("applies repeated moves locally and serializes their background writes", async () => {
+    const first = makeItem(1, "approved");
+    const second = makeItem(2, "approved");
+    const third = makeItem(3, "approved");
+    const finalThird = { ...third, position: 1, version: 3 };
+    let confirmFirstMove!: (value: {
+      moved: boolean;
+      request: DashboardEventQueueItemDto;
+    }) => void;
+
+    moveRequest
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            confirmFirstMove = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ moved: true, request: finalThird });
+    getQueue.mockResolvedValue({
+      items: [finalThird, { ...first, position: 2 }, { ...second, position: 3 }],
+    });
+    renderPanel([first, second, third]);
+
+    const thirdRow = screen.getByText("Singer 3").closest("article");
+    expect(thirdRow).not.toBeNull();
+    const moveUp = within(thirdRow!).getByRole("button", {
+      name: /Przesuń zgłoszenie w górę/,
+    });
+
+    fireEvent.click(moveUp);
+    await waitFor(() => expect(moveRequest).toHaveBeenCalledOnce());
+    expect(moveUp).toBeEnabled();
+
+    fireEvent.click(moveUp);
+    expect(within(thirdRow!).getByText("Pozycja: 1")).toBeInTheDocument();
+    expect(moveRequest).toHaveBeenCalledOnce();
+
+    confirmFirstMove({
+      moved: true,
+      request: { ...third, position: 2, version: 2 },
+    });
+
+    await waitFor(() => expect(moveRequest).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
   });
 });
 
