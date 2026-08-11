@@ -1,12 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { loginOperator, OperatorClientError } from "./api";
 
 export function OperatorLoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,8 +18,7 @@ export function OperatorLoginForm() {
     try {
       await loginOperator({ email, password });
       setPassword("");
-      router.replace("/dashboard");
-      router.refresh();
+      window.location.replace("/dashboard");
     } catch (caughtError) {
       setError(getLoginErrorMessage(caughtError));
     } finally {

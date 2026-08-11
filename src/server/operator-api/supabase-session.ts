@@ -165,24 +165,17 @@ const getCachedOperatorSession = cache(
 async function resolveOperatorSession(): Promise<AuthenticatedOperatorSession> {
   const routeName = "dashboard.session";
   const supabase = await createSupabaseServerClient();
-  const userResult = await traceServerStep(routeName, "getUser", () =>
-    supabase.auth.getUser(),
-  );
-  throwIfInfrastructureAuthError(userResult.error);
+  const authUser = await getVerifiedAuthIdentity(supabase, routeName);
 
-  const {
-    data: { user },
-  } = userResult;
-
-  const operator = user
+  const operator = authUser
     ? await traceServerStep(
         routeName,
         "findLinkedOperator",
-        () => findLinkedOperator(user.id),
+        () => findLinkedOperator(authUser.id),
         SESSION_DB_STEP_TIMEOUT_MS,
       )
     : null;
-  const decision = resolveOperatorAccess(user?.id ?? null, operator);
+  const decision = resolveOperatorAccess(authUser?.id ?? null, operator);
 
   if (!decision.allowed) {
     throw new OperatorApiError(
@@ -193,10 +186,7 @@ async function resolveOperatorSession(): Promise<AuthenticatedOperatorSession> {
   }
 
   return {
-    authUser: {
-      id: user!.id,
-      email: user!.email ?? null,
-    },
+    authUser: authUser!,
     operator: decision.operator,
     supabase,
   };
@@ -204,21 +194,36 @@ async function resolveOperatorSession(): Promise<AuthenticatedOperatorSession> {
 
 export async function getSignInPageAccess() {
   const supabase = await createSupabaseServerClient();
-  const userResult = await traceServerStep("sign-in", "getUser", () =>
-    supabase.auth.getUser(),
-  );
-  throwIfInfrastructureAuthError(userResult.error);
-
-  const {
-    data: { user },
-  } = userResult;
-  const operator = user
+  const authUser = await getVerifiedAuthIdentity(supabase, "sign-in");
+  const operator = authUser
     ? await traceServerStep("sign-in", "findLinkedOperator", () =>
-        findLinkedOperator(user.id),
+        findLinkedOperator(authUser.id),
       )
     : null;
 
-  return resolveSignInPageAccess(user?.id ?? null, operator);
+  return resolveSignInPageAccess(authUser?.id ?? null, operator);
+}
+
+async function getVerifiedAuthIdentity(
+  supabase: SupabaseServerClient,
+  routeName: string,
+) {
+  const claimsResult = await traceServerStep(routeName, "getClaims", () =>
+    supabase.auth.getClaims(),
+  );
+  throwIfInfrastructureAuthError(claimsResult.error);
+
+  const claims = claimsResult.data?.claims;
+  const id = typeof claims?.sub === "string" ? claims.sub : null;
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: typeof claims?.email === "string" ? claims.email : null,
+  };
 }
 
 export async function logoutOperator() {

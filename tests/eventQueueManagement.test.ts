@@ -510,13 +510,17 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
   assert.match(panelSource, /applyOptimisticDashboardEventQueueAction/);
   assert.match(panelSource, /restoreDashboardEventQueueItems/);
   assert.match(panelSource, /reconcileDashboardEventQueueItem/);
+  assert.match(panelSource, /pendingMutationCountRef/);
+  assert.match(panelSource, /localMutationVersionRef/);
+  assert.match(panelSource, /realtimeRefreshQueuedRef/);
+  assert.match(panelSource, /flushQueuedRealtimeRefresh/);
   assert.match(
     panelSource,
     /getDashboardEventQueue\(\s*organizationId,\s*eventId,\s*signal/s,
   );
   assert.doesNotMatch(panelSource, /const isBusy = pendingOperation !== null/);
   assert.doesNotMatch(panelSource, /disabled=\{pendingOperation !== null\}/);
-  assert.doesNotMatch(panelSource, /setInterval|setTimeout|useEffect/);
+  assert.doesNotMatch(panelSource, /setInterval|setTimeout/);
   assert.match(panelSource, /Nie ma jeszcze zgłoszeń z linku sesji/);
 });
 

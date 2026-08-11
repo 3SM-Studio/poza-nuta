@@ -456,9 +456,28 @@ test("organization overview queries are scoped to workspace public access target
 
   assert.match(source, /getOverviewStatsForWorkspace\(\{/);
   assert.match(source, /workspaceId: organization\.id/);
-  assert.match(source, /countEventStatsForWorkspace\(input\.workspaceId\)/);
+  assert.match(
+    source,
+    /countEventStatsForWorkspace\(input\.workspaceId, input\.now\)/,
+  );
   assert.match(source, /countRequestStatsForWorkspace\(\{/);
-  assert.match(source, /getRecentEventsForWorkspace\(organization\.id\)/);
+  assert.match(
+    source,
+    /getActiveEventForWorkspace\(organization\.id, now\)/,
+  );
+  assert.match(
+    source,
+    /getRecentEventsForWorkspace\(organization\.id, now\)/,
+  );
+  assert.match(
+    source,
+    /status: getEffectiveEventLifecycleStatus\(event, now\)/,
+  );
+  assert.match(source, /getEffectivelyActiveEventCondition\(now\)/);
+  assert.equal(
+    source.includes("count(*) filter (where ${events.status} = 'active')"),
+    false,
+  );
   assert.match(source, /getTopRequestedSongsForWorkspace\(organization\.id\)/);
   assert.match(source, /eq\(events\.workspaceId, workspaceId\)/);
   assert.match(source, /innerJoin\(events, eq\(events\.id, songRequests\.eventId\)\)/);

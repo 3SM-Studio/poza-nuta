@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -11,7 +11,6 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { RequestStatusBadge } from "@/components/request-status-badge";
@@ -68,7 +67,10 @@ import {
   reconcileDashboardEventQueueItem,
   restoreDashboardEventQueueItems,
 } from "@/lib/dashboard-event-queue-optimistic";
-import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
+import type {
+  QueueRealtimeConnectionStatus,
+  QueueRealtimeInvalidateReason,
+} from "@/lib/queue-realtime";
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
 import { formatDuration, OperatorClientError } from "./api";
@@ -119,7 +121,6 @@ export function EventQueuePanel({
   canManage,
   initialItems,
 }: EventQueuePanelProps) {
-  const router = useRouter();
   const [items, setItems] = useState(initialItems);
   const [activeFilter, setActiveFilter] =
     useState<DashboardEventQueueFilter>("all");
@@ -129,6 +130,17 @@ export function EventQueuePanel({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pendingMutationCountRef = useRef(0);
+  const localMutationVersionRef = useRef(0);
+  const realtimeRefreshInFlightRef = useRef(false);
+  const realtimeRefreshQueuedRef = useRef(false);
+  const refreshFromRealtimeRef = useRef<
+    | ((
+        reason: QueueRealtimeInvalidateReason,
+        signal: AbortSignal,
+      ) => Promise<void>)
+    | null
+  >(null);
   const filteredItems = useMemo(() => {
     const statuses = getDashboardEventQueueFilterStatuses(activeFilter);
     const queueItems = items.filter((item) => item.status !== "now");
@@ -151,9 +163,41 @@ export function EventQueuePanel({
         ),
     [items],
   );
+  const flushQueuedRealtimeRefresh = useCallback(() => {
+    if (
+      pendingMutationCountRef.current > 0 ||
+      realtimeRefreshInFlightRef.current ||
+      !realtimeRefreshQueuedRef.current
+    ) {
+      return;
+    }
+
+    realtimeRefreshQueuedRef.current = false;
+    void refreshFromRealtimeRef.current?.(
+      "broadcast",
+      new AbortController().signal,
+    );
+  }, []);
   const refreshFromRealtime = useCallback(
-    async (_reason: unknown, signal: AbortSignal) => {
-      setIsSyncing(true);
+    async (
+      reason: QueueRealtimeInvalidateReason,
+      signal: AbortSignal,
+    ) => {
+      if (
+        pendingMutationCountRef.current > 0 ||
+        realtimeRefreshInFlightRef.current
+      ) {
+        realtimeRefreshQueuedRef.current = true;
+        return;
+      }
+
+      const mutationVersionAtStart = localMutationVersionRef.current;
+      const showSyncIndicator = reason !== "subscribe";
+      realtimeRefreshInFlightRef.current = true;
+
+      if (showSyncIndicator) {
+        setIsSyncing(true);
+      }
 
       try {
         const response = await getDashboardEventQueue(
@@ -161,6 +205,14 @@ export function EventQueuePanel({
           eventId,
           signal,
         );
+
+        if (
+          pendingMutationCountRef.current > 0 ||
+          localMutationVersionRef.current !== mutationVersionAtStart
+        ) {
+          realtimeRefreshQueuedRef.current = true;
+          return;
+        }
 
         setItems(response.items);
         setError(null);
@@ -170,32 +222,62 @@ export function EventQueuePanel({
         }
 
         if (
+          pendingMutationCountRef.current > 0 ||
+          localMutationVersionRef.current !== mutationVersionAtStart
+        ) {
+          realtimeRefreshQueuedRef.current = true;
+          return;
+        }
+
+        if (
           caughtError instanceof OperatorClientError &&
           caughtError.status === 401
         ) {
-          router.replace("/sign-in");
-          router.refresh();
+          window.location.replace("/sign-in");
           return;
         }
 
         setError(getClientErrorMessage(caughtError));
       } finally {
-        setIsSyncing(false);
+        realtimeRefreshInFlightRef.current = false;
+
+        if (showSyncIndicator) {
+          setIsSyncing(false);
+        }
+
+        flushQueuedRealtimeRefresh();
       }
     },
-    [eventId, organizationId, router],
+    [eventId, flushQueuedRealtimeRefresh, organizationId],
   );
+  useEffect(() => {
+    refreshFromRealtimeRef.current = refreshFromRealtime;
+
+    return () => {
+      refreshFromRealtimeRef.current = null;
+    };
+  }, [refreshFromRealtime]);
   const liveStatus = useDashboardQueueRealtime(
     realtimeEventId,
     refreshFromRealtime,
   );
 
   async function refreshQueue() {
+    const mutationVersionAtStart = localMutationVersionRef.current;
+
     setIsRefreshing(true);
     setError(null);
 
     try {
       const response = await getDashboardEventQueue(organizationId, eventId);
+
+      if (
+        pendingMutationCountRef.current > 0 ||
+        localMutationVersionRef.current !== mutationVersionAtStart
+      ) {
+        realtimeRefreshQueuedRef.current = true;
+        return;
+      }
 
       setItems(response.items);
       toast.success("Kolejka zaktualizowana");
@@ -205,6 +287,7 @@ export function EventQueuePanel({
       }
     } finally {
       setIsRefreshing(false);
+      flushQueuedRealtimeRefresh();
     }
   }
 
@@ -230,6 +313,7 @@ export function EventQueuePanel({
       changedRequestIds.includes(item.id),
     );
 
+    beginLocalMutation();
     markOperationPending(operationKey);
     setItems(optimisticItems);
     setError(null);
@@ -257,6 +341,7 @@ export function EventQueuePanel({
       }
     } finally {
       clearOperationPending(operationKey);
+      finishLocalMutation();
     }
   }
 
@@ -282,6 +367,7 @@ export function EventQueuePanel({
       changedRequestIds.includes(item.id),
     );
 
+    beginLocalMutation();
     markOperationPending(operationKey);
     setItems(optimisticItems);
     setError(null);
@@ -311,7 +397,21 @@ export function EventQueuePanel({
       }
     } finally {
       clearOperationPending(operationKey);
+      finishLocalMutation();
     }
+  }
+
+  function beginLocalMutation() {
+    pendingMutationCountRef.current += 1;
+    localMutationVersionRef.current += 1;
+  }
+
+  function finishLocalMutation() {
+    pendingMutationCountRef.current = Math.max(
+      0,
+      pendingMutationCountRef.current - 1,
+    );
+    flushQueuedRealtimeRefresh();
   }
 
   function markOperationPending(operationKey: string) {
@@ -337,8 +437,7 @@ export function EventQueuePanel({
       caughtError instanceof OperatorClientError &&
       caughtError.status === 401
     ) {
-      router.replace("/sign-in");
-      router.refresh();
+      window.location.replace("/sign-in");
       return true;
     }
 
@@ -364,7 +463,7 @@ export function EventQueuePanel({
               variant="outline"
               type="button"
               onClick={() => void refreshQueue()}
-              disabled={isRefreshing}
+              disabled={isRefreshing || pendingOperations.size > 0}
             >
               <RefreshCw aria-hidden="true" data-icon="inline-start" />
               {isRefreshing ? "Synchronizuję..." : "Odśwież"}

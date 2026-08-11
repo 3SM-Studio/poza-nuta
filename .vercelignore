@@ -1,0 +1,7 @@
+.env
+.env.local
+.mcp.json
+.codex/
+CODEX_TASK_BRIEF.md
+pozanuta-stage-1.zip
+tsconfig.tsbuildinfo

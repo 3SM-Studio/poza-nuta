@@ -147,6 +147,30 @@ test("operator session lookup is memoized without routeName as cache key", () =>
   assert.equal(source.includes("getCachedOperatorSession(routeName"), false);
 });
 
+test("operator session hot path verifies cached JWT claims without a remote getUser call", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/supabase-session.ts", import.meta.url),
+    "utf8",
+  );
+  const sessionStart = source.indexOf("async function resolveOperatorSession");
+  const logoutStart = source.indexOf("export async function logoutOperator");
+  const sessionSource = source.slice(sessionStart, logoutStart);
+
+  assert.match(sessionSource, /getVerifiedAuthIdentity/);
+  assert.match(sessionSource, /supabase\.auth\.getClaims\(\)/);
+  assert.doesNotMatch(sessionSource, /supabase\.auth\.getUser\(\)/);
+});
+
+test("operator login performs one full navigation after the session cookie is written", () => {
+  const source = readFileSync(
+    new URL("../src/components/operator/login-form.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /window\.location\.replace\("\/dashboard"\)/);
+  assert.doesNotMatch(source, /useRouter|router\.replace|router\.refresh/);
+});
+
 test("dashboard organization list is memoized per request render", () => {
   const source = readFileSync(
     new URL("../src/server/operator-api/organizations.ts", import.meta.url),

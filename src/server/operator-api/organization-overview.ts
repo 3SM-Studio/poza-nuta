@@ -2,7 +2,12 @@ import "server-only";
 
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 
+import { getEffectivelyActiveEventCondition } from "../../db/event-conditions";
 import { events, songs, songRequests, workspaceMembers } from "../../db/schema";
+import {
+  getEffectiveEventLifecycleStatus,
+  type EffectiveEventLifecycleStatus,
+} from "../../lib/effective-event-lifecycle";
 import { getDb } from "../db";
 import { traceServerStep } from "../runtime-diagnostics";
 import { getDashboardOrganizationForAuthUser } from "./organizations";
@@ -39,7 +44,7 @@ export type DashboardOrganizationOverview = {
     name: string;
     venue: string | null;
     startsAt: Date;
-    status: "draft" | "active" | "closed" | "cancelled";
+    status: EffectiveEventLifecycleStatus;
   }>;
   topRequestedSongs: Array<{
     songId: number;
@@ -97,6 +102,7 @@ export async function getDashboardOrganizationOverviewForAuthUser(
     action: () =>
       getOverviewStatsForWorkspace({
         workspaceId: organization.id,
+        now,
         todayStart,
         sevenDaysAgo,
       }),
@@ -105,13 +111,13 @@ export async function getDashboardOrganizationOverviewForAuthUser(
   const activeEventResult = await resolveOptionalOverviewSection({
     routeName: "dashboard.org",
     stepName: "activeEvent",
-    action: () => getActiveEventForWorkspace(organization.id),
+    action: () => getActiveEventForWorkspace(organization.id, now),
     fallback: null,
   });
   const recentEventsResult = await resolveOptionalOverviewSection({
     routeName: "dashboard.org",
     stepName: "recentEvents",
-    action: () => getRecentEventsForWorkspace(organization.id),
+    action: () => getRecentEventsForWorkspace(organization.id, now),
     fallback: [],
   });
   const topRequestedSongsResult = await resolveOptionalOverviewSection({
@@ -154,13 +160,14 @@ export async function getDashboardOrganizationOverviewForAuthUser(
 
 async function getOverviewStatsForWorkspace(input: {
   workspaceId: number;
+  now: Date;
   todayStart: Date;
   sevenDaysAgo: Date;
 }): Promise<DashboardOrganizationOverview["stats"]> {
   const eventStats = await traceServerStep(
     "dashboard.org",
     "overview.counts.events",
-    () => countEventStatsForWorkspace(input.workspaceId),
+    () => countEventStatsForWorkspace(input.workspaceId, input.now),
   );
   const requestStats = await traceServerStep(
     "dashboard.org",
@@ -191,10 +198,11 @@ async function getOverviewStatsForWorkspace(input: {
   };
 }
 
-async function countEventStatsForWorkspace(workspaceId: number) {
+async function countEventStatsForWorkspace(workspaceId: number, now: Date) {
+  const effectivelyActive = getEffectivelyActiveEventCondition(now);
   const [result] = await getDb()
     .select({
-      activeEvents: sql<number>`count(*) filter (where ${events.status} = 'active')::int`,
+      activeEvents: sql<number>`count(*) filter (where ${effectivelyActive})::int`,
       totalEvents: sql<number>`count(*)::int`,
     })
     .from(events)
@@ -255,7 +263,7 @@ async function countCatalogSongs() {
   return result?.value ?? 0;
 }
 
-async function getActiveEventForWorkspace(workspaceId: number) {
+async function getActiveEventForWorkspace(workspaceId: number, now: Date) {
   const [event] = await getDb()
     .select({
       id: events.id,
@@ -266,26 +274,42 @@ async function getActiveEventForWorkspace(workspaceId: number) {
       publicShowSongTitles: events.publicShowSongTitles,
     })
     .from(events)
-    .where(and(eq(events.workspaceId, workspaceId), eq(events.status, "active")))
+    .where(
+      and(
+        eq(events.workspaceId, workspaceId),
+        getEffectivelyActiveEventCondition(now),
+      ),
+    )
     .orderBy(desc(events.startsAt), desc(events.id))
     .limit(1);
 
   return event ?? null;
 }
 
-async function getRecentEventsForWorkspace(workspaceId: number) {
-  return getDb()
+async function getRecentEventsForWorkspace(workspaceId: number, now: Date) {
+  const recentEvents = await getDb()
     .select({
       id: events.id,
       name: events.name,
       venue: events.venue,
       startsAt: events.startsAt,
       status: events.status,
+      autoCloseAt: events.autoCloseAt,
+      endsAt: events.endsAt,
+      closedAt: events.closedAt,
     })
     .from(events)
     .where(eq(events.workspaceId, workspaceId))
     .orderBy(desc(events.startsAt), desc(events.id))
     .limit(5);
+
+  return recentEvents.map((event) => ({
+    id: event.id,
+    name: event.name,
+    venue: event.venue,
+    startsAt: event.startsAt,
+    status: getEffectiveEventLifecycleStatus(event, now),
+  }));
 }
 
 async function getTopRequestedSongsForWorkspace(workspaceId: number) {

@@ -155,6 +155,18 @@ test("dashboard managed event status is calculated at runtime", () => {
     getManagedEventLifecycleStatus(
       {
         ...baseEvent,
+        status: "active",
+        startsAt: new Date("2026-07-05T12:00:00.000Z"),
+        autoCloseAt: new Date("2026-07-05T17:59:59.999Z"),
+      },
+      now,
+    ),
+    "closed",
+  );
+  assert.equal(
+    getManagedEventLifecycleStatus(
+      {
+        ...baseEvent,
         status: "closed",
         closedAt: new Date("2026-07-05T17:30:00.000Z"),
       },

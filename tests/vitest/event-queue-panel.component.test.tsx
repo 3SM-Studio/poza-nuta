@@ -12,20 +12,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventQueuePanel } from "@/components/operator/event-queue-panel";
 import type { DashboardEventQueueItemDto } from "@/components/operator/event-queue-api";
 import type { DashboardEventQueueRequestStatus } from "@/lib/dashboard-event-queue";
+import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 
-const { getQueue, moveRequest, runAction, toastInfo, toastSuccess } = vi.hoisted(
-  () => ({
+const { getQueue, moveRequest, realtime, runAction, toastInfo, toastSuccess } =
+  vi.hoisted(() => ({
     getQueue: vi.fn(),
     moveRequest: vi.fn(),
+    realtime: {
+      invalidate: null as
+        | ((
+            reason: QueueRealtimeInvalidateReason,
+            signal: AbortSignal,
+          ) => Promise<void>)
+        | null,
+    },
     runAction: vi.fn(),
     toastInfo: vi.fn(),
     toastSuccess: vi.fn(),
-  }),
-);
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
-}));
+  }));
 
 vi.mock("sonner", () => ({
   toast: { info: toastInfo, success: toastSuccess },
@@ -38,7 +42,16 @@ vi.mock("@/components/operator/event-queue-api", () => ({
 }));
 
 vi.mock("@/components/operator/use-dashboard-queue-realtime", () => ({
-  useDashboardQueueRealtime: () => "live",
+  useDashboardQueueRealtime: (
+    _eventId: number,
+    onInvalidate: (
+      reason: QueueRealtimeInvalidateReason,
+      signal: AbortSignal,
+    ) => Promise<void>,
+  ) => {
+    realtime.invalidate = onInvalidate;
+    return "live";
+  },
 }));
 
 const statuses: DashboardEventQueueRequestStatus[] = [
@@ -54,6 +67,7 @@ describe("EventQueuePanel", () => {
   beforeEach(() => {
     getQueue.mockReset();
     moveRequest.mockReset();
+    realtime.invalidate = null;
     runAction.mockReset();
     toastInfo.mockReset();
     toastSuccess.mockReset();
@@ -110,6 +124,44 @@ describe("EventQueuePanel", () => {
       description: "Zgłoszenie zostało odrzucone.",
     });
     expect(screen.queryByText(/Zmieniono status/)).not.toBeInTheDocument();
+  });
+
+  it("keeps an optimistic action visible while Realtime waits for the mutation", async () => {
+    const pending = makeItem(1, "pending");
+    const approved = { ...pending, status: "approved" as const, version: 2 };
+    let confirmAction!: (value: {
+      request: DashboardEventQueueItemDto;
+    }) => void;
+
+    runAction.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          confirmAction = resolve;
+        }),
+    );
+    getQueue.mockResolvedValue({ items: [approved] });
+    renderPanel([pending]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Zaakceptuj" }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Ustaw jako aktualnie/,
+      }),
+    ).toBeInTheDocument();
+    expect(runAction).toHaveBeenCalledOnce();
+
+    await realtime.invalidate?.("broadcast", new AbortController().signal);
+    expect(getQueue).not.toHaveBeenCalled();
+
+    confirmAction({ request: approved });
+
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
+    expect(
+      screen.getByRole("button", {
+        name: /Ustaw jako aktualnie/,
+      }),
+    ).toBeInTheDocument();
   });
 });
 
