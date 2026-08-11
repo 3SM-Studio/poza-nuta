@@ -119,14 +119,42 @@ export function applyOptimisticDashboardEventQueueMove<
 
   const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
 
-  if (targetIndex < 0 || targetIndex >= approvedItems.length) {
+  return applyOptimisticDashboardEventQueueMoveToPosition(
+    items,
+    requestId,
+    targetIndex + 1,
+    changedAt,
+  );
+}
+
+export function applyOptimisticDashboardEventQueueMoveToPosition<
+  TItem extends DashboardEventQueueOptimisticItem,
+>(
+  items: TItem[],
+  requestId: number,
+  targetPosition: number,
+  changedAt = new Date().toISOString(),
+) {
+  const approvedItems = items
+    .filter((item) => item.status === "approved")
+    .sort(compareApprovedQueueItems);
+  const currentIndex = approvedItems.findIndex((item) => item.id === requestId);
+
+  if (currentIndex < 0 || approvedItems.length === 0) {
     return items;
   }
 
-  [approvedItems[currentIndex], approvedItems[targetIndex]] = [
-    approvedItems[targetIndex],
-    approvedItems[currentIndex],
-  ];
+  const targetIndex = Math.min(
+    Math.max(Math.trunc(targetPosition) - 1, 0),
+    approvedItems.length - 1,
+  );
+
+  if (targetIndex === currentIndex) {
+    return items;
+  }
+
+  const [movedItem] = approvedItems.splice(currentIndex, 1);
+  approvedItems.splice(targetIndex, 0, movedItem);
 
   const positions = new Map(
     approvedItems.map((item, index) => [item.id, index + 1]),

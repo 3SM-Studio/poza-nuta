@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
+import type { DragEndEvent } from "@dnd-kit/core";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EventQueuePanel } from "@/components/operator/event-queue-panel";
@@ -14,8 +17,11 @@ import type { DashboardEventQueueItemDto } from "@/components/operator/event-que
 import type { DashboardEventQueueRequestStatus } from "@/lib/dashboard-event-queue";
 import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 
-const { getQueue, moveRequest, realtime, runAction, toastInfo, toastSuccess } =
+const { dnd, getQueue, moveRequest, realtime, runAction, toastInfo, toastSuccess } =
   vi.hoisted(() => ({
+    dnd: {
+      dragEnd: null as ((event: DragEndEvent) => void) | null,
+    },
     getQueue: vi.fn(),
     moveRequest: vi.fn(),
     realtime: {
@@ -30,6 +36,45 @@ const { getQueue, moveRequest, realtime, runAction, toastInfo, toastSuccess } =
     toastInfo: vi.fn(),
     toastSuccess: vi.fn(),
   }));
+
+vi.mock("@dnd-kit/core", () => ({
+  closestCorners: vi.fn(),
+  DndContext: ({
+    children,
+    onDragEnd,
+  }: {
+    children: ReactNode;
+    onDragEnd: (event: DragEndEvent) => void;
+  }) => {
+    dnd.dragEnd = onDragEnd;
+    return <>{children}</>;
+  },
+  DragOverlay: ({ children }: { children: ReactNode }) => <>{children}</>,
+  KeyboardSensor: class KeyboardSensor {},
+  PointerSensor: class PointerSensor {},
+  useDroppable: () => ({ isOver: false, setNodeRef: vi.fn() }),
+  useSensor: vi.fn(() => ({})),
+  useSensors: vi.fn((...sensors: unknown[]) => sensors),
+}));
+
+vi.mock("@dnd-kit/sortable", () => ({
+  SortableContext: ({ children }: { children: ReactNode }) => <>{children}</>,
+  sortableKeyboardCoordinates: vi.fn(),
+  useSortable: () => ({
+    attributes: {},
+    isDragging: false,
+    listeners: {},
+    setActivatorNodeRef: vi.fn(),
+    setNodeRef: vi.fn(),
+    transform: null,
+    transition: undefined,
+  }),
+  verticalListSortingStrategy: vi.fn(),
+}));
+
+vi.mock("@dnd-kit/utilities", () => ({
+  CSS: { Transform: { toString: vi.fn(() => undefined) } },
+}));
 
 vi.mock("sonner", () => ({
   toast: { info: toastInfo, success: toastSuccess },
@@ -66,6 +111,7 @@ const statuses: DashboardEventQueueRequestStatus[] = [
 describe("EventQueuePanel", () => {
   beforeEach(() => {
     getQueue.mockReset();
+    dnd.dragEnd = null;
     moveRequest.mockReset();
     realtime.invalidate = null;
     runAction.mockReset();
@@ -90,11 +136,105 @@ describe("EventQueuePanel", () => {
 
     for (const [index, status] of statuses.entries()) {
       const badge = screen
-        .getByText(labels[index])
-        .closest("[data-request-status]");
+        .getAllByText(labels[index])
+        .map((element) => element.closest("[data-request-status]"))
+        .find(Boolean);
       expect(badge).toHaveAttribute("data-request-status", status);
       expect(badge?.querySelector("svg")).not.toBeNull();
     }
+  });
+
+  it("separates pending, approved, and rejected requests into queue lanes", () => {
+    renderPanel([
+      makeItem(1, "pending"),
+      makeItem(2, "approved"),
+      makeItem(3, "rejected"),
+    ]);
+
+    expect(
+      within(document.querySelector('[data-queue-lane="pending"]')!).getByText(
+        "Singer 1",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(document.querySelector('[data-queue-lane="approved"]')!).getByText(
+        "Singer 2",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(document.querySelector('[data-queue-lane="rejected"]')!).getByText(
+        "Singer 3",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("moves a dragged request between lanes immediately and persists it in the background", async () => {
+    const pending = makeItem(1, "pending");
+    const approved = makeItem(2, "approved");
+    const accepted = {
+      ...pending,
+      status: "approved" as const,
+      position: 2,
+      version: 2,
+    };
+    const moved = { ...accepted, position: 1, version: 3 };
+    let confirmAction!: (value: {
+      request: DashboardEventQueueItemDto;
+    }) => void;
+
+    runAction.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          confirmAction = resolve;
+        }),
+    );
+    moveRequest.mockResolvedValue({ moved: true, request: moved });
+    getQueue.mockResolvedValue({
+      items: [moved, { ...approved, position: 2 }],
+    });
+    renderPanel([pending, approved]);
+
+    act(() => {
+      dnd.dragEnd?.({
+        active: {
+          data: {
+            current: { type: "request", requestId: 1, lane: "pending" },
+          },
+        },
+        over: {
+          data: {
+            current: { type: "request", requestId: 2, lane: "approved" },
+          },
+        },
+      } as unknown as DragEndEvent);
+    });
+
+    expect(
+      within(document.querySelector('[data-queue-lane="approved"]')!).getByText(
+        "Singer 1",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(runAction).toHaveBeenCalledWith(
+        "organization-test",
+        "123e4567-e89b-42d3-a456-426614174000",
+        1,
+        "approve",
+      ),
+    );
+    expect(moveRequest).not.toHaveBeenCalled();
+
+    confirmAction({ request: accepted });
+
+    await waitFor(() =>
+      expect(moveRequest).toHaveBeenCalledWith(
+        "organization-test",
+        "123e4567-e89b-42d3-a456-426614174000",
+        1,
+        { targetPosition: 1 },
+      ),
+    );
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
   });
 
   it("requires destructive confirmation before rejecting a request", async () => {

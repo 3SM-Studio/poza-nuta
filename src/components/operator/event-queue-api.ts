@@ -1,6 +1,7 @@
 import {
   type DashboardEventQueueAction,
   type DashboardEventQueueMoveDirection,
+  type DashboardEventQueueMoveInput,
   type DashboardEventQueueRequestStatus,
 } from "@/lib/dashboard-event-queue";
 
@@ -107,8 +108,11 @@ export function moveDashboardEventQueueRequest(
   organizationId: string,
   eventId: string,
   requestId: number,
-  direction: DashboardEventQueueMoveDirection,
+  move: DashboardEventQueueMoveDirection | DashboardEventQueueMoveInput,
 ) {
+  const moveInput =
+    typeof move === "string" ? { direction: move } : move;
+
   return requestJson<DashboardEventQueueMoveResponse>(
     getDashboardEventQueueMoveApiPath(
       organizationId,
@@ -117,7 +121,7 @@ export function moveDashboardEventQueueRequest(
     ),
     {
       method: "POST",
-      body: JSON.stringify({ direction }),
+      body: JSON.stringify(moveInput),
     },
   );
 }

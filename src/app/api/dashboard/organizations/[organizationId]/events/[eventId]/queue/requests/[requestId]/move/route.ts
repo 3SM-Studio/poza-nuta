@@ -67,7 +67,7 @@ export async function POST(
         organizationId,
         eventId: eventIdValidation.data,
         requestId: requestIdValidation.data,
-        direction: moveValidation.data,
+        move: moveValidation.data,
       });
 
     return operatorJsonResponse(result);

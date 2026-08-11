@@ -11,6 +11,7 @@ import {
 } from "../src/lib/dashboard-event-queue.ts";
 import {
   applyOptimisticDashboardEventQueueAction,
+  applyOptimisticDashboardEventQueueMoveToPosition,
   reconcileDashboardEventQueueItem,
   restoreDashboardEventQueueItems,
   type DashboardEventQueueOptimisticItem,
@@ -60,6 +61,7 @@ test("owner, manager and operator can manage event queues, viewer cannot", () =>
 
 test("event queue actions preserve the existing request status model", () => {
   assert.equal(canApplyDashboardEventQueueAction("approve", "pending"), true);
+  assert.equal(canApplyDashboardEventQueueAction("approve", "rejected"), true);
   assert.equal(canApplyDashboardEventQueueAction("start", "pending"), true);
   assert.equal(canApplyDashboardEventQueueAction("start", "approved"), true);
   assert.equal(canApplyDashboardEventQueueAction("reject", "pending"), true);
@@ -135,6 +137,32 @@ test("optimistic accept moves a pending request into the approved queue", () => 
   assert.equal(acceptedRequest?.status, "approved");
   assert.equal(acceptedRequest?.position, 2);
   assert.equal(acceptedRequest?.version, 2);
+});
+
+test("optimistic drag moves an approved request to any queue position", () => {
+  const items = [
+    makeQueueItem({ id: 1, status: "approved", position: 1 }),
+    makeQueueItem({ id: 2, status: "approved", position: 2 }),
+    makeQueueItem({ id: 3, status: "approved", position: 3 }),
+  ];
+
+  const nextItems = applyOptimisticDashboardEventQueueMoveToPosition(
+    items,
+    3,
+    1,
+    "2026-07-06T18:00:00.000Z",
+  );
+
+  assert.deepEqual(
+    nextItems
+      .filter((item) => item.status === "approved")
+      .map((item) => [item.id, item.position]),
+    [
+      [3, 1],
+      [1, 2],
+      [2, 3],
+    ],
+  );
 });
 
 test("optimistic now marks the previous current request as done", () => {
@@ -223,10 +251,25 @@ test("event queue API validation rejects unsupported actions and moves", () => {
   });
   assert.deepEqual(validateDashboardEventQueueMoveInput({ direction: "up" }), {
     success: true,
-    data: "up",
+    data: { direction: "up" },
+  });
+  assert.deepEqual(validateDashboardEventQueueMoveInput({ targetPosition: 3 }), {
+    success: true,
+    data: { targetPosition: 3 },
   });
   assert.equal(
     validateDashboardEventQueueMoveInput({ direction: "sideways" }).success,
+    false,
+  );
+  assert.equal(
+    validateDashboardEventQueueMoveInput({ targetPosition: 0 }).success,
+    false,
+  );
+  assert.equal(
+    validateDashboardEventQueueMoveInput({
+      direction: "up",
+      targetPosition: 1,
+    }).success,
     false,
   );
 });
@@ -371,6 +414,8 @@ test("approved queue reorder is transactional and event-scoped", () => {
   assert.match(moveSource, /\.orderBy\(asc\(songRequests\.id\)\)\s*\.for\("update"\)/s);
   assert.match(moveSource, /position: request\.position/);
   assert.match(moveSource, /eq\(songRequests\.eventId, context\.event\.id\)/);
+  assert.match(moveSource, /input\.move\.targetPosition/);
+  assert.match(moveSource, /orderedRequests\.splice\(targetIndex, 0, targetRequest\)/);
 });
 
 test("starting a request completes the previous current request in the same event", () => {

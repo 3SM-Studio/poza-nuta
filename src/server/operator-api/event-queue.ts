@@ -8,7 +8,7 @@ import {
   canReorderDashboardEventQueueRequest,
   getDashboardEventQueueTargetStatus,
   type DashboardEventQueueAction,
-  type DashboardEventQueueMoveDirection,
+  type DashboardEventQueueMoveInput,
 } from "../../lib/dashboard-event-queue";
 import {
   events,
@@ -260,7 +260,7 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
   organizationId: string;
   eventId: string;
   requestId: number;
-  direction: DashboardEventQueueMoveDirection;
+  move: DashboardEventQueueMoveInput;
 }) {
   return getDb().transaction(async (transaction) => {
     const context = await requireEventQueueManagerContext(
@@ -333,7 +333,11 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
     }
 
     const targetIndex =
-      input.direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      "direction" in input.move
+        ? input.move.direction === "up"
+          ? currentIndex - 1
+          : currentIndex + 1
+        : Math.min(input.move.targetPosition, orderedRequests.length) - 1;
 
     if (targetIndex < 0 || targetIndex >= orderedRequests.length) {
       return {
@@ -348,12 +352,8 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
     }
 
     const previousPosition = currentIndex + 1;
-    const targetRequest = orderedRequests[currentIndex];
-    const neighborRequest = orderedRequests[targetIndex];
-    [orderedRequests[currentIndex], orderedRequests[targetIndex]] = [
-      neighborRequest,
-      targetRequest,
-    ];
+    const [targetRequest] = orderedRequests.splice(currentIndex, 1);
+    orderedRequests.splice(targetIndex, 0, targetRequest);
     const changedAt = new Date();
     const positionUpdates = orderedRequests
       .map((request, index) => ({
@@ -394,7 +394,9 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
       action: "move_event_queue_request",
       entityId: String(input.requestId),
       payload: {
-        direction: input.direction,
+        ...("direction" in input.move
+          ? { direction: input.move.direction }
+          : { targetPosition: input.move.targetPosition }),
         previousPosition,
         nextPosition: updatedRequest.position,
       },

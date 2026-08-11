@@ -1,11 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  closestCorners,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowDown,
   ArrowUp,
   Check,
   CircleCheck,
+  GripVertical,
   Mic2,
   RefreshCw,
   RotateCcw,
@@ -41,25 +68,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  DASHBOARD_EVENT_QUEUE_FILTERS,
   canApplyDashboardEventQueueAction,
-  getDashboardEventQueueFilterStatuses,
   type DashboardEventQueueAction,
-  type DashboardEventQueueFilter,
   type DashboardEventQueueMoveDirection,
   type DashboardEventQueueRequestStatus,
 } from "@/lib/dashboard-event-queue";
 import {
   applyOptimisticDashboardEventQueueAction,
   applyOptimisticDashboardEventQueueMove,
+  applyOptimisticDashboardEventQueueMoveToPosition,
   getDashboardEventQueueChangedRequestIds,
   reconcileDashboardEventQueueItem,
   restoreDashboardEventQueueItems,
@@ -79,14 +96,6 @@ import {
 } from "./event-queue-api";
 import { useDashboardQueueRealtime } from "./use-dashboard-queue-realtime";
 
-const filterLabels: Record<DashboardEventQueueFilter, string> = {
-  all: "Wszystkie",
-  pending: "Oczekujące",
-  approved: "Zaakceptowane",
-  rejected: "Odrzucone",
-  closed: "Zagrane / zamknięte",
-};
-
 const actionLabels: Record<DashboardEventQueueAction, string> = {
   approve: "Zaakceptuj",
   start: "Ustaw jako aktualnie śpiewane",
@@ -104,6 +113,19 @@ type EventQueuePanelProps = {
 };
 
 type QueueRefreshReason = QueueRealtimeInvalidateReason | "local";
+type QueueBoardLane = "pending" | "approved" | "rejected";
+
+const queueBoardLanes: QueueBoardLane[] = [
+  "pending",
+  "approved",
+  "rejected",
+];
+
+const queueBoardLaneLabels: Record<QueueBoardLane, string> = {
+  pending: "Oczekujące",
+  approved: "Zaakceptowane",
+  rejected: "Odrzucone",
+};
 
 export function EventQueuePanel({
   organizationId,
@@ -113,8 +135,9 @@ export function EventQueuePanel({
   initialItems,
 }: EventQueuePanelProps) {
   const [items, setItems] = useState(initialItems);
-  const [activeFilter, setActiveFilter] =
-    useState<DashboardEventQueueFilter>("all");
+  const [activeDragRequestId, setActiveDragRequestId] = useState<number | null>(
+    null,
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,14 +153,10 @@ export function EventQueuePanel({
       ) => Promise<void>)
     | null
   >(null);
-  const filteredItems = useMemo(() => {
-    const statuses = getDashboardEventQueueFilterStatuses(activeFilter);
-    const queueItems = items.filter((item) => item.status !== "now");
-
-    return statuses
-      ? queueItems.filter((item) => statuses.includes(item.status))
-      : queueItems;
-  }, [activeFilter, items]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const currentItem = useMemo(
     () => items.find((item) => item.status === "now") ?? null,
     [items],
@@ -151,6 +170,27 @@ export function EventQueuePanel({
             left.position - right.position || left.id - right.id,
         ),
     [items],
+  );
+  const boardItems = useMemo(
+    () =>
+      Object.fromEntries(
+        queueBoardLanes.map((lane) => [
+          lane,
+          items.filter((item) => item.status === lane),
+        ]),
+      ) as Record<QueueBoardLane, DashboardEventQueueItemDto[]>,
+    [items],
+  );
+  const closedItems = useMemo(
+    () =>
+      items.filter(
+        (item) => item.status === "done" || item.status === "skipped",
+      ),
+    [items],
+  );
+  const activeDragItem = useMemo(
+    () => items.find((item) => item.id === activeDragRequestId) ?? null,
+    [activeDragRequestId, items],
   );
   const flushQueuedRealtimeRefresh = useCallback(() => {
     if (
@@ -387,6 +427,119 @@ export function EventQueuePanel({
     });
   }
 
+  function handleMoveToPosition(requestId: number, targetPosition: number) {
+    const mutationVersion = beginLocalMutation();
+    let rollbackItems: DashboardEventQueueItemDto[] = [];
+
+    setItems((currentItems) => {
+      const optimisticItems =
+        applyOptimisticDashboardEventQueueMoveToPosition(
+          currentItems,
+          requestId,
+          targetPosition,
+        );
+      const changedRequestIds = getDashboardEventQueueChangedRequestIds(
+        currentItems,
+        optimisticItems,
+      );
+
+      rollbackItems = currentItems.filter((item) =>
+        changedRequestIds.includes(item.id),
+      );
+      return optimisticItems;
+    });
+    setError(null);
+
+    scheduleMutation(async () => {
+      try {
+        const result = await moveDashboardEventQueueRequest(
+          organizationId,
+          eventId,
+          requestId,
+          { targetPosition },
+        );
+
+        if (
+          !result.moved &&
+          mutationVersion === localMutationVersionRef.current
+        ) {
+          setItems((currentItems) =>
+            restoreDashboardEventQueueItems(currentItems, rollbackItems),
+          );
+        }
+      } catch (caughtError) {
+        if (!handleAuthenticationError(caughtError)) {
+          if (mutationVersion === localMutationVersionRef.current) {
+            setItems((currentItems) =>
+              restoreDashboardEventQueueItems(currentItems, rollbackItems),
+            );
+          }
+          setError(getClientErrorMessage(caughtError));
+        }
+      }
+    });
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const dragData = event.active.data.current as
+      | QueueRequestDragData
+      | undefined;
+
+    if (dragData?.type === "request") {
+      setActiveDragRequestId(dragData.requestId);
+    }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragRequestId(null);
+
+    if (!canManage || !event.over) {
+      return;
+    }
+
+    const dragData = event.active.data.current as
+      | QueueRequestDragData
+      | undefined;
+    const dropData = event.over.data.current as QueueDropData | undefined;
+
+    if (dragData?.type !== "request" || !dropData) {
+      return;
+    }
+
+    const targetLane = dropData.lane;
+    const sourceLane = dragData.lane;
+    const targetPosition = getApprovedDropPosition(
+      dropData,
+      approvedItems,
+    );
+
+    if (sourceLane === targetLane) {
+      if (
+        dropData.type === "request" &&
+        dropData.requestId === dragData.requestId
+      ) {
+        return;
+      }
+
+      if (targetLane === "approved" && targetPosition !== null) {
+        handleMoveToPosition(dragData.requestId, targetPosition);
+      }
+      return;
+    }
+
+    const action = getLaneTransitionAction(sourceLane, targetLane);
+
+    if (!action) {
+      return;
+    }
+
+    handleAction(dragData.requestId, action);
+
+    if (targetLane === "approved" && targetPosition !== null) {
+      handleMoveToPosition(dragData.requestId, targetPosition);
+    }
+  }
+
   function beginLocalMutation() {
     pendingMutationCountRef.current += 1;
     localMutationVersionRef.current += 1;
@@ -492,63 +645,259 @@ export function EventQueuePanel({
           )}
         </section>
 
-        <div className={"flex flex-wrap gap-2"}>
-          <Select
-            value={activeFilter}
-            onValueChange={(value) =>
-              setActiveFilter(value as DashboardEventQueueFilter)
-            }
-          >
-            <SelectTrigger
-              className={"w-full max-w-72"}
-              aria-label="Filtr kolejki wydarzenia"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {DASHBOARD_EVENT_QUEUE_FILTERS.map((filter) => (
-                  <SelectItem key={filter} value={filter}>
-                    {filterLabels[filter]} ({getFilterCount(items, filter)})
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragCancel={() => setActiveDragRequestId(null)}
+          onDragEnd={handleDragEnd}
+          accessibility={{
+            screenReaderInstructions: {
+              draggable:
+                "Aby podnieść zgłoszenie, naciśnij spację. Strzałkami wybierz miejsce i ponownie naciśnij spację, aby je upuścić.",
+            },
+          }}
+        >
+          <div className={"grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3"}>
+            {queueBoardLanes.map((lane) => (
+              <QueueLane
+                key={lane}
+                lane={lane}
+                items={boardItems[lane]}
+                approvedItems={approvedItems}
+                canManage={canManage}
+                onAction={handleAction}
+                onMove={handleMove}
+              />
+            ))}
+          </div>
 
-        {filteredItems.length > 0 ? (
-          <div className={"grid p-0"}>
-            {filteredItems.map((item) => {
-              const approvedIndex = approvedItems.findIndex(
-                (approvedItem) => approvedItem.id === item.id,
-              );
+          <DragOverlay dropAnimation={null}>
+            {activeDragItem ? (
+              <div className={"w-[min(28rem,calc(100vw-2rem))] rotate-1 opacity-95 shadow-2xl"}>
+                <EventQueueRequestRow
+                  item={activeDragItem}
+                  canManage={false}
+                  canMoveUp={false}
+                  canMoveDown={false}
+                  onAction={handleAction}
+                  onMove={handleMove}
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
 
-              return (
+        {closedItems.length > 0 ? (
+          <section className={"grid gap-3 border-t border-border pt-4"}>
+            <div>
+              <h3 className={"text-base font-semibold"}>Zagrane / zamknięte</h3>
+              <p className={"mt-1 text-sm text-muted-foreground"}>
+                Historia zakończonych i pominiętych zgłoszeń.
+              </p>
+            </div>
+            <div className={"grid gap-3 lg:grid-cols-2"}>
+              {closedItems.map((item) => (
                 <EventQueueRequestRow
                   key={item.id}
                   item={item}
                   canManage={canManage}
-                  canMoveUp={approvedIndex > 0}
-                  canMoveDown={
-                    approvedIndex >= 0 &&
-                    approvedIndex < approvedItems.length - 1
-                  }
+                  canMoveUp={false}
+                  canMoveDown={false}
                   onAction={handleAction}
                   onMove={handleMove}
                 />
-              );
-            })}
-          </div>
-        ) : (
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {items.length === 0 ? (
           <CardDescription className={"px-4 py-16 text-center text-muted-foreground"}>
             <strong>Brak zgłoszeń</strong>
             <br />
             Nie ma jeszcze zgłoszeń z linku sesji.
           </CardDescription>
-        )}
+        ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+type QueueRequestDragData = {
+  type: "request";
+  requestId: number;
+  lane: QueueBoardLane;
+};
+
+type QueueLaneDropData = {
+  type: "lane";
+  lane: QueueBoardLane;
+};
+
+type QueueDropData = QueueRequestDragData | QueueLaneDropData;
+
+type QueueLaneProps = {
+  lane: QueueBoardLane;
+  items: DashboardEventQueueItemDto[];
+  approvedItems: DashboardEventQueueItemDto[];
+  canManage: boolean;
+  onAction: (requestId: number, action: DashboardEventQueueAction) => void;
+  onMove: (
+    requestId: number,
+    direction: DashboardEventQueueMoveDirection,
+  ) => void;
+};
+
+function QueueLane({
+  lane,
+  items,
+  approvedItems,
+  canManage,
+  onAction,
+  onMove,
+}: QueueLaneProps) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: getQueueLaneId(lane),
+    data: { type: "lane", lane } satisfies QueueLaneDropData,
+    disabled: !canManage,
+  });
+
+  return (
+    <section
+      ref={setNodeRef}
+      data-queue-lane={lane}
+      className={[
+        "grid min-h-52 content-start gap-3 rounded-xl border border-border bg-muted/25 p-3 transition-colors",
+        lane === "rejected" ? "lg:col-span-2 2xl:col-span-1" : "",
+        isOver ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "",
+      ].join(" ")}
+    >
+      <header className={"flex items-center justify-between gap-3 px-1"}>
+        <div>
+          <h3 className={"font-semibold"}>{queueBoardLaneLabels[lane]}</h3>
+          <p className={"mt-0.5 text-xs text-muted-foreground"}>
+            {getQueueLaneDescription(lane)}
+          </p>
+        </div>
+        <Badge variant={lane === "approved" ? "default" : "secondary"}>
+          {items.length}
+        </Badge>
+      </header>
+
+      <SortableContext
+        items={items.map((item) => getQueueRequestId(item.id))}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className={"grid gap-3"}>
+          {items.map((item) => {
+            const approvedIndex = approvedItems.findIndex(
+              (approvedItem) => approvedItem.id === item.id,
+            );
+
+            return (
+              <SortableQueueRequest
+                key={item.id}
+                item={item}
+                lane={lane}
+                canManage={canManage}
+                canMoveUp={approvedIndex > 0}
+                canMoveDown={
+                  approvedIndex >= 0 &&
+                  approvedIndex < approvedItems.length - 1
+                }
+                onAction={onAction}
+                onMove={onMove}
+              />
+            );
+          })}
+        </div>
+      </SortableContext>
+
+      {items.length === 0 ? (
+        <div className={"grid min-h-28 place-items-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground"}>
+          Upuść zgłoszenie tutaj
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type SortableQueueRequestProps = {
+  item: DashboardEventQueueItemDto;
+  lane: QueueBoardLane;
+  canManage: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onAction: (requestId: number, action: DashboardEventQueueAction) => void;
+  onMove: (
+    requestId: number,
+    direction: DashboardEventQueueMoveDirection,
+  ) => void;
+};
+
+function SortableQueueRequest({
+  item,
+  lane,
+  canManage,
+  canMoveUp,
+  canMoveDown,
+  onAction,
+  onMove,
+}: SortableQueueRequestProps) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: getQueueRequestId(item.id),
+    data: {
+      type: "request",
+      requestId: item.id,
+      lane,
+    } satisfies QueueRequestDragData,
+    disabled: !canManage,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.35 : 1,
+      }}
+    >
+      <EventQueueRequestRow
+        item={item}
+        canManage={canManage}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
+        onAction={onAction}
+        onMove={onMove}
+        dragHandle={
+          canManage ? (
+            <Button
+              ref={setActivatorNodeRef}
+              size="icon-sm"
+              variant="ghost"
+              type="button"
+              className={"touch-none cursor-grab active:cursor-grabbing"}
+              aria-label={`Przeciągnij zgłoszenie: ${item.displayName || item.singerName} — ${item.song.title}`}
+              title="Przeciągnij zgłoszenie"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical aria-hidden="true" />
+            </Button>
+          ) : null
+        }
+      />
+    </div>
   );
 }
 
@@ -557,6 +906,7 @@ type EventQueueRequestRowProps = {
   canManage: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  dragHandle?: ReactNode;
   onAction: (
     requestId: number,
     action: DashboardEventQueueAction,
@@ -572,6 +922,7 @@ function EventQueueRequestRow({
   canManage,
   canMoveUp,
   canMoveDown,
+  dragHandle,
   onAction,
   onMove,
 }: EventQueueRequestRowProps) {
@@ -579,9 +930,12 @@ function EventQueueRequestRow({
   const duration = formatDuration(item.song.durationSeconds);
 
   return (
-    <article className={"grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 px-4 py-3 sm:grid-cols-[minmax(12rem,1fr)_auto] [&+&]:border-t [&+&]:border-border"}>
+    <article className={"relative grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 rounded-lg border border-border bg-card px-4 py-3 shadow-sm sm:grid-cols-[minmax(12rem,1fr)_auto]"}>
+      {dragHandle ? (
+        <div className={"absolute right-2 top-2 z-10"}>{dragHandle}</div>
+      ) : null}
       <div className={"min-w-0"}>
-        <div className={"flex flex-wrap items-center gap-2 [&_strong]:text-base"}>
+        <div className={"flex flex-wrap items-center gap-2 pr-9 [&_strong]:text-base"}>
           <strong>{item.displayName || item.singerName}</strong>
           <RequestStatusBadge status={item.status} />
           <Badge variant="outline">
@@ -693,15 +1047,61 @@ function getAvailableActions(status: DashboardEventQueueRequestStatus) {
   );
 }
 
-function getFilterCount(
-  items: DashboardEventQueueItemDto[],
-  filter: DashboardEventQueueFilter,
-) {
-  const statuses = getDashboardEventQueueFilterStatuses(filter);
+function getQueueLaneId(lane: QueueBoardLane) {
+  return `queue-lane:${lane}`;
+}
 
-  return statuses
-    ? items.filter((item) => statuses.includes(item.status)).length
-    : items.length;
+function getQueueRequestId(requestId: number) {
+  return `queue-request:${requestId}`;
+}
+
+function getQueueLaneDescription(lane: QueueBoardLane) {
+  switch (lane) {
+    case "pending":
+      return "Nowe zgłoszenia do decyzji";
+    case "approved":
+      return "Kolejność występów";
+    case "rejected":
+      return "Zgłoszenia poza kolejką";
+  }
+}
+
+function getLaneTransitionAction(
+  sourceLane: QueueBoardLane,
+  targetLane: QueueBoardLane,
+): DashboardEventQueueAction | null {
+  if (sourceLane === targetLane) {
+    return null;
+  }
+
+  if (targetLane === "approved") {
+    return "approve";
+  }
+
+  if (targetLane === "pending") {
+    return "restore";
+  }
+
+  return "reject";
+}
+
+function getApprovedDropPosition(
+  dropData: QueueDropData,
+  approvedItems: DashboardEventQueueItemDto[],
+) {
+  if (dropData.lane !== "approved") {
+    return null;
+  }
+
+  if (dropData.type === "lane") {
+    return approvedItems.length + 1;
+  }
+
+  const dropIndex = approvedItems.findIndex(
+    (item) => item.id === dropData.requestId,
+  );
+
+  return dropIndex >= 0 ? dropIndex + 1 : approvedItems.length + 1;
 }
 
 function getActionIcon(action: DashboardEventQueueAction) {

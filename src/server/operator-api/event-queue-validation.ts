@@ -4,7 +4,7 @@ import {
   DASHBOARD_EVENT_QUEUE_MOVE_DIRECTIONS,
   type DashboardEventQueueAction,
   type DashboardEventQueueFilter,
-  type DashboardEventQueueMoveDirection,
+  type DashboardEventQueueMoveInput,
 } from "../../lib/dashboard-event-queue.ts";
 import type { ValidationResult } from "./validation.ts";
 
@@ -41,23 +41,39 @@ export function validateDashboardEventQueueActionInput(
 
 export function validateDashboardEventQueueMoveInput(
   input: unknown,
-): ValidationResult<DashboardEventQueueMoveDirection> {
-  if (!isRecord(input) || typeof input.direction !== "string") {
-    return invalidDirectionResult();
+): ValidationResult<DashboardEventQueueMoveInput> {
+  if (!isRecord(input)) {
+    return invalidMoveResult();
+  }
+
+  if (typeof input.direction === "string") {
+    if (
+      !DASHBOARD_EVENT_QUEUE_MOVE_DIRECTIONS.includes(
+        input.direction as "up" | "down",
+      ) ||
+      input.targetPosition !== undefined
+    ) {
+      return invalidMoveResult();
+    }
+
+    return {
+      success: true,
+      data: { direction: input.direction as "up" | "down" },
+    };
   }
 
   if (
-    !DASHBOARD_EVENT_QUEUE_MOVE_DIRECTIONS.includes(
-      input.direction as DashboardEventQueueMoveDirection,
-    )
+    Number.isSafeInteger(input.targetPosition) &&
+    (input.targetPosition as number) > 0 &&
+    input.direction === undefined
   ) {
-    return invalidDirectionResult();
+    return {
+      success: true,
+      data: { targetPosition: input.targetPosition as number },
+    };
   }
 
-  return {
-    success: true,
-    data: input.direction as DashboardEventQueueMoveDirection,
-  };
+  return invalidMoveResult();
 }
 
 function invalidActionResult(): ValidationResult<DashboardEventQueueAction> {
@@ -72,13 +88,13 @@ function invalidActionResult(): ValidationResult<DashboardEventQueueAction> {
   };
 }
 
-function invalidDirectionResult(): ValidationResult<DashboardEventQueueMoveDirection> {
+function invalidMoveResult(): ValidationResult<DashboardEventQueueMoveInput> {
   return {
     success: false,
     issues: [
       {
-        field: "direction",
-        message: "direction must be up or down.",
+        field: "move",
+        message: "provide direction up/down or a safe positive targetPosition.",
       },
     ],
   };
