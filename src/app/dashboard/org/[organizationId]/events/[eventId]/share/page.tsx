@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { EventSessionAccessPanel } from "@/components/operator/event-session-access-panel";
+import { GeneralJoinAccessPanel } from "@/components/operator/general-join-access-panel";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -79,6 +80,7 @@ export default async function OrganizationEventSharePage({
   const sessionUrl = tryBuildCanonicalSiteUrl(
     `/s/${result.event.publicToken}`,
   );
+  const generalJoinUrl = tryBuildCanonicalSiteUrl("/join");
 
   return (
     <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
@@ -129,6 +131,8 @@ export default async function OrganizationEventSharePage({
               lifecycleStatus === "closed" || lifecycleStatus === "cancelled"
             }
           />
+
+          <GeneralJoinAccessPanel joinUrl={generalJoinUrl} />
         </div>
       </section>
     </main>

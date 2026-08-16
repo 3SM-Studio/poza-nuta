@@ -1,5 +1,15 @@
 @import "tailwindcss";
+@import "./typeset.css";
 @import "tw-animate-css";
+
+.typeset-docs {
+  --typeset-font-body: var(--font-geist);
+  --typeset-font-heading: var(--font-geist);
+  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-size: 15px;
+  --typeset-leading: 1.75;
+  --typeset-flow: 1.25em;
+}
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -125,6 +135,16 @@ html.light {
 
 html.dark {
   color-scheme: dark;
+}
+
+[data-organization-overview] {
+  --shadow-card:
+    0 1px 2px oklch(0 0 0 / 7%), 0 8px 24px oklch(0 0 0 / 5%);
+}
+
+html.dark [data-organization-overview] {
+  --shadow-card:
+    0 1px 2px oklch(0 0 0 / 24%), 0 8px 24px oklch(0 0 0 / 14%);
 }
 
 * {

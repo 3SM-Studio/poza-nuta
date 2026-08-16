@@ -548,7 +548,7 @@ test("public route group uses shared public layout and header", () => {
 
   assert.match(
     rootLayoutSource,
-    /<html lang="pl" suppressHydrationWarning>/,
+    /<html\s+className=\{`\$\{geist\.variable\} \$\{geistMono\.variable\}`\}\s+lang="pl"\s+suppressHydrationWarning/,
   );
   assert.doesNotMatch(rootLayoutSource, /PublicSiteHeader/);
   assert.match(publicLayoutSource, /PublicSiteHeader/);

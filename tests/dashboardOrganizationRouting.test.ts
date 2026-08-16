@@ -344,7 +344,7 @@ test("dashboard organization links use settings canonical path", () => {
     "utf8",
   );
   const overviewSource = readFileSync(
-    "src/app/dashboard/org/[organizationId]/page.tsx",
+    "src/components/operator/organization-overview-view.tsx",
     "utf8",
   );
 
@@ -487,7 +487,7 @@ test("organization overview queries are scoped to workspace public access target
 
 test("organization overview renders empty states and no fake dashboard data", () => {
   const source = readFileSync(
-    "src/app/dashboard/org/[organizationId]/page.tsx",
+    "src/components/operator/organization-overview-view.tsx",
     "utf8",
   );
 
@@ -499,14 +499,49 @@ test("organization overview renders empty states and no fake dashboard data", ()
   assert.equal(source.includes("Global catalog songs"), false);
   assert.match(source, /overview\.recentEvents\.length > 0/);
   assert.match(source, /overview\.topRequestedSongs\.length > 0/);
-  assert.match(source, /Brak wydarzeń/);
-  assert.match(source, /Brak requestów/);
+  assert.match(source, /Brak aktywnego wydarzenia/);
+  assert.match(source, /Brak danych o popularnych utworach/);
   assert.match(source, /overview\.partialFailures\.counts/);
   assert.match(source, /overview\.partialFailures\.activeEvent/);
-  assert.match(source, /ostatnie 30 dni/);
+  assert.match(source, /ostatnich 30 dni/);
+  assert.match(source, /xl:grid-cols-12/);
+  assert.match(source, /xl:col-span-8/);
+  assert.match(source, /<CardFooter/);
+  assert.match(source, /<ItemGroup/);
+  assert.match(source, /<Empty/);
+  assert.match(source, /<SectionUnavailable/);
+  assert.match(source, /role="progressbar"/);
+  assert.match(source, /canManageEvents/);
+  assert.match(source, /overview\.partialFailures\.counts\s*\?\s*"Dane częściowe"/);
+  assert.match(source, /Liczba wydarzeń chwilowo niedostępna/);
+  assert.match(source, /Statystyki z 7 dni chwilowo niedostępne/);
+  assert.match(
+    source,
+    /overview\.partialFailures\.counts\s*\?\s*"Chwilowo niedostępne"\s*:\s*formatNumber\(overview\.stats\.pendingRequests\)/,
+  );
+  assert.match(source, /canManageOrganization/);
+  assert.match(source, /lg:grid-cols-2 xl:grid-cols-12/);
+  assert.match(source, /lg:col-span-2 xl:col-span-5/);
+  assert.match(source, /lg:flex-row lg:items-center lg:justify-between/);
+  assert.match(source, /\[overflow-wrap:anywhere\]/);
+  assert.equal(source.includes("bez dodatkowych kart KPI"), false);
+  assert.equal(source.includes("function StatCard"), false);
+  assert.equal(source.includes("recharts"), false);
   assert.equal(source.includes("Math.random"), false);
   assert.equal(source.includes("placeholder"), false);
   assert.equal(source.includes("fake"), false);
+});
+
+test("dashboard overview uses official item and empty primitives", () => {
+  const itemSource = readFileSync("src/components/ui/item.tsx", "utf8");
+  const emptySource = readFileSync("src/components/ui/empty.tsx", "utf8");
+
+  assert.match(itemSource, /data-slot="item-group"/);
+  assert.match(itemSource, /data-slot="item-content"/);
+  assert.match(itemSource, /variant:\s*\{[\s\S]*muted:/);
+  assert.match(emptySource, /data-slot="empty"/);
+  assert.match(emptySource, /data-slot="empty-content"/);
+  assert.match(emptySource, /data-slot="empty-description"/);
 });
 
 test("dashboard shell uses separate simple organization and account layouts", () => {
@@ -526,8 +561,46 @@ test("dashboard shell uses separate simple organization and account layouts", ()
   assert.match(shellSource, /getSelectedOrganizationId\(pathname\)/);
 });
 
+test("typeset font variables do not replace the existing application typography", () => {
+  const globalsSource = readFileSync("src/app/globals.css", "utf8");
+  const layoutSource = readFileSync("src/app/layout.tsx", "utf8");
+  const typesetSource = readFileSync("src/app/typeset.css", "utf8");
+
+  assert.match(
+    globalsSource,
+    /@import "tailwindcss";\s*@import "\.\/typeset\.css";/,
+  );
+  assert.match(globalsSource, /\.typeset-docs\s*\{/);
+  assert.match(globalsSource, /--typeset-font-body: var\(--font-geist\)/);
+  assert.match(globalsSource, /--typeset-font-heading: var\(--font-geist\)/);
+  assert.match(globalsSource, /--typeset-font-mono: var\(--font-geist-mono\)/);
+  assert.match(globalsSource, /--typeset-size: 15px/);
+  assert.match(globalsSource, /--typeset-leading: 1\.75/);
+  assert.match(globalsSource, /--typeset-flow: 1\.25em/);
+  assert.match(globalsSource, /--font-heading:\s*Inter/);
+  assert.match(globalsSource, /--font-sans:\s*Inter/);
+  assert.doesNotMatch(globalsSource, /--font-sans:\s*var\(--font-geist\)/);
+
+  assert.match(typesetSource, /shadcn\/typeset/);
+  assert.match(typesetSource, /\.typeset\s*\{/);
+  assert.match(typesetSource, /\.not-typeset/);
+  assert.match(typesetSource, /\[data-not-typeset\]/);
+
+  assert.match(layoutSource, /import \{ Geist, Geist_Mono \} from "next\/font\/google"/);
+  assert.match(layoutSource, /variable: "--font-geist"/);
+  assert.match(layoutSource, /variable: "--font-geist-mono"/);
+  assert.match(
+    layoutSource,
+    /className=\{`\$\{geist\.variable\} \$\{geistMono\.variable\}`\}/,
+  );
+});
+
 test("global theme exposes light and dark shadcn and sidebar tokens", () => {
   const globalsSource = readFileSync("src/app/globals.css", "utf8");
+  const managementThemeSource = readFileSync(
+    "src/app/(platform-admin)/admin/admin-theme.css",
+    "utf8",
+  );
   const sidebarSource = readFileSync("src/components/ui/sidebar.tsx", "utf8");
   const buttonSource = readFileSync("src/components/ui/button.tsx", "utf8");
   const cardSource = readFileSync("src/components/ui/card.tsx", "utf8");
@@ -568,6 +641,17 @@ test("global theme exposes light and dark shadcn and sidebar tokens", () => {
   assert.match(globalsSource, /oklch\(/);
   assert.match(sidebarSource, /bg-sidebar/);
   assert.match(sidebarSource, /bg-background/);
+  assert.equal(
+    managementThemeSource.match(/--sidebar-primary: var\(--primary\)/g)
+      ?.length,
+    2,
+  );
+  assert.equal(
+    managementThemeSource.match(
+      /--sidebar-primary-foreground: var\(--primary-foreground\)/g,
+    )?.length,
+    2,
+  );
   assert.match(buttonSource, /shadow-\[var\(--shadow-accent-soft\)\]/);
   assert.match(cardSource, /shadow-\[var\(--shadow-card\)\]/);
 });
@@ -1329,6 +1413,10 @@ test("organization event share route renders canonical code and QR controls", ()
     "src/components/operator/event-session-access-panel.tsx",
     "utf8",
   );
+  const generalJoinPanelSource = readFileSync(
+    "src/components/operator/general-join-access-panel.tsx",
+    "utf8",
+  );
   const brandedQrSource = readFileSync(
     "src/lib/branded-session-qr.ts",
     "utf8",
@@ -1350,6 +1438,8 @@ test("organization event share route renders canonical code and QR controls", ()
   assert.match(sharePageSource, /notFound\(\)/);
   assert.match(sharePageSource, /result\.event\.sessionCode/);
   assert.match(sharePageSource, /`\/s\/\$\{result\.event\.publicToken\}`/);
+  assert.match(sharePageSource, /tryBuildCanonicalSiteUrl\("\/join"\)/);
+  assert.match(sharePageSource, /GeneralJoinAccessPanel/);
   const sidebarSource = readFileSync(
     "src/components/operator/organizer-sidebar.tsx",
     "utf8",
@@ -1373,6 +1463,12 @@ test("organization event share route renders canonical code and QR controls", ()
   assert.doesNotMatch(sharePanelSource, /dangerouslySetInnerHTML/);
   assert.match(sharePanelSource, /Kopiuj kod/);
   assert.doesNotMatch(sharePanelSource, /Wygeneruj|Regeneruj/);
+  assert.match(generalJoinPanelSource, /Ogólny kod wejścia/);
+  assert.match(generalJoinPanelSource, /Kopiuj link ogólny/);
+  assert.match(generalJoinPanelSource, /Pobierz ogólny QR \(SVG\)/);
+  assert.match(generalJoinPanelSource, /createBrandedSessionQrSvg\(joinUrl\)/);
+  assert.match(generalJoinPanelSource, /href=\{joinUrl\}/);
+  assert.doesNotMatch(generalJoinPanelSource, /pozanuta\.vercel\.app/);
   assert.match(organizationsSource, /canShareDashboardOrganizationEvent/);
   assert.match(organizationsSource, /role === "operator"/);
   assert.equal(sharePageSource.includes("codeHash"), false);
@@ -1465,6 +1561,7 @@ test("dashboard routes expose skeleton loading fallbacks", () => {
     "src/app/account/security/loading.tsx",
     "src/app/dashboard/org/[organizationId]/loading.tsx",
     "src/app/dashboard/org/[organizationId]/events/loading.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/loading.tsx",
     "src/app/dashboard/org/[organizationId]/team/loading.tsx",
     "src/app/dashboard/org/[organizationId]/settings/loading.tsx",
   ];
@@ -1477,12 +1574,27 @@ test("dashboard routes expose skeleton loading fallbacks", () => {
   assert.match(skeletonSource, /data-slot="skeleton"/);
   assert.match(skeletonSource, /animate-pulse/);
   assert.match(dashboardSkeletonsSource, /export function DashboardPageSkeleton/);
+  assert.match(dashboardSkeletonsSource, /export function EventPageSkeleton/);
   assert.match(dashboardSkeletonsSource, /export function PublicQueueSkeleton/);
 
   for (const route of loadingRoutes) {
     assert.equal(existsSync(route), true, `${route} should exist`);
     assert.match(readFileSync(route, "utf8"), /Skeleton/);
   }
+});
+
+test("event layout streams its own fallback before runtime event data resolves", () => {
+  const layoutSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/layout.tsx",
+    "utf8",
+  );
+
+  assert.match(layoutSource, /<Suspense fallback=\{<EventPageSkeleton \/>\}>/);
+  assert.match(layoutSource, /async function DashboardEventLayoutContent/);
+  assert.ok(
+    layoutSource.indexOf("<Suspense") <
+      layoutSource.indexOf("requireOperatorSession()"),
+  );
 });
 
 test("global public queue page is removed and session queue handles refresh errors", () => {

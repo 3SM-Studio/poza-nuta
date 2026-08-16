@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EventSessionAccessPanel } from "@/components/operator/event-session-access-panel";
+import { GeneralJoinAccessPanel } from "@/components/operator/general-join-access-panel";
 import { AppThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -118,5 +119,41 @@ describe("session action feedback", () => {
     expect(
       await screen.findByText("Nie udało się pobrać kodu QR."),
     ).toBeVisible();
+  });
+
+  it("shows and copies the canonical general join link", async () => {
+    const joinUrl = "https://example.test/join";
+
+    render(
+      <AppThemeProvider>
+        <GeneralJoinAccessPanel joinUrl={joinUrl} />
+        <Toaster />
+      </AppThemeProvider>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /https:\/\/example\.test\/join/ }),
+    ).toHaveAttribute("href", joinUrl);
+    expect(
+      await screen.findByRole("img", {
+        name: "Kod QR prowadzący do ogólnej strony dołączania",
+      }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kopiuj link ogólny" }),
+    );
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(joinUrl));
+    expect(await screen.findByText("Ogólny link skopiowany.")).toBeVisible();
+  });
+
+  it("shows a safe fallback when the general join URL is unavailable", () => {
+    render(<GeneralJoinAccessPanel joinUrl={null} />);
+
+    expect(
+      screen.getByText("Ogólny adres jest chwilowo niedostępny"),
+    ).toBeVisible();
+    expect(screen.queryByRole("img", { name: /ogólnej strony/ })).toBeNull();
   });
 });
