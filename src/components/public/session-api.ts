@@ -53,13 +53,28 @@ export function createSessionRequest(
   publicToken: string,
   input: {
     songId: number;
-    requesterName: string;
   },
 ) {
   return requestJson(`/api/s/${encodeURIComponent(publicToken)}/requests`, {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function joinSession(publicToken: string, displayName: string) {
+  return requestJson<{ participant: { displayName: string } }>(
+    `/api/s/${encodeURIComponent(publicToken)}/join`,
+    {
+      method: "POST",
+      body: JSON.stringify({ displayName }),
+    },
+  );
+}
+
+export function getSessionParticipant(publicToken: string) {
+  return requestJson<{ participant: { displayName: string } | null }>(
+    `/api/s/${encodeURIComponent(publicToken)}/participant`,
+  );
 }
 
 export function getSessionQueue(publicToken: string, signal?: AbortSignal) {

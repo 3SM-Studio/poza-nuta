@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import type postgres from "postgres";
+import { NextRequest } from "next/server";
 import { test, vi } from "vitest";
 
 import {
@@ -93,6 +94,8 @@ for (const image of images) {
         closeReasons.map(({ close_reason }) => close_reason),
         [null, null, "manual", "automatic"],
       );
+
+      await applyPostgresMigration(sql, 23);
 
       await assertCatalogContract(sql);
       await assertConstraintContract(sql);
@@ -706,10 +709,11 @@ async function assertPublicApiDtoContract(
   await stateClient.end({ timeout: 5 });
 
   await withApplicationDatabase(harness, async () => {
-    const [{ GET }, { POST }, { resetSessionRateLimitForTests }] =
+    const [{ GET }, { POST }, sessionService, { resetSessionRateLimitForTests }] =
       await Promise.all([
         import("../../src/app/api/s/[token]/event/route.ts"),
         import("../../src/app/api/s/[token]/requests/route.ts"),
+        import("../../src/server/session-api/service.ts"),
         import("../../src/server/session-api/rate-limit-core.ts"),
       ]);
     resetSessionRateLimitForTests();
@@ -740,20 +744,34 @@ async function assertPublicApiDtoContract(
       ].sort(),
     );
 
+    const joined = await sessionService.joinPublicSession(
+      identity.public_token,
+      null,
+      {
+        displayName: "Public DTO Guest",
+        normalizedDisplayName: "public dto guest",
+      },
+    );
+    const previousSiteUrl = process.env.SITE_URL;
+    process.env.SITE_URL = "http://localhost";
     const requestResponse = await POST(
-      new Request(`http://localhost/api/s/${identity.public_token}/requests`, {
+      new NextRequest(`http://localhost/api/s/${identity.public_token}/requests`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          cookie: `poza_nuta_participant=${joined.credential}`,
+          host: "localhost",
+          origin: "http://localhost",
           "x-forwarded-for": "192.0.2.22",
         },
         body: JSON.stringify({
           songId: fixture.songId,
-          requesterName: "Public DTO Guest",
         }),
       }),
       { params: Promise.resolve({ token: identity.public_token }) },
     );
+    if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousSiteUrl;
     assert.equal(requestResponse.status, 201);
     const requestBody = (await requestResponse.json()) as unknown;
     assert.deepEqual(requestBody, { request: { status: "pending" } });
@@ -1018,6 +1036,9 @@ async function assertConcurrentActivePublicEventReopen(
         "events_one_active_public_per_workspace_idx",
       ),
       true,
+      rejected.reason instanceof Error
+        ? rejected.reason.message
+        : "Unexpected non-Error rejection",
     );
 
     const [state] = await sql<{ active: number; audits: number }[]>`
@@ -1170,11 +1191,19 @@ async function assertCloseReopenPreservesQueue(
     WHERE event_id = ${eventId}
   `;
   assert.ok(identity);
-  await sessionService.createPublicSessionRequest(identity.public_token, {
-    songId: fixture.songId,
-    singerName: "Guest after reopen",
-    note: null,
-  });
+  const joined = await sessionService.joinPublicSession(
+    identity.public_token,
+    null,
+    {
+      displayName: "Guest after reopen",
+      normalizedDisplayName: "guest after reopen",
+    },
+  );
+  await sessionService.createPublicSessionRequest(
+    identity.public_token,
+    joined.credential,
+    { songId: fixture.songId },
+  );
   const [requestCount] = await sql<{ count: number }[]>`
     SELECT count(*)::integer AS count
     FROM public.song_requests
@@ -1754,15 +1783,26 @@ function randomEightDigitCode(excluded?: string) {
   return code;
 }
 
-function isPostgresError(error: unknown, code: string, constraint: string) {
-  return (
+function isPostgresError(
+  error: unknown,
+  code: string,
+  constraint: string,
+): boolean {
+  const matches =
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
     error.code === code &&
     (("constraint_name" in error && error.constraint_name === constraint) ||
-      ("constraint" in error && error.constraint === constraint))
-  );
+      ("constraint" in error && error.constraint === constraint));
+
+  if (matches) return true;
+  return typeof error === "object" &&
+    error !== null &&
+    "cause" in error &&
+    error.cause !== error
+    ? isPostgresError(error.cause, code, constraint)
+    : false;
 }
 
 function getErrorCode(error: unknown) {

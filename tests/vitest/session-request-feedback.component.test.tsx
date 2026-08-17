@@ -122,7 +122,7 @@ describe("session request feedback", () => {
     fireEvent.submit(submit.closest("form")!);
 
     expect(screen.getByText("Wybierz piosenkę.")).toBeVisible();
-    expect(screen.getAllByText(/Podaj imię lub ksywkę/)).toHaveLength(2);
+    expect(screen.queryByLabelText("Imię lub ksywka")).not.toBeInTheDocument();
     expect(toastSuccess).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
     expect(createRequest).not.toHaveBeenCalled();
@@ -130,7 +130,13 @@ describe("session request feedback", () => {
 
   it("shows a success toast and a durable pending request state", async () => {
     createRequest.mockResolvedValue({});
-    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={event}
+        participantDisplayName="Ala"
+      />,
+    );
     await completeRequestForm();
 
     await waitFor(() => expect(createRequest).toHaveBeenCalledOnce());
@@ -141,6 +147,9 @@ describe("session request feedback", () => {
     expect(screen.getByText("Oczekujące")).toBeVisible();
     expect(screen.getByText(/Test Song/)).toBeVisible();
     expect(screen.getByText(/Zgłaszający: Ala/)).toBeVisible();
+    expect(createRequest).toHaveBeenCalledWith("AbCdEfGhIjKlMnOpQrStUv", {
+      songId: 11,
+    });
   });
 
   it("shows a persistent duplicate alert without duplicating it in Sonner", async () => {
@@ -222,8 +231,5 @@ async function completeRequestForm() {
   });
   fireEvent.click(screen.getByRole("button", { name: "Szukaj" }));
   fireEvent.click(await screen.findByRole("button", { name: /Test Song/ }));
-  fireEvent.change(screen.getByLabelText("Imię lub ksywka"), {
-    target: { value: "Ala" },
-  });
   fireEvent.click(screen.getByRole("button", { name: "Dodaj do kolejki" }));
 }

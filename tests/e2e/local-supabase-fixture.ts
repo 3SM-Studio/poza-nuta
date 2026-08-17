@@ -35,6 +35,14 @@ export type LocalSupabaseFixture = {
       position: number;
     }[]
   >;
+  readParticipantRequests(displayName: string): Promise<
+    {
+      requestId: number;
+      eventParticipantId: number;
+      participantId: number;
+      songTitle: string;
+    }[]
+  >;
   resetQueue(): Promise<void>;
   cleanup(): Promise<void>;
 };
@@ -69,7 +77,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
   let authUserId: string | null = null;
   let workspaceId: number | null = null;
   let operatorId: number | null = null;
-  let songId: number | null = null;
+  let songIds: number[] = [];
 
   try {
     const authResult = await admin.auth.admin.createUser({
@@ -201,7 +209,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
         VALUES (${session.id}, ${sessionCode}, ${operator.id}, 'initial')
       `;
 
-      const [song] = await transaction<{ id: number }[]>`
+      const songs = await transaction<{ id: number }[]>`
         INSERT INTO public.songs (
           source,
           source_song_id,
@@ -219,15 +227,23 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           ${"e2e song"},
           ${"e2e artist"},
           ${"e2e song e2e artist"}
+        ), (
+          'manual',
+          ${`e2e-second-${fixtureSuffix}`},
+          ${"E2E Second Song"},
+          ${"E2E Artist"},
+          ${"e2e second song"},
+          ${"e2e artist"},
+          ${"e2e second song e2e artist"}
         )
         RETURNING id
       `;
 
-      if (!song) {
-        throw new Error("Local song fixture was not created.");
+      if (songs.length !== 2) {
+        throw new Error("Local song fixtures were not created.");
       }
 
-      songId = song.id;
+      songIds = songs.map(({ id }) => id);
 
       await transaction`
         INSERT INTO public.song_requests (
@@ -242,7 +258,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
         VALUES
           (
             ${event.id},
-            ${song.id},
+            ${songs[0]!.id},
             ${queueRequestNames.pending},
             ${queueRequestNames.pending},
             'pending',
@@ -251,7 +267,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           ),
           (
             ${event.id},
-            ${song.id},
+            ${songs[0]!.id},
             ${queueRequestNames.approved},
             ${queueRequestNames.approved},
             'approved',
@@ -260,7 +276,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           ),
           (
             ${event.id},
-            ${song.id},
+            ${songs[0]!.id},
             ${queueRequestNames.rejected},
             ${queueRequestNames.rejected},
             'rejected',
@@ -357,6 +373,37 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       }));
     }
 
+    async function readParticipantRequests(displayName: string) {
+      const rows = await sql<
+        {
+          request_id: number;
+          event_participant_id: number;
+          participant_id: number;
+          song_title: string;
+        }[]
+      >`
+        SELECT
+          r.id AS request_id,
+          r.event_participant_id,
+          ep.participant_id,
+          s.title AS song_title
+        FROM public.song_requests r
+        JOIN public.event_participants ep ON ep.id = r.event_participant_id
+        JOIN public.songs s ON s.id = r.song_id
+        JOIN public.events e ON e.id = r.event_id
+        WHERE e.public_id = ${eventPublicId}::uuid
+          AND r.display_name = ${displayName}
+        ORDER BY r.id
+      `;
+
+      return rows.map((row) => ({
+        requestId: row.request_id,
+        eventParticipantId: row.event_participant_id,
+        participantId: row.participant_id,
+        songTitle: row.song_title,
+      }));
+    }
+
     async function resetQueue() {
       await sql`
         UPDATE public.song_requests r
@@ -415,10 +462,10 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           `;
         }
 
-        if (songId !== null) {
+        if (songIds.length > 0) {
           await sql`
             DELETE FROM public.songs
-            WHERE id = ${songId}
+            WHERE id = ANY(${songIds})
           `;
         }
 
@@ -447,6 +494,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       readEventState,
       readQueueStatuses,
       readQueueRows,
+      readParticipantRequests,
       resetQueue,
       cleanup,
     };

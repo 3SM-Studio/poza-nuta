@@ -36,6 +36,7 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
     const legacyBefore = await eventDataFingerprint(sql, legacyFixture.workspaceId);
     await assertMigrationFailFast(sql);
     await applyPostgresMigration(sql, 22);
+    await applyPostgresMigration(sql, 23);
     assert.deepEqual(
       await eventDataFingerprint(sql, legacyFixture.workspaceId),
       legacyBefore,
@@ -80,17 +81,25 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
     );
     assert.equal(searchResults.length, 1);
 
+    const joinedGuest = await sessionService.joinPublicSession(
+      fixture.publicToken,
+      null,
+      {
+        displayName: "Guest Evidence",
+        normalizedDisplayName: "guest evidence",
+      },
+    );
     const concurrent = await Promise.allSettled([
-      sessionService.createSessionRequest(fixture.sessionCode, {
-        songId: fixture.songId,
-        singerName: "Guest Evidence",
-        note: null,
-      }),
-      sessionService.createSessionRequest(fixture.sessionCode, {
-        songId: fixture.songId,
-        singerName: "Guest Evidence",
-        note: null,
-      }),
+      sessionService.createPublicSessionRequest(
+        fixture.publicToken,
+        joinedGuest.credential,
+        { songId: fixture.songId },
+      ),
+      sessionService.createPublicSessionRequest(
+        fixture.publicToken,
+        joinedGuest.credential,
+        { songId: fixture.songId },
+      ),
     ]);
     assert.equal(
       concurrent.filter((result) => result.status === "fulfilled").length,
@@ -101,11 +110,11 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
     assert.equal(getErrorCode(duplicate.reason), "SESSION_REQUEST_DUPLICATE");
     assert.equal(getErrorStatus(duplicate.reason), 409);
     await assert.rejects(
-      sessionService.createSessionRequest(fixture.sessionCode, {
-        songId: fixture.songId,
-        singerName: "guest evidence",
-        note: null,
-      }),
+      sessionService.createPublicSessionRequest(
+        fixture.publicToken,
+        joinedGuest.credential,
+        { songId: fixture.songId },
+      ),
       (error: unknown) => getErrorCode(error) === "SESSION_REQUEST_DUPLICATE",
     );
 
@@ -168,11 +177,11 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
       WHERE id = ${fixture.eventId}
     `;
     await assert.rejects(
-      sessionService.createSessionRequest(fixture.sessionCode, {
-        songId: fixture.songId,
-        singerName: "Closed Evidence",
-        note: null,
-      }),
+      sessionService.createPublicSessionRequest(
+        fixture.publicToken,
+        joinedGuest.credential,
+        { songId: fixture.songId },
+      ),
       (error: unknown) => getErrorCode(error) === "SESSION_EVENT_CLOSED",
     );
     await assert.rejects(
@@ -224,6 +233,7 @@ type Fixture = {
   membershipId: number;
   songId: number;
   sessionCode: string;
+  publicToken: string;
 };
 
 type LegacyFixture = {
@@ -418,10 +428,10 @@ async function seedFixture(sql: postgres.Sql): Promise<Fixture> {
     )
     RETURNING id::integer, public_id::text, session_code
   `;
-  const [session] = await sql<{ id: number }[]>`
+  const [session] = await sql<{ id: number; public_token: string }[]>`
     INSERT INTO public.event_sessions (event_id, public_token)
     VALUES (${event.id}, ${makePublicToken()})
-    RETURNING id::integer
+    RETURNING id::integer, public_token
   `;
   await sql`
     INSERT INTO public.event_session_codes (
@@ -498,6 +508,7 @@ async function seedFixture(sql: postgres.Sql): Promise<Fixture> {
     membershipId: membership.id,
     songId: song.id,
     sessionCode: event.session_code,
+    publicToken: session.public_token,
   };
 }
 
@@ -608,13 +619,22 @@ async function assertConcurrentMultiActiveLifecycle(
     assert.equal(activeState.active, 4);
 
     await Promise.all(
-      identities.map(({ public_token }, index) =>
-        sessionService.createPublicSessionRequest(public_token, {
-          songId: fixture.songId,
-          singerName: `Scoped Guest ${index + 1}`,
-          note: null,
-        }),
-      ),
+      identities.map(async ({ public_token }, index) => {
+        const displayName = `Scoped Guest ${index + 1}`;
+        const joined = await sessionService.joinPublicSession(
+          public_token,
+          null,
+          {
+            displayName,
+            normalizedDisplayName: displayName.toLocaleLowerCase("pl-PL"),
+          },
+        );
+        return sessionService.createPublicSessionRequest(
+          public_token,
+          joined.credential,
+          { songId: fixture.songId },
+        );
+      }),
     );
     const requests = await sql<{ id: number; event_id: number; status: string }[]>`
       SELECT id::integer, event_id::integer, status::text

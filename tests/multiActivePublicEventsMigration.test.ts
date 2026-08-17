@@ -91,7 +91,7 @@ test("journal, schema, services, and UI expose the multi-active contract", () =>
     "utf8",
   );
 
-  assert.deepEqual(journal.entries.at(-1), {
+  assert.deepEqual(journal.entries.find(({ idx }) => idx === 22), {
     idx: 22,
     version: "7",
     when: 1785875185006,

@@ -14,11 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 import { getSessionCapabilityState } from "@/lib/session-capabilities";
-import {
-  normalizeSessionRequesterName,
-  SESSION_REQUESTER_NAME_MAX_LENGTH,
-  SESSION_REQUESTER_NAME_MIN_LENGTH,
-} from "@/lib/session-request";
 import type { PublicQueueResponse, PublicSong } from "./api";
 import styles from "./public.module.css";
 import {
@@ -36,22 +31,21 @@ import {
 } from "./validation";
 import { usePublicQueueRealtime } from "./use-public-queue-realtime";
 
-type SessionRequestFormErrors = Partial<
-  Record<"songId" | "requesterName", string>
->;
+type SessionRequestFormErrors = Partial<Record<"songId", string>>;
 
 type SubmittedRequestSummary = {
   title: string;
   artist: string;
-  requesterName: string;
 };
 
 export function SessionRequestPage({
   sessionToken,
   event,
+  participantDisplayName,
 }: {
   sessionToken: string;
   event: SessionEvent;
+  participantDisplayName?: string;
 }) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
@@ -59,7 +53,6 @@ export function SessionRequestPage({
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [requesterName, setRequesterName] = useState("");
   const [formErrors, setFormErrors] = useState<SessionRequestFormErrors>({});
   const [submitAlert, setSubmitAlert] =
     useState<SessionStateAlertKind | null>(null);
@@ -172,7 +165,6 @@ export function SessionRequestPage({
 
     const validation = validateSessionRequestForm({
       songId: selectedSong?.id ?? null,
-      requesterName,
     });
 
     if (!validation.success) {
@@ -192,12 +184,10 @@ export function SessionRequestPage({
       setSubmittedRequest({
         title: selectedSong.title,
         artist: selectedSong.artist,
-        requesterName: validation.data.requesterName,
       });
       setSelectedSong(null);
       setSearchTerm("");
       setSearchResults([]);
-      setRequesterName("");
       toast.success("Dodano zgłoszenie", {
         description: "Operator musi je zatwierdzić.",
       });
@@ -205,6 +195,13 @@ export function SessionRequestPage({
         await loadQueue();
       }
     } catch (caughtError) {
+      if (
+        caughtError instanceof SessionClientError &&
+        caughtError.code === "SESSION_PARTICIPANT_REQUIRED"
+      ) {
+        router.refresh();
+        return;
+      }
       const alertKind = getSubmitAlertKind(caughtError);
       if (alertKind) {
         setSubmitAlert(alertKind);
@@ -304,6 +301,12 @@ export function SessionRequestPage({
       <section className={styles.publicSection}>
         <h2>Twoje zgłoszenie</h2>
 
+        {participantDisplayName ? (
+          <p className={styles.inlineMessage}>
+            Dołączono jako <strong>{participantDisplayName}</strong>
+          </p>
+        ) : null}
+
         <div
           className={`${styles.selectedSong} ${
             formErrors.songId ? styles.invalidSelection : ""
@@ -324,39 +327,6 @@ export function SessionRequestPage({
         ) : null}
 
         <form className={styles.requestForm} onSubmit={handleSubmit}>
-          <div className={styles.field}>
-            <label htmlFor="session-requester-name">
-              Imię lub ksywka
-            </label>
-            <Input
-              id="session-requester-name"
-              type="text"
-              required
-              minLength={SESSION_REQUESTER_NAME_MIN_LENGTH}
-              value={requesterName}
-              onChange={(event) => {
-                setRequesterName(event.target.value);
-                setFormErrors((current) => ({
-                  ...current,
-                  requesterName: undefined,
-                }));
-                setSubmitAlert(null);
-              }}
-              maxLength={SESSION_REQUESTER_NAME_MAX_LENGTH}
-              placeholder="Imię lub ksywka"
-              disabled={isSubmitting}
-            />
-            <span className={styles.inlineMessage}>
-              Podaj imię lub ksywkę, żeby operator wiedział, kogo zaprosić.
-            </span>
-            <span className={styles.characterCount}>
-              {requesterName.length}/{SESSION_REQUESTER_NAME_MAX_LENGTH}
-            </span>
-            {formErrors.requesterName ? (
-              <p className={styles.fieldError}>{formErrors.requesterName}</p>
-            ) : null}
-          </div>
-
           <Button
             className={styles.submitButton}
             type="submit"
@@ -379,8 +349,8 @@ export function SessionRequestPage({
                 {submittedRequest.artist}
               </p>
               <p className={styles.inlineMessage}>
-                Zgłaszający: {submittedRequest.requesterName}. Zgłoszenie czeka
-                na decyzję operatora.
+                Zgłaszający: {participantDisplayName}. Zgłoszenie czeka na
+                decyzję operatora.
               </p>
             </CardContent>
           </Card>
@@ -453,18 +423,15 @@ export function SessionRequestPage({
 
 function validateSessionRequestForm(input: {
   songId: number | null;
-  requesterName: string;
 }):
   | {
       success: true;
       data: {
         songId: number;
-        requesterName: string;
       };
     }
   | { success: false; errors: SessionRequestFormErrors } {
   const errors: SessionRequestFormErrors = {};
-  const requesterName = normalizeSessionRequesterName(input.requesterName);
 
   if (
     input.songId === null ||
@@ -472,13 +439,6 @@ function validateSessionRequestForm(input: {
     input.songId <= 0
   ) {
     errors.songId = "Wybierz piosenkę.";
-  }
-
-  if (requesterName.length < SESSION_REQUESTER_NAME_MIN_LENGTH) {
-    errors.requesterName =
-      "Podaj imię lub ksywkę, żeby operator wiedział, kogo zaprosić.";
-  } else if (requesterName.length > SESSION_REQUESTER_NAME_MAX_LENGTH) {
-    errors.requesterName = `Imię lub ksywka może mieć maksymalnie ${SESSION_REQUESTER_NAME_MAX_LENGTH} znaków.`;
   }
 
   if (Object.keys(errors).length > 0) {
@@ -489,7 +449,6 @@ function validateSessionRequestForm(input: {
     success: true,
     data: {
       songId: input.songId as number,
-      requesterName,
     },
   };
 }

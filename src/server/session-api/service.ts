@@ -1,11 +1,14 @@
 import "server-only";
 
-import { and, eq, gt, ilike, inArray, isNull, lte, max, or, sql } from "drizzle-orm";
+import { and, eq, gt, ilike, inArray, isNull, lte, max, or } from "drizzle-orm";
 
 import {
   eventSessionCodes,
   eventSessions,
   events,
+  eventParticipants,
+  participantCredentials,
+  participantIdentities,
   songRequests,
   songs,
 } from "../../db/schema";
@@ -24,7 +27,15 @@ import { getDb } from "../db";
 import { PublicApiError } from "../public-api/errors";
 import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "../public-api/queue-policy";
 import { PUBLIC_SONG_SEARCH_LIMIT } from "../public-api/service";
-import type { SessionRequestInput } from "./validation";
+import {
+  generateParticipantCredential,
+  hashParticipantCredential,
+  PARTICIPANT_CREDENTIAL_TTL_MS,
+} from "./participant-credential";
+import type {
+  ParticipantJoinInput,
+  ParticipantSessionRequestInput,
+} from "./validation";
 
 type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
@@ -67,8 +78,19 @@ type SessionEventRecord = {
 };
 
 type SessionEventRow = {
+  sessionId: number;
   event: SessionEventRecord;
   publicToken: string;
+};
+
+export type PublicSessionParticipant = {
+  displayName: string;
+};
+
+export type ParticipantJoinResult = {
+  participant: PublicSessionParticipant;
+  credential: string;
+  credentialExpiresAt: Date;
 };
 
 type SessionLookup =
@@ -220,6 +242,193 @@ export async function getPublicSessionQueue(publicToken: string) {
   return getQueueForLookup({ kind: "token", value: publicToken });
 }
 
+export async function getPublicSessionParticipant(
+  publicToken: string,
+  credential: string | null | undefined,
+): Promise<PublicSessionParticipant | null> {
+  const session = await requireLiveSession({
+    kind: "token",
+    value: publicToken,
+  });
+  const tokenHash = credential ? hashParticipantCredential(credential) : null;
+  if (!tokenHash) return null;
+
+  const now = new Date();
+  const [membership] = await getDb()
+    .select({
+      displayName: eventParticipants.displayName,
+      credentialId: participantCredentials.id,
+    })
+    .from(participantCredentials)
+    .innerJoin(
+      eventParticipants,
+      eq(eventParticipants.participantId, participantCredentials.participantId),
+    )
+    .where(
+      and(
+        eq(participantCredentials.tokenHash, tokenHash),
+        gt(participantCredentials.expiresAt, now),
+        isNull(participantCredentials.revokedAt),
+        eq(eventParticipants.eventSessionId, session.sessionId),
+      ),
+    )
+    .limit(1);
+
+  if (!membership) return null;
+
+  await getDb()
+    .update(participantCredentials)
+    .set({ lastUsedAt: now })
+    .where(eq(participantCredentials.id, membership.credentialId));
+
+  return { displayName: membership.displayName };
+}
+
+export async function joinPublicSession(
+  publicToken: string,
+  credential: string | null | undefined,
+  input: ParticipantJoinInput,
+): Promise<ParticipantJoinResult> {
+  const suppliedTokenHash = credential
+    ? hashParticipantCredential(credential)
+    : null;
+
+  return getDb().transaction(async (transaction) => {
+    const session = requireParticipantSessionRow(
+      requireLiveSessionRow(
+        await findSessionEventInTransaction(transaction, {
+          kind: "token",
+          value: publicToken,
+        }),
+      ),
+    );
+    const now = new Date();
+
+    const [recognizedCredential] = suppliedTokenHash
+      ? await transaction
+          .select({
+            participantId: participantCredentials.participantId,
+            expiresAt: participantCredentials.expiresAt,
+          })
+          .from(participantCredentials)
+          .where(
+            and(
+              eq(participantCredentials.tokenHash, suppliedTokenHash),
+              gt(participantCredentials.expiresAt, now),
+              isNull(participantCredentials.revokedAt),
+            ),
+          )
+          .limit(1)
+      : [];
+
+    const rawCredential = recognizedCredential
+      ? (credential as string)
+      : generateParticipantCredential();
+    const tokenHash = hashParticipantCredential(rawCredential);
+    if (!tokenHash) throw new Error("Participant credential generation failed.");
+
+    let participantId = recognizedCredential?.participantId;
+    let credentialExpiresAt = recognizedCredential?.expiresAt;
+
+    if (participantId) {
+      await transaction
+        .update(participantCredentials)
+        .set({ lastUsedAt: now })
+        .where(eq(participantCredentials.tokenHash, tokenHash));
+    } else {
+      const [identity] = await transaction
+        .insert(participantIdentities)
+        .values({ createdAt: now, updatedAt: now })
+        .returning({ id: participantIdentities.id });
+
+      if (!identity) throw new Error("Participant identity could not be created.");
+      participantId = identity.id;
+      credentialExpiresAt = new Date(now.getTime() + PARTICIPANT_CREDENTIAL_TTL_MS);
+
+      const [createdCredential] = await transaction
+        .insert(participantCredentials)
+        .values({
+          participantId,
+          tokenHash,
+          createdAt: now,
+          lastUsedAt: now,
+          expiresAt: credentialExpiresAt,
+        })
+        .onConflictDoNothing()
+        .returning({ id: participantCredentials.id });
+
+      if (!createdCredential) {
+        throw new Error("Participant credential could not be created.");
+      }
+    }
+
+    const [existingMembership] = await transaction
+      .select({ displayName: eventParticipants.displayName })
+      .from(eventParticipants)
+      .where(
+        and(
+          eq(eventParticipants.eventSessionId, session.sessionId),
+          eq(eventParticipants.participantId, participantId),
+        ),
+      )
+      .limit(1);
+
+    if (existingMembership) {
+      return {
+        participant: { displayName: existingMembership.displayName },
+        credential: rawCredential,
+        credentialExpiresAt: credentialExpiresAt as Date,
+      };
+    }
+
+    const [membership] = await transaction
+      .insert(eventParticipants)
+      .values({
+        eventSessionId: session.sessionId,
+        participantId,
+        displayName: input.displayName,
+        normalizedDisplayName: input.normalizedDisplayName,
+        joinedAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+      .returning({ displayName: eventParticipants.displayName });
+
+    if (!membership) {
+      const [sameParticipantMembership] = await transaction
+        .select({ displayName: eventParticipants.displayName })
+        .from(eventParticipants)
+        .where(
+          and(
+            eq(eventParticipants.eventSessionId, session.sessionId),
+            eq(eventParticipants.participantId, participantId),
+          ),
+        )
+        .limit(1);
+
+      if (sameParticipantMembership) {
+        return {
+          participant: { displayName: sameParticipantMembership.displayName },
+          credential: rawCredential,
+          credentialExpiresAt: credentialExpiresAt as Date,
+        };
+      }
+
+      throw new PublicApiError(
+        409,
+        "SESSION_NICKNAME_TAKEN",
+        "This nickname is already used in the event.",
+      );
+    }
+
+    return {
+      participant: membership,
+      credential: rawCredential,
+      credentialExpiresAt: credentialExpiresAt as Date,
+    };
+  });
+}
+
 async function getQueueForLookup(lookup: SessionLookup) {
   const session = await requireLiveSession(lookup);
 
@@ -283,29 +492,60 @@ async function getQueueForLookup(lookup: SessionLookup) {
   };
 }
 
-export async function createSessionRequest(
-  code: string,
-  input: SessionRequestInput,
-) {
-  return createRequestForLookup({ kind: "code", value: code }, input);
-}
-
 export async function createPublicSessionRequest(
   publicToken: string,
-  input: SessionRequestInput,
+  credential: string | null | undefined,
+  input: ParticipantSessionRequestInput,
 ) {
-  return createRequestForLookup({ kind: "token", value: publicToken }, input);
-}
-
-async function createRequestForLookup(
-  lookup: SessionLookup,
-  input: SessionRequestInput,
-) {
-  return getDb().transaction(async (transaction) => {
-    const session = await requireSongRequestSessionInTransaction(
-      transaction,
-      lookup,
+  const tokenHash = credential ? hashParticipantCredential(credential) : null;
+  if (!tokenHash) {
+    throw new PublicApiError(
+      403,
+      "SESSION_PARTICIPANT_REQUIRED",
+      "Join this event before requesting a song.",
     );
+  }
+
+  return getDb().transaction(async (transaction) => {
+    const session = await requireSongRequestSessionInTransaction(transaction, {
+      kind: "token",
+      value: publicToken,
+    });
+    const now = new Date();
+
+    const [membership] = await transaction
+      .select({
+        id: eventParticipants.id,
+        displayName: eventParticipants.displayName,
+        credentialId: participantCredentials.id,
+      })
+      .from(participantCredentials)
+      .innerJoin(
+        eventParticipants,
+        eq(eventParticipants.participantId, participantCredentials.participantId),
+      )
+      .where(
+        and(
+          eq(participantCredentials.tokenHash, tokenHash),
+          gt(participantCredentials.expiresAt, now),
+          isNull(participantCredentials.revokedAt),
+          eq(eventParticipants.eventSessionId, session.sessionId),
+        ),
+      )
+      .limit(1);
+
+    if (!membership) {
+      throw new PublicApiError(
+        403,
+        "SESSION_PARTICIPANT_REQUIRED",
+        "Join this event before requesting a song.",
+      );
+    }
+
+    await transaction
+      .update(participantCredentials)
+      .set({ lastUsedAt: now })
+      .where(eq(participantCredentials.id, membership.credentialId));
 
     const [song] = await transaction
       .select({ id: songs.id })
@@ -328,7 +568,7 @@ async function createRequestForLookup(
         and(
           eq(songRequests.eventId, session.event.id),
           eq(songRequests.songId, song.id),
-          sql`lower(${songRequests.displayName}) = lower(${input.singerName})`,
+          eq(songRequests.eventParticipantId, membership.id),
           inArray(songRequests.status, ACTIVE_SESSION_REQUEST_STATUSES),
         ),
       )
@@ -338,7 +578,7 @@ async function createRequestForLookup(
       throw new PublicApiError(
         409,
         "SESSION_REQUEST_DUPLICATE",
-        "This singer already has an active request for the selected song.",
+        "This participant already has an active request for the selected song.",
       );
     }
 
@@ -346,31 +586,25 @@ async function createRequestForLookup(
       .select({ maxPosition: max(songRequests.position) })
       .from(songRequests)
       .where(eq(songRequests.eventId, session.event.id));
-    const position = (queueState?.maxPosition ?? 0) + 1;
-    const now = new Date();
 
-    const [request] = await transaction
+    const [createdRequest] = await transaction
       .insert(songRequests)
       .values({
         eventId: session.event.id,
         songId: song.id,
-        singerName: input.singerName,
-        displayName: input.singerName,
-        note: input.note,
+        singerName: membership.displayName,
+        displayName: membership.displayName,
+        note: null,
         status: "pending",
-        position,
+        position: (queueState?.maxPosition ?? 0) + 1,
         requestedBy: "public",
+        eventParticipantId: membership.id,
         updatedAt: now,
       })
-      .returning({
-        status: songRequests.status,
-      });
+      .returning({ status: songRequests.status });
 
-    if (!request) {
-      throw new Error("Session request could not be created.");
-    }
-
-    return request;
+    if (!createdRequest) throw new Error("Session request could not be created.");
+    return createdRequest;
   });
 }
 
@@ -382,6 +616,21 @@ async function requireLiveSession(lookup: SessionLookup) {
 async function requireSongRequestSession(lookup: SessionLookup) {
   const session = await requireLiveSession(lookup);
   return requireSongRequestsEnabled(session);
+}
+
+function requireParticipantSessionRow(row: SessionEventRow) {
+  if (
+    !canUseSessionSongRequests(row.event) &&
+    !canUseSessionPublicQueue(row.event)
+  ) {
+    throw new PublicApiError(
+      403,
+      "SESSION_PARTICIPATION_DISABLED",
+      "Participant access is disabled for this event.",
+    );
+  }
+
+  return row;
 }
 
 async function requireSongRequestSessionInTransaction(
@@ -441,6 +690,7 @@ async function findSessionEvent(lookup: SessionLookup, now = new Date()) {
 
   const query = getDb()
     .select({
+      sessionId: eventSessions.id,
       event: sessionEventSelection,
       publicToken: eventSessions.publicToken,
     })
@@ -479,6 +729,7 @@ async function findSessionEventInTransaction(
 
   const query = transaction
     .select({
+      sessionId: eventSessions.id,
       event: sessionEventSelection,
       publicToken: eventSessions.publicToken,
     })

@@ -500,7 +500,7 @@ test("session queue keeps privacy paths and global public queue is removed", () 
     "export async function getSessionQueue",
   );
   const sessionRequestStart = sessionServiceSource.indexOf(
-    "export async function createSessionRequest",
+    "export async function createPublicSessionRequest",
   );
   const sessionQueueSource = sessionServiceSource.slice(
     sessionQueueStart,

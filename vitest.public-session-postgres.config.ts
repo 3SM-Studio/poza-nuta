@@ -10,7 +10,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/postgres/publicEventSessionIdentity.integration.test.ts"],
+    include: [
+      "tests/postgres/publicEventSessionIdentity.integration.test.ts",
+      "tests/postgres/participantIdentity.integration.test.ts",
+    ],
     testTimeout: 180_000,
     hookTimeout: 180_000,
   },

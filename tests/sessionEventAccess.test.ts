@@ -15,7 +15,7 @@ import {
   consumeSessionRateLimit,
   resetSessionRateLimitForTests,
 } from "../src/server/session-api/rate-limit-core.ts";
-import { validateSessionRequestInput } from "../src/server/session-api/validation.ts";
+import { validateParticipantSessionRequestInput } from "../src/server/session-api/validation.ts";
 
 const now = new Date("2026-07-18T18:00:00.000Z");
 const activeEvent = {
@@ -105,22 +105,18 @@ test("session capabilities keep requests and public queue independent", () => {
   );
 });
 
-test("session request validation requires and trims a nickname", () => {
-  assert.equal(
-    validateSessionRequestInput({ songId: 1, singerName: " " }).success,
-    false,
-  );
-  assert.deepEqual(
-    validateSessionRequestInput({
+test("participant request validation accepts only a server-owned song selection", () => {
+  assert.deepEqual(validateParticipantSessionRequestInput({ songId: 1 }), {
+    success: true,
+    data: { songId: 1 },
+  });
+  for (const field of ["requesterName", "singerName", "displayName", "eventId"]) {
+    const result = validateParticipantSessionRequestInput({
       songId: 1,
-      singerName: "  Ala  ",
-      note: "  duet  ",
-    }),
-    {
-      success: true,
-      data: { songId: 1, singerName: "Ala", note: "duet" },
-    },
-  );
+      [field]: "Admin",
+    });
+    assert.equal(result.success, false);
+  }
 });
 
 test("session resolver uses one token/code identity service and locks writes", () => {
@@ -152,7 +148,7 @@ test("public session DTOs exclude internal relational identifiers", () => {
     service.indexOf("function escapeLikePattern"),
   );
   const requestWriter = service.slice(
-    service.indexOf("async function createRequestForLookup"),
+    service.indexOf("export async function createPublicSessionRequest"),
     service.indexOf("async function requireLiveSession"),
   );
 
@@ -165,21 +161,21 @@ test("public session DTOs exclude internal relational identifiers", () => {
   assert.match(requestWriter, /status:\s*songRequests\.status/);
 });
 
-test("session request duplicate protection is serialized by the event lock", () => {
+test("participant request duplicate protection is serialized by the event lock", () => {
   const source = readFileSync("src/server/session-api/service.ts", "utf8");
   const createRequest = source.slice(
-    source.indexOf("export async function createSessionRequest"),
+    source.indexOf("export async function createPublicSessionRequest"),
     source.indexOf("async function requireLiveSession"),
   );
 
   assert.match(
     createRequest,
-    /requireSongRequestSessionInTransaction\(\s*transaction,\s*lookup/,
+    /requireSongRequestSessionInTransaction\(transaction,\s*\{\s*kind: "token",\s*value: publicToken/,
   );
   assert.match(createRequest, /eq\(songRequests\.songId, song\.id\)/);
   assert.match(
     createRequest,
-    /lower\(\$\{songRequests\.displayName\}\) = lower\(\$\{input\.singerName\}\)/,
+    /eq\(songRequests\.eventParticipantId, membership\.id\)/,
   );
   assert.match(
     createRequest,
@@ -196,12 +192,13 @@ test("session API remains anonymous, identity-scoped and rate limited", () => {
   const routes = [
     "src/app/api/session/[code]/event/route.ts",
     "src/app/api/session/[code]/songs/search/route.ts",
-    "src/app/api/session/[code]/requests/route.ts",
     "src/app/api/session/[code]/queue/route.ts",
     "src/app/api/s/[token]/event/route.ts",
     "src/app/api/s/[token]/songs/search/route.ts",
     "src/app/api/s/[token]/requests/route.ts",
     "src/app/api/s/[token]/queue/route.ts",
+    "src/app/api/s/[token]/join/route.ts",
+    "src/app/api/s/[token]/participant/route.ts",
   ];
 
   for (const route of routes) {
@@ -209,6 +206,14 @@ test("session API remains anonymous, identity-scoped and rate limited", () => {
     assert.match(source, /requireSessionApiRateLimit\(request\)/);
     assert.doesNotMatch(source, /requireOperatorSession/);
   }
+
+  const legacyMutation = readFileSync(
+    "src/app/api/session/[code]/requests/route.ts",
+    "utf8",
+  );
+  assert.match(legacyMutation, /legacyGoneResponse/);
+  assert.match(legacyMutation, /SESSION_REQUEST_ENDPOINT_GONE/);
+  assert.doesNotMatch(legacyMutation, /request\.json|createSessionRequest/);
 });
 
 test("canonical session page and code resolver provide safe states", () => {

@@ -394,6 +394,86 @@ export const eventSessionCodes = pgTable(
   ],
 ).enableRLS();
 
+export const participantIdentities = pgTable(
+  "participant_identities",
+  {
+    id: idColumn(),
+    publicId: uuid("public_id").notNull().defaultRandom(),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("participant_identities_public_id_idx").on(table.publicId),
+  ],
+).enableRLS();
+
+export const participantCredentials = pgTable(
+  "participant_credentials",
+  {
+    id: idColumn(),
+    participantId: bigint("participant_id", { mode: "number" })
+      .notNull()
+      .references(() => participantIdentities.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestampColumn("expires_at").notNull(),
+    lastUsedAt: timestampColumn("last_used_at").notNull(),
+    revokedAt: timestampColumn("revoked_at"),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("participant_credentials_token_hash_idx").on(table.tokenHash),
+    index("participant_credentials_participant_idx").on(table.participantId),
+    index("participant_credentials_expires_at_idx").on(table.expiresAt),
+    check(
+      "participant_credentials_token_hash_format_check",
+      sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "participant_credentials_time_order_check",
+      sql`${table.expiresAt} > ${table.createdAt}
+        and ${table.lastUsedAt} >= ${table.createdAt}
+        and (${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt})`,
+    ),
+  ],
+).enableRLS();
+
+export const eventParticipants = pgTable(
+  "event_participants",
+  {
+    id: idColumn(),
+    eventSessionId: bigint("event_session_id", { mode: "number" })
+      .notNull()
+      .references(() => eventSessions.id, { onDelete: "cascade" }),
+    participantId: bigint("participant_id", { mode: "number" })
+      .notNull()
+      .references(() => participantIdentities.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    normalizedDisplayName: text("normalized_display_name").notNull(),
+    joinedAt: timestampColumn("joined_at").notNull().defaultNow(),
+    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("event_participants_session_participant_idx").on(
+      table.eventSessionId,
+      table.participantId,
+    ),
+    uniqueIndex("event_participants_session_nickname_idx").on(
+      table.eventSessionId,
+      table.normalizedDisplayName,
+    ),
+    index("event_participants_participant_idx").on(table.participantId),
+    check(
+      "event_participants_display_name_check",
+      sql`char_length(${table.displayName}) between 2 and 24
+        and ${table.displayName} = regexp_replace(btrim(${table.displayName}), '[[:space:]]+', ' ', 'g')`,
+    ),
+    check(
+      "event_participants_normalized_display_name_check",
+      sql`${table.normalizedDisplayName} = lower(${table.displayName})`,
+    ),
+  ],
+).enableRLS();
+
 export const workspaceMembers = pgTable(
   "workspace_members",
   {
@@ -501,6 +581,10 @@ export const songRequests = pgTable(
     requestedBy: requestSourceEnum("requested_by").notNull(),
     createdByOperatorId: bigint("created_by_operator_id", { mode: "number" })
       .references(() => operatorUsers.id, { onDelete: "set null" }),
+    eventParticipantId: bigint("event_participant_id", { mode: "number" }).references(
+      () => eventParticipants.id,
+      { onDelete: "set null" },
+    ),
     version: integer("version").notNull().default(1),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
@@ -522,6 +606,7 @@ export const songRequests = pgTable(
     index("song_requests_created_by_operator_idx").on(
       table.createdByOperatorId,
     ),
+    index("song_requests_event_participant_idx").on(table.eventParticipantId),
     check("song_requests_position_check", sql`${table.position} >= 0`),
     check("song_requests_version_check", sql`${table.version} > 0`),
   ],

@@ -249,6 +249,51 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await expect(
         anonymousPage.getByRole("heading", { name: fixture.eventName }),
       ).toBeVisible();
+      await expect(
+        anonymousPage.getByRole("heading", { name: "Dołącz do sesji" }),
+      ).toBeVisible();
+      await expect(anonymousPage.getByRole("searchbox")).toHaveCount(0);
+
+      const participantName = "E2E Participant";
+      await anonymousPage.getByLabel("Imię lub ksywka").fill(participantName);
+      await anonymousPage
+        .getByRole("button", { name: "Dołącz do wydarzenia" })
+        .click();
+      await expect(anonymousPage.getByRole("searchbox")).toBeVisible();
+      await expect(
+        anonymousPage.getByText(`Dołączono jako ${participantName}`),
+      ).toBeVisible();
+
+      await submitParticipantSong(anonymousPage, "E2E Song");
+      await expect
+        .poll(() => fixture.readParticipantRequests(participantName))
+        .toHaveLength(1);
+      const [firstParticipantRequest] =
+        await fixture.readParticipantRequests(participantName);
+      expect(firstParticipantRequest?.songTitle).toBe("E2E Song");
+
+      await anonymousPage.reload();
+      await expect(
+        anonymousPage.getByRole("heading", { name: "Dołącz do sesji" }),
+      ).toHaveCount(0);
+      await expect(
+        anonymousPage.getByText(`Dołączono jako ${participantName}`),
+      ).toBeVisible();
+
+      await submitParticipantSong(anonymousPage, "E2E Second Song");
+      await expect
+        .poll(() => fixture.readParticipantRequests(participantName))
+        .toHaveLength(2);
+      const participantRequests =
+        await fixture.readParticipantRequests(participantName);
+      expect(new Set(participantRequests.map(({ participantId }) => participantId)).size).toBe(1);
+      expect(
+        new Set(
+          participantRequests.map(
+            ({ eventParticipantId }) => eventParticipantId,
+          ),
+        ).size,
+      ).toBe(1);
 
       await page.goto(sharePath);
       await expect(
@@ -384,6 +429,12 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await expect(
         anonymousPage.getByRole("heading", { name: fixture.eventName }),
       ).toBeVisible();
+      await expect(
+        anonymousPage.getByRole("heading", { name: "Dołącz do sesji" }),
+      ).toHaveCount(0);
+      await expect(
+        anonymousPage.getByText(`Dołączono jako ${participantName}`),
+      ).toBeVisible();
 
       await page.goto(queuePath);
       await expect(
@@ -420,6 +471,18 @@ function observeBrowserErrors(
   page.on("pageerror", (error) => {
     errors.push(error.message);
   });
+}
+
+async function submitParticipantSong(
+  page: import("@playwright/test").Page,
+  title: string,
+) {
+  const search = page.getByRole("searchbox");
+  await search.fill(title);
+  await page.getByRole("button", { name: "Szukaj" }).click();
+  await page.getByRole("button", { name: new RegExp(title) }).click();
+  await page.getByRole("button", { name: "Dodaj do kolejki" }).click();
+  await expect(page.locator("[data-submitted-request]")).toBeVisible();
 }
 
 function sanitizeBrowserUrl(value: string) {
