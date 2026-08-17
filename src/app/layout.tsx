@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { VercelInsights } from "@/components/observability/vercel-insights";
 import { AppThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           {children}
           <Toaster closeButton position="top-right" />
         </AppThemeProvider>
+        <VercelInsights />
       </body>
     </html>
   );
