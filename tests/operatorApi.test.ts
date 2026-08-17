@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -180,6 +181,75 @@ test("dashboard organization list is memoized per request render", () => {
   assert.match(source, /import \{ cache \} from "react"/);
   assert.match(source, /export const listDashboardOrganizationsForAuthUser = cache\(/);
   assert.match(source, /async \(authUserId: string\)/);
+});
+
+test("dashboard event base loader deduplicates only within one request and key", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /const getCachedDashboardOrganizationEventForAuthUser = cache\(/,
+  );
+  assert.match(
+    source,
+    /async \(authUserId: string, organizationId: string, eventId: string\)/,
+  );
+  assert.match(
+    source,
+    /getCachedDashboardOrganizationEventForAuthUser\(\s*input\.authUserId,\s*input\.organizationId,\s*input\.eventId,\s*\)/,
+  );
+  assert.doesNotMatch(source, /unstable_cache|new Map/);
+
+  const script = String.raw`
+    const React = require("react");
+    const {
+      renderToReadableStream,
+    } = require("next/dist/compiled/react-server-dom-webpack/server.node");
+
+    const calls = [];
+    const loader = React.cache(async (authUserId, organizationId, eventId) => {
+      calls.push([authUserId, organizationId, eventId]);
+      return { authUserId, organizationId, eventId };
+    });
+
+    async function Page({ users }) {
+      await Promise.all(
+        users.flatMap((authUserId) => [
+          loader(authUserId, "org-a", "event-a"),
+          loader(authUserId, "org-a", "event-a"),
+        ]),
+      );
+      return React.createElement("div", null, "ok");
+    }
+
+    async function renderRequest(users) {
+      const stream = renderToReadableStream(
+        React.createElement(Page, { users }),
+        {},
+      );
+      for await (const chunk of stream) void chunk;
+    }
+
+    (async () => {
+      await renderRequest(["user-a", "user-b"]);
+      await renderRequest(["user-a"]);
+      process.stdout.write(JSON.stringify(calls));
+    })();
+  `;
+  const output = execFileSync(
+    process.execPath,
+    ["--conditions=react-server", "--eval", script],
+    { cwd: process.cwd(), encoding: "utf8" },
+  );
+
+  assert.deepEqual(JSON.parse(output), [
+    ["user-a", "org-a", "event-a"],
+    ["user-b", "org-a", "event-a"],
+    ["user-a", "org-a", "event-a"],
+  ]);
 });
 
 test("operator API preserves auth and permission errors before infra fallback", () => {

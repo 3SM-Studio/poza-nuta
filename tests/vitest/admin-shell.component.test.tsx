@@ -47,6 +47,19 @@ afterEach(() => {
 });
 
 describe("AdminShell", () => {
+  it("uses the standard breadcrumb fallback on the admin overview", () => {
+    pathname = "/admin";
+    renderAllowed("platform_admin");
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByText("Administracja")).toBeVisible();
+    expect(
+      within(breadcrumb).getByText("Overview", {
+        selector: "[data-slot='breadcrumb-page']",
+      }),
+    ).toBeVisible();
+  });
+
   it.each([
     ["platform_owner", "Właściciel platformy"],
     ["platform_admin", "Administrator platformy"],

@@ -2,6 +2,12 @@ export type DashboardOrganizationAccessTarget = {
   active: boolean;
 };
 
+export type DashboardOrganizationRole =
+  | "owner"
+  | "manager"
+  | "operator"
+  | "viewer";
+
 export type DashboardOrganizationAccessResult<T> =
   | {
       allowed: true;
@@ -28,4 +34,22 @@ export function resolveDashboardOrganizationAccess<
     allowed: true,
     organization,
   };
+}
+
+export function canCreateDashboardOrganizationEvent(
+  role: DashboardOrganizationRole,
+) {
+  return role === "owner" || role === "manager";
+}
+
+export function canManageDashboardOrganizationEvent(
+  role: DashboardOrganizationRole,
+) {
+  return role === "owner" || role === "manager";
+}
+
+export function canShareDashboardOrganizationEvent(
+  role: DashboardOrganizationRole,
+) {
+  return role === "owner" || role === "manager" || role === "operator";
 }

@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 
 import { EventPageSkeleton } from "@/components/operator/dashboard-skeletons";
 import { EventSidebarBridge } from "@/components/operator/event-sidebar-context";
+import {
+  EventWorkspaceShell,
+  type EventWorkspaceModel,
+} from "@/components/operator/event-workspace-shell";
+import { getDashboardEventLifecycleStatus } from "@/lib/dashboard-event-lifecycle";
 import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/event-route-compatibility";
 import { getDashboardOrganizationEventForAuthUser } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
@@ -59,11 +64,27 @@ async function DashboardEventLayoutContent({
   });
   if (!result) notFound();
 
+  const workspace: EventWorkspaceModel = {
+    event: {
+      publicId: result.event.publicId,
+      name: result.event.name,
+      venue: result.event.venue,
+      city: result.event.city,
+      startsAt: result.event.startsAt,
+      closesAt: result.event.autoCloseAt ?? result.event.endsAt,
+      lifecycle: getDashboardEventLifecycleStatus(result.event),
+      visibility: result.event.visibility,
+      slug: result.event.slug,
+    },
+  };
+
   return (
     <EventSidebarBridge
       event={{ eventId: result.event.publicId, name: result.event.name }}
     >
-      {children}
+      <EventWorkspaceShell workspace={workspace}>
+        {children}
+      </EventWorkspaceShell>
     </EventSidebarBridge>
   );
 }

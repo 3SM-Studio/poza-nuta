@@ -39,7 +39,10 @@ export function SidebarNavigation({
   return (
     <nav aria-label={ariaLabel}>
       {groups.map((group) => (
-        <SidebarGroup key={group.label}>
+        <SidebarGroup
+          key={group.label}
+          {...(group.ariaLabel ? { "aria-label": group.ariaLabel } : {})}
+        >
           <SidebarGroupLabel
             className={
               group.contextLabel

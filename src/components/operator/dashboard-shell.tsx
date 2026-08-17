@@ -7,7 +7,12 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
+  getDashboardOrganizationEventPath,
+  getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventSettingsPath,
+  getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
+  getDashboardOrganizationPath,
   getDashboardOrganizationSettingsPath,
   getDashboardOrganizationTeamPath,
   getDashboardProfileOnboardingPath,
@@ -76,6 +81,16 @@ function DashboardShellContent({
       ? "account"
       : "simple";
   const title = getDashboardPageTitle(pathname, organizationId);
+  const eventBreadcrumbs =
+    organizationId && eventId && currentOrganization
+      ? getEventBreadcrumbs({
+          pathname,
+          organizationId,
+          organizationName: currentOrganization.name,
+          eventId,
+          eventName: currentEvent?.name ?? "Wydarzenie",
+        })
+      : undefined;
 
   return (
     <AppShell
@@ -98,6 +113,7 @@ function DashboardShellContent({
       }
       section="Panel organizatora"
       title={title}
+      {...(eventBreadcrumbs ? { headerBreadcrumbs: eventBreadcrumbs } : {})}
     >
       {children}
     </AppShell>
@@ -106,7 +122,7 @@ function DashboardShellContent({
 
 function getSelectedEventId(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
-  return segments[3] === "events" && segments[4]
+  return segments[3] === "events" && segments[4] && segments[4] !== "new"
     ? decodeURIComponent(segments[4])
     : null;
 }
@@ -116,6 +132,9 @@ export function getDashboardPageTitle(
   organizationId: string | null,
 ) {
   if (organizationId) {
+    const eventSection = getEventSectionLabel(pathname, organizationId);
+    if (eventSection) return eventSection;
+
     return getOrganizationSectionLabel(pathname, organizationId);
   }
 
@@ -127,6 +146,77 @@ export function getDashboardPageTitle(
   if (pathname.startsWith("/dashboard/settings")) return "Ustawienia wydarzenia";
 
   return "Panel";
+}
+
+function getEventBreadcrumbs({
+  pathname,
+  organizationId,
+  organizationName,
+  eventId,
+  eventName,
+}: {
+  pathname: string;
+  organizationId: string;
+  organizationName: string;
+  eventId: string;
+  eventName: string;
+}) {
+  const eventPath = getDashboardOrganizationEventPath(organizationId, eventId);
+  const eventSection = getEventSectionLabel(pathname, organizationId);
+  const isOverview = pathname === eventPath || pathname === `${eventPath}/`;
+
+  return [
+    { label: "Panel organizatora", href: "/dashboard" },
+    {
+      label: organizationName,
+      href: getDashboardOrganizationPath(organizationId),
+    },
+    {
+      label: "Wydarzenia",
+      href: getDashboardOrganizationEventsPath(organizationId),
+    },
+    isOverview
+      ? { label: eventName }
+      : { label: eventName, href: eventPath },
+    ...(isOverview || !eventSection ? [] : [{ label: eventSection }]),
+  ];
+}
+
+function getEventSectionLabel(pathname: string, organizationId: string) {
+  const eventId = getSelectedEventId(pathname);
+  if (!eventId) return null;
+
+  if (
+    pathname ===
+      getDashboardOrganizationEventQueuePath(organizationId, eventId) ||
+    pathname ===
+      `${getDashboardOrganizationEventQueuePath(organizationId, eventId)}/`
+  ) {
+    return "Kolejka";
+  }
+
+  if (
+    pathname ===
+      getDashboardOrganizationEventSharePath(organizationId, eventId) ||
+    pathname ===
+      `${getDashboardOrganizationEventSharePath(organizationId, eventId)}/`
+  ) {
+    return "Link i QR";
+  }
+
+  if (
+    pathname ===
+      getDashboardOrganizationEventSettingsPath(organizationId, eventId) ||
+    pathname ===
+      `${getDashboardOrganizationEventSettingsPath(organizationId, eventId)}/`
+  ) {
+    return "Ustawienia";
+  }
+
+  const eventPath = getDashboardOrganizationEventPath(organizationId, eventId);
+  return pathname === eventPath || pathname === `${eventPath}/`
+    ? "Przegląd"
+    : null;
 }
 
 function getOrganizationSectionLabel(pathname: string, organizationId: string) {

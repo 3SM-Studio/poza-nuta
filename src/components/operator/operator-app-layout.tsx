@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { SIDEBAR_COOKIE_NAME } from "@/components/app-shell/sidebar-state";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import type { DashboardOrganizationRole } from "@/lib/dashboard-organization-access";
 import { OperatorApiError } from "@/server/operator-api/errors";
 import { listDashboardOrganizationsForAuthUser } from "@/server/operator-api/organizations";
 import {
@@ -26,7 +27,7 @@ export async function OperatorAppLayout({ children }: { children: ReactNode }) {
     id: number;
     name: string;
     organizationId: string;
-    role: string;
+    role: DashboardOrganizationRole;
   }>;
   let canAccessAdmin: boolean;
 

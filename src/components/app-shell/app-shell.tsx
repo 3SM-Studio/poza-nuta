@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
-import { SiteHeader } from "./site-header";
+import { SiteHeader, type SiteHeaderBreadcrumb } from "./site-header";
 
 export function AppShell({
   kind,
@@ -15,6 +15,7 @@ export function AppShell({
   title,
   headerContext,
   headerActions,
+  headerBreadcrumbs,
   children,
   contentClassName,
 }: {
@@ -25,6 +26,7 @@ export function AppShell({
   title: string;
   headerContext?: ReactNode;
   headerActions?: ReactNode;
+  headerBreadcrumbs?: SiteHeaderBreadcrumb[];
   children: ReactNode;
   contentClassName?: string;
 }) {
@@ -49,6 +51,7 @@ export function AppShell({
           title={title}
           context={headerContext}
           actions={headerActions}
+          {...(headerBreadcrumbs ? { breadcrumbs: headerBreadcrumbs } : {})}
         />
         <div
           className={cn(

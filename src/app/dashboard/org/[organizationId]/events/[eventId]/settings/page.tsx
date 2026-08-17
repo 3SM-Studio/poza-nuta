@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 
 import { EventManagementPanel } from "@/components/operator/event-management-panel";
 import type { EventManagementActionState } from "@/components/operator/event-management-panel";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -31,10 +30,7 @@ import {
   getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
 } from "@/lib/dashboard-routes";
-import {
-  formatWarsawDateTime,
-  formatWarsawDateTimeLocal,
-} from "@/lib/warsaw-time";
+import { formatWarsawDateTimeLocal } from "@/lib/warsaw-time";
 import { OperatorApiError } from "@/server/operator-api/errors";
 import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/event-route-compatibility";
 import {
@@ -139,127 +135,105 @@ export default async function OrganizationEventDetailPage({
   const actionMessage = getActionMessage(resolvedSearchParams.eventAction);
 
   return (
-    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
-      <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
-        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
-          <div>
-            <h1>Ustawienia wydarzenia</h1>
-            <p className={"mt-1.5 text-sm text-muted-foreground"}>{result.event.name}</p>
-          </div>
-          <div className={"flex min-w-0 flex-wrap items-center gap-2 sm:justify-end"}>
-            <Badge variant={getLifecycleStatusBadgeVariant(lifecycleStatus)}>
-              {formatLifecycleStatus(lifecycleStatus)}
-            </Badge>
-          </div>
-        </header>
+    <div className="grid min-w-0 gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Szczegóły wydarzenia</CardTitle>
+          <CardDescription>
+            Panel zarządzania godziną zamknięcia i ręcznym zakończeniem
+            wydarzenia.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold">
+            <div>
+              <dt>Zgłoszenia</dt>
+              <dd>{requestsOpen ? "Otwarte" : "Zamknięte"}</dd>
+            </div>
+            <div>
+              <dt>Publiczny event</dt>
+              <dd>{result.event.isActivePublicEvent ? "Tak" : "Nie"}</dd>
+            </div>
+            <div>
+              <dt>Katalog wydarzeń</dt>
+              <dd>
+                {result.event.visibility === "public"
+                  ? "Opublikowany"
+                  : "Prywatny"}
+              </dd>
+            </div>
+            <div>
+              <dt>Publiczna kolejka</dt>
+              <dd>
+                {result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"}
+              </dd>
+            </div>
+            <div>
+              <dt>Uprawnienia</dt>
+              <dd>{roleCanManage ? "Zarządzanie" : "Tylko podgląd"}</dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
 
-        <div className={"grid min-w-0 gap-4"}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Szczegóły wydarzenia</CardTitle>
-              <CardDescription>
-                Panel zarządzania godziną zamknięcia i ręcznym zakończeniem
-                wydarzenia.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{formatLifecycleStatus(lifecycleStatus)}</dd>
-                </div>
-                <div>
-                  <dt>Zgłoszenia</dt>
-                  <dd>{requestsOpen ? "Otwarte" : "Zamknięte"}</dd>
-                </div>
-                <div>
-                  <dt>Start (czas polski)</dt>
-                  <dd>{formatDateTime(result.event.startsAt)}</dd>
-                </div>
-                <div>
-                  <dt>Czas zamknięcia (czas polski)</dt>
-                  <dd>{formatDateTime(result.event.autoCloseAt)}</dd>
-                </div>
-                <div>
-                  <dt>Publiczny event</dt>
-                  <dd>{result.event.isActivePublicEvent ? "Tak" : "Nie"}</dd>
-                </div>
-                <div>
-                  <dt>Katalog wydarzeń</dt>
-                  <dd>{result.event.visibility === "public" ? "Opublikowany" : "Prywatny"}</dd>
-                </div>
-                <div>
-                  <dt>Publiczna kolejka</dt>
-                  <dd>{result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
-
-          <EventManagementPanel
-            canManage={canManage}
-            manageBlockedReason={getManageBlockedReason({
-              roleCanManage,
-              lifecycleStatus,
-            })}
-            initialValues={{
-              title: result.event.name,
-              venue: result.event.venue ?? "",
-              city: result.event.city ?? "",
-              slug: result.event.slug ?? "",
-              visibility: result.event.visibility,
-              startsAtInputValue: formatDateTimeLocalInput(
-                result.event.startsAt,
-              ),
-              autoCloseAtInputValue: formatDateTimeLocalInput(
-                result.event.autoCloseAt,
-              ),
-              facebookUrl: result.event.facebookUrl ?? "",
-              songRequestsEnabled: result.event.songRequestsEnabled,
-              publicQueueEnabled: result.event.publicQueueEnabled,
-              publicShowSongTitles: result.event.publicShowSongTitles,
-              isActivePublicEvent: result.event.isActivePublicEvent,
-            }}
-            showClosingWarning={shouldShowDashboardEventClosingWarning(
-              result.event,
-              now,
-            )}
-            detailsAction={updateEventDetails.bind(
-              null,
-              result.organization.publicId,
-              result.event.publicId,
-            )}
-            extendAction={extendEvent.bind(
-              null,
-              result.organization.publicId,
-              result.event.publicId,
-            )}
-            closeAction={closeEvent.bind(
-              null,
-              result.organization.publicId,
-              result.event.publicId,
-            )}
-            reopenAction={reopenEvent.bind(
-              null,
-              result.organization.publicId,
-              result.event.publicId,
-            )}
-            rotateCodeAction={rotateSessionCode.bind(
-              null,
-              result.organization.publicId,
-              result.event.publicId,
-              result.event.sessionCode,
-            )}
-            canReopen={canReopen}
-            reopenDeadline={
-              reopenDeadline ? reopenDeadline.toISOString() : null
-            }
-            canRotateCode={canRotateCode}
-            successMessage={actionMessage}
-          />
-        </div>
-      </section>
-    </main>
+      <EventManagementPanel
+        canManage={canManage}
+        manageBlockedReason={getManageBlockedReason({
+          roleCanManage,
+          lifecycleStatus,
+        })}
+        initialValues={{
+          title: result.event.name,
+          venue: result.event.venue ?? "",
+          city: result.event.city ?? "",
+          slug: result.event.slug ?? "",
+          visibility: result.event.visibility,
+          startsAtInputValue: formatDateTimeLocalInput(result.event.startsAt),
+          autoCloseAtInputValue: formatDateTimeLocalInput(
+            result.event.autoCloseAt,
+          ),
+          facebookUrl: result.event.facebookUrl ?? "",
+          songRequestsEnabled: result.event.songRequestsEnabled,
+          publicQueueEnabled: result.event.publicQueueEnabled,
+          publicShowSongTitles: result.event.publicShowSongTitles,
+          isActivePublicEvent: result.event.isActivePublicEvent,
+        }}
+        showClosingWarning={shouldShowDashboardEventClosingWarning(
+          result.event,
+          now,
+        )}
+        detailsAction={updateEventDetails.bind(
+          null,
+          result.organization.publicId,
+          result.event.publicId,
+        )}
+        extendAction={extendEvent.bind(
+          null,
+          result.organization.publicId,
+          result.event.publicId,
+        )}
+        closeAction={closeEvent.bind(
+          null,
+          result.organization.publicId,
+          result.event.publicId,
+        )}
+        reopenAction={reopenEvent.bind(
+          null,
+          result.organization.publicId,
+          result.event.publicId,
+        )}
+        rotateCodeAction={rotateSessionCode.bind(
+          null,
+          result.organization.publicId,
+          result.event.publicId,
+          result.event.sessionCode,
+        )}
+        canReopen={canReopen}
+        reopenDeadline={reopenDeadline ? reopenDeadline.toISOString() : null}
+        canRotateCode={canRotateCode}
+        successMessage={actionMessage}
+      />
+    </div>
   );
 }
 
@@ -543,29 +517,6 @@ function mapEventManagementActionError(
   throw error;
 }
 
-function getLifecycleStatusBadgeVariant(status: string) {
-  return status === "active"
-    ? "default"
-    : status === "closed" || status === "cancelled"
-      ? "secondary"
-      : "outline";
-}
-
-function formatLifecycleStatus(status: string) {
-  switch (status) {
-    case "active":
-      return "Aktywne";
-    case "cancelled":
-      return "Anulowane";
-    case "closed":
-      return "Zamknięte";
-    case "scheduled":
-      return "Zaplanowane";
-    default:
-      return status;
-  }
-}
-
 function getManageBlockedReason({
   roleCanManage,
   lifecycleStatus,
@@ -605,14 +556,6 @@ function getActionMessage(value: string | string[] | undefined) {
     default:
       return null;
   }
-}
-
-function formatDateTime(date: Date | null) {
-  if (!date) {
-    return "Brak terminu";
-  }
-
-  return formatWarsawDateTime(date);
 }
 
 function formatDateTimeLocalInput(date: Date | null) {

@@ -31,6 +31,18 @@ describe("EventManagementPanel", () => {
     vi.useRealTimers();
   });
 
+  it("shows no settings actions when the role cannot manage the event", () => {
+    renderPanel({
+      canManage: false,
+      canReopen: false,
+      canRotateCode: false,
+    });
+
+    expect(screen.getByText("Zarządzanie jest niedostępne.")).toBeVisible();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
   it("uses Sonner for a successful action and a persistent reopen Alert", () => {
     renderPanel({
       canManage: false,

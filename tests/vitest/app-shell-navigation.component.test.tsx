@@ -6,9 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DashboardShell } from "@/components/operator/dashboard-shell";
 import { EventSidebarBridge } from "@/components/operator/event-sidebar-context";
+import type { OrganizerSidebarOrganization } from "@/components/operator/organizer-sidebar";
+import type { DashboardOrganizationRole } from "@/lib/dashboard-organization-access";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
 let pathname = "/dashboard/organizations";
+const eventId = "7c2ec4fa-6089-4fd3-a0ea-032d33adbdda";
+const eventPath = `/dashboard/org/demo/events/${eventId}`;
 const mocks = vi.hoisted(() => ({
   logout: vi.fn(async () => undefined),
   replace: vi.fn(),
@@ -74,38 +78,102 @@ describe("shared application shell", () => {
     }
   });
 
-  it("renders event navigation and marks only its deepest destination active", async () => {
-    pathname = "/dashboard/org/demo/events/42/queue";
-    renderDashboard({ event: { eventId: "42", name: "Wieczór testowy" } });
+  it.each([
+    ["Przegląd", eventPath],
+    ["Kolejka", `${eventPath}/queue`],
+    ["Link i QR", `${eventPath}/share`],
+    ["Ustawienia", `${eventPath}/settings`],
+  ])("keeps one event navigation set and marks %s active", async (label, href) => {
+    pathname = href;
+    renderDashboard({ event: { eventId, name: "Wieczór testowy" } });
 
-    expect(await screen.findByText("Wieczór testowy")).toBeVisible();
-    for (const label of [
-      "Szczegóły",
-      "Kolejka",
-      "Link i QR",
-      "Powrót do wydarzeń",
-    ]) {
-      expect(screen.getByRole("link", { name: label })).toBeVisible();
-    }
-    expect(
-      screen
-        .getAllByRole("link", { name: "Ustawienia" })
-        .find(
-          (link) =>
-            link.getAttribute("href") ===
-            "/dashboard/org/demo/events/42/settings",
-        ),
-    ).toBeVisible();
-
-    const currentLinks = screen
-      .getAllByRole("link")
-      .filter((link) => link.hasAttribute("aria-current"));
-    expect(currentLinks).toHaveLength(1);
-    expect(currentLinks[0]).toHaveTextContent("Kolejka");
-    expect(screen.getByRole("link", { name: "Przegląd" })).not.toHaveAttribute(
-      "aria-current",
+    expect(await screen.findAllByText("Wieczór testowy")).toHaveLength(2);
+    const eventSections = document.querySelectorAll(
+      '[aria-label="Nawigacja wydarzenia"]',
     );
-    expect(document.querySelector("[data-site-header-title='Wydarzenia']")).toBeVisible();
+    expect(eventSections).toHaveLength(1);
+    const eventNavigation = within(eventSections[0] as HTMLElement);
+    const eventLinks = eventNavigation
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("href")?.startsWith(eventPath));
+    expect(eventLinks).toHaveLength(4);
+    expect(eventNavigation.getByRole("link", { name: label })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      eventLinks.filter((link) => link.hasAttribute("aria-current")),
+    ).toHaveLength(1);
+    expect(
+      eventNavigation.getByRole("link", { name: "Przegląd" }),
+    ).toHaveAttribute("href", eventPath);
+    expect(eventNavigation.getByRole("link", { name: "Kolejka" })).toHaveAttribute(
+      "href",
+      `${eventPath}/queue`,
+    );
+    expect(
+      eventNavigation.getByRole("link", { name: "Link i QR" }),
+    ).toHaveAttribute("href", `${eventPath}/share`);
+    expect(
+      eventNavigation.getByRole("link", { name: "Ustawienia" }),
+    ).toHaveAttribute("href", `${eventPath}/settings`);
+    expect(
+      eventNavigation.getByRole("link", { name: "Powrót do wydarzeń" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Zespół" })).toBeVisible();
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByText("Studio Demo")).toBeVisible();
+    expect(within(breadcrumb).getByText("Wieczór testowy")).toBeVisible();
+    expect(
+      within(breadcrumb).getByText(
+        label === "Przegląd" ? "Wieczór testowy" : label,
+      ),
+    ).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      document.querySelector(`[data-site-header-title='${label}']`),
+    ).toBeVisible();
+  });
+
+  it("hides event sharing from a viewer while keeping the other event links", () => {
+    pathname = eventPath;
+    renderDashboard({
+      event: { eventId, name: "Wieczór testowy" },
+      organizationRole: "viewer",
+    });
+
+    const eventNavigation = within(
+      document.querySelector(
+        '[aria-label="Nawigacja wydarzenia"]',
+      ) as HTMLElement,
+    );
+    expect(eventNavigation.queryByRole("link", { name: "Link i QR" })).toBeNull();
+    expect(eventNavigation.getByRole("link", { name: "Przegląd" })).toBeVisible();
+    expect(eventNavigation.getByRole("link", { name: "Kolejka" })).toBeVisible();
+    expect(eventNavigation.getByRole("link", { name: "Ustawienia" })).toBeVisible();
+  });
+
+  it.each([
+    ["organization overview", "/dashboard/org/demo", "Przegląd"],
+    ["organization events", "/dashboard/org/demo/events", "Wydarzenia"],
+    ["new event", "/dashboard/org/demo/events/new", "Wydarzenia"],
+    ["organization settings", "/dashboard/org/demo/settings", "Ustawienia"],
+    ["dashboard root", "/dashboard", "Panel"],
+  ])("uses the standard breadcrumb fallback on %s", (_case, href, title) => {
+    pathname = href;
+    renderDashboard();
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByText("Panel organizatora")).toBeVisible();
+    expect(
+      within(breadcrumb).getByText(title, {
+        selector: "[data-slot='breadcrumb-page']",
+      }),
+    ).toBeVisible();
+    expect(within(breadcrumb).queryByText("Wydarzenie")).toBeNull();
   });
 
   it("shows the admin switch only when server-side access was granted", async () => {
@@ -196,16 +264,22 @@ describe("shared application shell", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Studio Demo");
   });
 
-  it("opens a mobile drawer and closes it after navigation", async () => {
+  it("exposes event links in the mobile drawer and closes it after navigation", async () => {
+    pathname = eventPath;
     window.innerWidth = 390;
-    renderDashboard();
+    renderDashboard({ event: { eventId, name: "Wieczór testowy" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Otwórz menu" }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveAttribute("data-management-theme", "true");
-    expect(within(dialog).getByRole("link", { name: "Organizacje" })).toBeVisible();
+    const eventNavigation = within(
+      dialog.querySelector(
+        '[aria-label="Nawigacja wydarzenia"]',
+      ) as HTMLElement,
+    );
+    expect(eventNavigation.getByRole("link", { name: "Kolejka" })).toBeVisible();
 
-    fireEvent.click(within(dialog).getByRole("link", { name: "Organizacje" }));
+    fireEvent.click(eventNavigation.getByRole("link", { name: "Kolejka" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
@@ -232,7 +306,7 @@ describe("shared application shell", () => {
   });
 });
 
-const organizations = [
+const organizations: OrganizerSidebarOrganization[] = [
   {
     id: 1,
     name: "Studio Demo",
@@ -250,17 +324,25 @@ const organizations = [
 function renderDashboard({
   canAccessAdmin = true,
   event = null,
+  organizationRole = "owner",
 }: {
   canAccessAdmin?: boolean;
   event?: { eventId: string; name: string } | null;
+  organizationRole?: DashboardOrganizationRole;
 } = {}) {
+  const testOrganizations = organizations.map((organization) =>
+    organization.organizationId === "demo"
+      ? { ...organization, role: organizationRole }
+      : organization,
+  );
+
   return render(
     <SidebarProvider
       data-management-theme="true"
       className="bg-sidebar text-foreground"
     >
       <DashboardShell
-        organizations={organizations}
+        organizations={testOrganizations}
         operatorName="Jan Operator"
         email="jan@example.test"
         canAccessAdmin={canAccessAdmin}

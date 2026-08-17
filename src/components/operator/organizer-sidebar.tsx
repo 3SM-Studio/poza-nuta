@@ -17,6 +17,10 @@ import {
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
 import type { AppNavigationGroup } from "@/components/app-shell/navigation";
 import {
+  canShareDashboardOrganizationEvent,
+  type DashboardOrganizationRole,
+} from "@/lib/dashboard-organization-access";
+import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
   getDashboardOrganizationEventPath,
@@ -38,7 +42,7 @@ export type OrganizerSidebarOrganization = {
   id: number;
   name: string;
   organizationId: string;
-  role: string;
+  role: DashboardOrganizationRole;
 };
 
 export function getOrganizerNavigationGroups({
@@ -48,7 +52,11 @@ export function getOrganizerNavigationGroups({
 }: {
   organizationId: string | null;
   accountRoute: boolean;
-  event?: { eventId: string; name: string } | null;
+  event?: {
+    eventId: string;
+    name: string;
+    role: DashboardOrganizationRole;
+  } | null;
 }): AppNavigationGroup[] {
   const panelGroup: AppNavigationGroup = {
     label: "Panel organizatora",
@@ -104,13 +112,14 @@ export function getOrganizerNavigationGroups({
       {
         label: "Wydarzenie",
         contextLabel: event.name,
+        ariaLabel: "Nawigacja wydarzenia",
         items: [
           {
             href: getDashboardOrganizationEventPath(
               organizationId,
               event.eventId,
             ),
-            label: "Szczegóły",
+            label: "Przegląd",
             icon: CalendarDaysIcon,
             exact: true,
           },
@@ -122,14 +131,18 @@ export function getOrganizerNavigationGroups({
             label: "Kolejka",
             icon: ListMusicIcon,
           },
-          {
-            href: getDashboardOrganizationEventSharePath(
-              organizationId,
-              event.eventId,
-            ),
-            label: "Link i QR",
-            icon: QrCodeIcon,
-          },
+          ...(canShareDashboardOrganizationEvent(event.role)
+            ? [
+                {
+                  href: getDashboardOrganizationEventSharePath(
+                    organizationId,
+                    event.eventId,
+                  ),
+                  label: "Link i QR",
+                  icon: QrCodeIcon,
+                },
+              ]
+            : []),
           {
             href: getDashboardOrganizationEventSettingsPath(
               organizationId,
@@ -194,7 +207,10 @@ export function OrganizerSidebar({
   const groups = getOrganizerNavigationGroups({
     organizationId: organization?.organizationId ?? null,
     accountRoute: pathname.startsWith("/account"),
-    event,
+    event:
+      event && organization
+        ? { ...event, role: organization.role }
+        : null,
   });
 
   return (

@@ -22,6 +22,7 @@ import {
   buildWorkspaceHandleFromName,
   validateOrganizationName,
 } from "../../lib/organization-workspace";
+import type { DashboardOrganizationRole } from "../../lib/dashboard-organization-access";
 import {
   canManageDashboardEventLifecycle,
   resolveDashboardEventCloseAt,
@@ -56,11 +57,14 @@ import type {
   UpdateDashboardEventAutoCloseAtInput,
 } from "./validation";
 
-export type DashboardOrganizationRole =
-  | "owner"
-  | "manager"
-  | "operator"
-  | "viewer";
+export {
+  canCreateDashboardOrganizationEvent,
+  canManageDashboardOrganizationEvent,
+  canShareDashboardOrganizationEvent,
+} from "../../lib/dashboard-organization-access";
+export type {
+  DashboardOrganizationRole,
+} from "../../lib/dashboard-organization-access";
 
 export type DashboardOrganization = {
   id: number;
@@ -244,61 +248,53 @@ export async function listDashboardOrganizationEventsForAuthUser(
   };
 }
 
-export function canCreateDashboardOrganizationEvent(
-  role: DashboardOrganizationRole,
-) {
-  return role === "owner" || role === "manager";
-}
-
-export function canManageDashboardOrganizationEvent(
-  role: DashboardOrganizationRole,
-) {
-  return role === "owner" || role === "manager";
-}
-
-export function canShareDashboardOrganizationEvent(
-  role: DashboardOrganizationRole,
-) {
-  return role === "owner" || role === "manager" || role === "operator";
-}
-
 export async function getDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
   eventId: string;
 }) {
-  const organization = await getDashboardOrganizationForAuthUser(
+  return getCachedDashboardOrganizationEventForAuthUser(
     input.authUserId,
     input.organizationId,
+    input.eventId,
   );
-
-  if (!organization) {
-    return null;
-  }
-
-  const [event] = await getDb()
-    .select(dashboardEventSelection)
-    .from(events)
-    .where(
-      and(
-        eq(events.workspaceId, organization.id),
-        getEventIdentifierCondition(input.eventId),
-      ),
-    )
-    .limit(1);
-
-  if (!event) {
-    return null;
-  }
-
-  return {
-    organization,
-    event: {
-      ...event,
-      effectiveStatus: getEffectiveEventLifecycleStatus(event),
-    },
-  };
 }
+
+const getCachedDashboardOrganizationEventForAuthUser = cache(
+  async (authUserId: string, organizationId: string, eventId: string) => {
+    const organization = await getDashboardOrganizationForAuthUser(
+      authUserId,
+      organizationId,
+    );
+
+    if (!organization) {
+      return null;
+    }
+
+    const [event] = await getDb()
+      .select(dashboardEventSelection)
+      .from(events)
+      .where(
+        and(
+          eq(events.workspaceId, organization.id),
+          getEventIdentifierCondition(eventId),
+        ),
+      )
+      .limit(1);
+
+    if (!event) {
+      return null;
+    }
+
+    return {
+      organization,
+      event: {
+        ...event,
+        effectiveStatus: getEffectiveEventLifecycleStatus(event),
+      },
+    };
+  },
+);
 
 export async function getDashboardOrganizationEventSessionAccessForAuthUser(input: {
   authUserId: string;

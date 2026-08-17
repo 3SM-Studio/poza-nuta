@@ -9,8 +9,11 @@ import {
 } from "../src/lib/organization-public-id.ts";
 import { buildOwnerWorkspaceMembershipInput } from "../src/lib/organization-workspace.ts";
 import {
+  canManageDashboardOrganizationEvent,
+  canShareDashboardOrganizationEvent,
   resolveDashboardOrganizationAccess,
   type DashboardOrganizationAccessTarget,
+  type DashboardOrganizationRole,
 } from "../src/lib/dashboard-organization-access.ts";
 import {
   getDashboardOrganizationIdFromPath,
@@ -1294,10 +1297,7 @@ test("organization event management is limited to owner and manager roles", () =
 
   assert.match(settingsPageSource, /canManageDashboardOrganizationEvent/);
   assert.match(organizationsSource, /canManageDashboardOrganizationEvent/);
-  assert.match(
-    organizationsSource,
-    /WORKSPACE_EVENT_MANAGE_FORBIDDEN/,
-  );
+  assert.match(organizationsSource, /WORKSPACE_EVENT_MANAGE_FORBIDDEN/);
   assert.match(
     organizationsSource,
     /or\(\s*eq\(workspaceMembers\.role, "owner"\),\s*eq\(workspaceMembers\.role, "manager"\),\s*\)/,
@@ -1310,6 +1310,23 @@ test("organization event management is limited to owner and manager roles", () =
     organizationsSource.includes('eq(workspaceMembers.role, "operator")'),
     false,
   );
+
+  const expected = {
+    owner: { manage: true, share: true },
+    manager: { manage: true, share: true },
+    operator: { manage: false, share: true },
+    viewer: { manage: false, share: false },
+  } satisfies Record<
+    DashboardOrganizationRole,
+    { manage: boolean; share: boolean }
+  >;
+
+  for (const [role, capability] of Object.entries(expected) as Array<
+    [DashboardOrganizationRole, (typeof expected)[DashboardOrganizationRole]]
+  >) {
+    assert.equal(canManageDashboardOrganizationEvent(role), capability.manage);
+    assert.equal(canShareDashboardOrganizationEvent(role), capability.share);
+  }
 });
 
 test("organization event management updates auto_close_at and closes without delete", () => {
@@ -1470,7 +1487,7 @@ test("organization event share route renders canonical code and QR controls", ()
   assert.match(generalJoinPanelSource, /href=\{joinUrl\}/);
   assert.doesNotMatch(generalJoinPanelSource, /pozanuta\.vercel\.app/);
   assert.match(organizationsSource, /canShareDashboardOrganizationEvent/);
-  assert.match(organizationsSource, /role === "operator"/);
+  assert.equal(canShareDashboardOrganizationEvent("operator"), true);
   assert.equal(sharePageSource.includes("codeHash"), false);
   assert.equal(sharePanelSource.includes("codeHash"), false);
 });
@@ -1595,6 +1612,69 @@ test("event layout streams its own fallback before runtime event data resolves",
     layoutSource.indexOf("<Suspense") <
       layoutSource.indexOf("requireOperatorSession()"),
   );
+});
+
+test("event workspace shell owns one safe header while event navigation stays in the sidebar", () => {
+  const layoutSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/layout.tsx",
+    "utf8",
+  );
+  const shellSource = readFileSync(
+    "src/components/operator/event-workspace-shell.tsx",
+    "utf8",
+  );
+  const headerSource = readFileSync(
+    "src/components/operator/event-workspace-header.tsx",
+    "utf8",
+  );
+  const navPath = "src/components/operator/event-workspace-nav.tsx";
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
+    "utf8",
+  );
+  const pageSources = [
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
+  ].map((path) => readFileSync(path, "utf8"));
+
+  assert.match(layoutSource, /<EventWorkspaceShell/);
+  assert.doesNotMatch(layoutSource, /canShareDashboardOrganizationEvent/);
+  assert.doesNotMatch(shellSource, /canShareDashboardOrganizationEvent/);
+  assert.doesNotMatch(shellSource, /EventWorkspaceNav|<nav\b/);
+  assert.match(layoutSource, /publicId: result\.event\.publicId/);
+  assert.doesNotMatch(layoutSource, /sessionCode|publicToken/);
+  assert.doesNotMatch(shellSource, /sessionCode|publicToken/);
+  assert.equal((headerSource.match(/<h1\b/g) ?? []).length, 1);
+  assert.match(headerSource, /overflow-wrap:anywhere/);
+  assert.equal(existsSync(navPath), false);
+  assert.match(sidebarSource, /ariaLabel: "Nawigacja wydarzenia"/);
+  assert.match(sidebarSource, /canShareDashboardOrganizationEvent\(event\.role\)/);
+  assert.match(
+    sidebarSource,
+    /getDashboardOrganizationEvent(?:Queue|Share|Settings)?Path/,
+  );
+
+  for (const pageSource of pageSources) {
+    assert.doesNotMatch(pageSource, /<main\b/);
+    assert.doesNotMatch(pageSource, /<h1\b/);
+  }
+
+  assert.match(pageSources[1] ?? "", /Zgłoszenia przypisane wyłącznie/);
+  assert.match(pageSources[1] ?? "", /Publiczna kolejka/);
+  assert.match(pageSources[1] ?? "", /Uprawnienia/);
+  assert.match(pageSources[1] ?? "", /<EventQueuePanel/);
+  assert.match(pageSources[2] ?? "", /kanonicznej sesji wydarzenia/);
+  assert.match(pageSources[2] ?? "", /Ogólny kod wejścia/);
+  assert.match(pageSources[2] ?? "", /\/join/);
+  assert.match(pageSources[2] ?? "", /<EventSessionAccessPanel/);
+  assert.match(pageSources[3] ?? "", /Zgłoszenia/);
+  assert.match(pageSources[3] ?? "", /Publiczny event/);
+  assert.match(pageSources[3] ?? "", /Katalog wydarzeń/);
+  assert.match(pageSources[3] ?? "", /Publiczna kolejka/);
+  assert.match(pageSources[3] ?? "", /Uprawnienia/);
+  assert.match(pageSources[3] ?? "", /<EventManagementPanel/);
 });
 
 test("global public queue page is removed and session queue handles refresh errors", () => {

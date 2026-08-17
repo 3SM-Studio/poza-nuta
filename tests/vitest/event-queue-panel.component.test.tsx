@@ -119,6 +119,19 @@ describe("EventQueuePanel", () => {
     toastSuccess.mockReset();
   });
 
+  it("keeps the viewer queue readable without management actions", () => {
+    renderPanel([makeItem(1, "pending")], false);
+
+    expect(screen.getByText("Singer 1")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Rola viewer pozwala przeglądać kolejkę, ale nie zmieniać statusów",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Zaakceptuj" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Odrzuć" })).toBeNull();
+  });
+
   it("renders every request status with text, icon, and a semantic tone", () => {
     renderPanel(
       statuses.map((status, index) => makeItem(index + 1, status)),
