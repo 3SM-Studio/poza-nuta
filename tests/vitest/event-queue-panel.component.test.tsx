@@ -8,7 +8,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { DragEndEvent } from "@dnd-kit/core";
+import type {
+  Collision,
+  CollisionDetection,
+  DragEndEvent,
+  DragStartEvent,
+} from "@dnd-kit/core";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,13 +22,27 @@ import type { DashboardEventQueueItemDto } from "@/components/operator/event-que
 import type { DashboardEventQueueRequestStatus } from "@/lib/dashboard-event-queue";
 import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 
-const { dnd, getQueue, moveRequest, realtime, runAction, toastInfo, toastSuccess } =
-  vi.hoisted(() => ({
+const {
+  closestCorners,
+  dnd,
+  getQueue,
+  moveRequest,
+  pointerWithin,
+  realtime,
+  runAction,
+  toastInfo,
+  toastSuccess,
+} = vi.hoisted(() => ({
+    closestCorners: vi.fn(),
     dnd: {
+      collisionDetection: null as CollisionDetection | null,
+      contextId: null as string | null,
       dragEnd: null as ((event: DragEndEvent) => void) | null,
+      dragStart: null as ((event: DragStartEvent) => void) | null,
     },
     getQueue: vi.fn(),
     moveRequest: vi.fn(),
+    pointerWithin: vi.fn(),
     realtime: {
       invalidate: null as
         | ((
@@ -38,19 +57,29 @@ const { dnd, getQueue, moveRequest, realtime, runAction, toastInfo, toastSuccess
   }));
 
 vi.mock("@dnd-kit/core", () => ({
-  closestCorners: vi.fn(),
+  closestCorners,
   DndContext: ({
     children,
+    collisionDetection,
+    id,
     onDragEnd,
+    onDragStart,
   }: {
     children: ReactNode;
+    collisionDetection: CollisionDetection;
+    id: string;
     onDragEnd: (event: DragEndEvent) => void;
+    onDragStart: (event: DragStartEvent) => void;
   }) => {
+    dnd.collisionDetection = collisionDetection;
+    dnd.contextId = id;
     dnd.dragEnd = onDragEnd;
+    dnd.dragStart = onDragStart;
     return <>{children}</>;
   },
   DragOverlay: ({ children }: { children: ReactNode }) => <>{children}</>,
   KeyboardSensor: class KeyboardSensor {},
+  pointerWithin,
   PointerSensor: class PointerSensor {},
   useDroppable: () => ({ isOver: false, setNodeRef: vi.fn() }),
   useSensor: vi.fn(() => ({})),
@@ -110,9 +139,14 @@ const statuses: DashboardEventQueueRequestStatus[] = [
 
 describe("EventQueuePanel", () => {
   beforeEach(() => {
+    closestCorners.mockReset();
+    dnd.collisionDetection = null;
+    dnd.contextId = null;
     getQueue.mockReset();
     dnd.dragEnd = null;
+    dnd.dragStart = null;
     moveRequest.mockReset();
+    pointerWithin.mockReset();
     realtime.invalidate = null;
     runAction.mockReset();
     toastInfo.mockReset();
@@ -180,6 +214,113 @@ describe("EventQueuePanel", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("preserves the source card geometry in the drag overlay across responsive queue layouts", () => {
+    renderPanel([makeItem(1, "rejected")]);
+
+    const board = document.querySelector("[data-queue-board]");
+    const rejectedLane = document.querySelector(
+      '[data-queue-lane="rejected"]',
+    );
+
+    expect(board).toHaveClass("lg:grid-cols-2", "2xl:grid-cols-3");
+    expect(dnd.contextId).toBe(
+      "event-queue:organization-test:123e4567-e89b-42d3-a456-426614174000",
+    );
+    expect(board).not.toHaveClass("grid-cols-2");
+    expect(rejectedLane).toHaveClass("lg:col-span-2", "2xl:col-span-1");
+
+    act(() => {
+      dnd.dragStart?.({
+        active: {
+          data: {
+            current: { type: "request", requestId: 1, lane: "rejected" },
+          },
+        },
+      } as unknown as DragStartEvent);
+    });
+
+    const overlay = document.querySelector("[data-queue-drag-overlay]");
+
+    expect(overlay).toHaveClass(
+      "h-full",
+      "w-full",
+      "[&>article]:h-full",
+    );
+    expect(overlay?.className).not.toContain("w-[min(");
+    expect(overlay?.className).not.toContain("rotate-");
+  });
+
+  it("uses the pointer position for collisions and falls back for keyboard dragging", () => {
+    renderPanel([makeItem(1, "rejected")]);
+
+    const pointerCollisions = [
+      { id: "queue-lane:approved" },
+    ] as Collision[];
+    const keyboardCollisions = [
+      { id: "queue-lane:pending" },
+    ] as Collision[];
+    const args = {} as Parameters<CollisionDetection>[0];
+
+    pointerWithin.mockReturnValueOnce(pointerCollisions).mockReturnValueOnce([]);
+    closestCorners.mockReturnValue(keyboardCollisions);
+
+    expect(dnd.collisionDetection?.(args)).toBe(pointerCollisions);
+    expect(closestCorners).not.toHaveBeenCalled();
+    expect(dnd.collisionDetection?.(args)).toBe(keyboardCollisions);
+    expect(closestCorners).toHaveBeenCalledWith(args);
+  });
+
+  it.each([
+    ["rejected", "approved", "approve"],
+    ["rejected", "pending", "restore"],
+    ["approved", "rejected", "reject"],
+  ] as const)(
+    "moves a request from %s to an empty %s lane",
+    async (sourceLane, targetLane, expectedAction) => {
+      const source = makeItem(1, sourceLane);
+      const target = {
+        ...source,
+        status: targetLane,
+        position: targetLane === "approved" ? 1 : 0,
+        version: 2,
+      };
+
+      runAction.mockResolvedValue({ request: target });
+      moveRequest.mockResolvedValue({ moved: true, request: target });
+      getQueue.mockResolvedValue({ items: [target] });
+      renderPanel([source]);
+
+      act(() => {
+        dnd.dragEnd?.({
+          active: {
+            data: {
+              current: { type: "request", requestId: 1, lane: sourceLane },
+            },
+          },
+          over: {
+            data: {
+              current: { type: "lane", lane: targetLane },
+            },
+          },
+        } as unknown as DragEndEvent);
+      });
+
+      expect(
+        within(
+          document.querySelector(`[data-queue-lane="${targetLane}"]`)!,
+        ).getByText("Singer 1"),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(runAction).toHaveBeenCalledWith(
+          "organization-test",
+          "123e4567-e89b-42d3-a456-426614174000",
+          1,
+          expectedAction,
+        ),
+      );
+    },
+  );
 
   it("moves a dragged request between lanes immediately and persists it in the background", async () => {
     const pending = makeItem(1, "pending");

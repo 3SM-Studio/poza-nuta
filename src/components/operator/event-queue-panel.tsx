@@ -13,10 +13,12 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
+  pointerWithin,
   PointerSensor,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -125,6 +127,14 @@ const queueBoardLaneLabels: Record<QueueBoardLane, string> = {
   pending: "Oczekujące",
   approved: "Zaakceptowane",
   rejected: "Odrzucone",
+};
+
+const queueCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+
+  return pointerCollisions.length > 0
+    ? pointerCollisions
+    : closestCorners(args);
 };
 
 export function EventQueuePanel({
@@ -646,8 +656,9 @@ export function EventQueuePanel({
         </section>
 
         <DndContext
+          id={`event-queue:${organizationId}:${eventId}`}
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={queueCollisionDetection}
           onDragStart={handleDragStart}
           onDragCancel={() => setActiveDragRequestId(null)}
           onDragEnd={handleDragEnd}
@@ -658,7 +669,10 @@ export function EventQueuePanel({
             },
           }}
         >
-          <div className={"grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3"}>
+          <div
+            data-queue-board
+            className={"grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3"}
+          >
             {queueBoardLanes.map((lane) => (
               <QueueLane
                 key={lane}
@@ -674,7 +688,10 @@ export function EventQueuePanel({
 
           <DragOverlay dropAnimation={null}>
             {activeDragItem ? (
-              <div className={"w-[min(28rem,calc(100vw-2rem))] rotate-1 opacity-95 shadow-2xl"}>
+              <div
+                data-queue-drag-overlay
+                className={"h-full w-full opacity-95 shadow-2xl [&>article]:h-full"}
+              >
                 <EventQueueRequestRow
                   item={activeDragItem}
                   canManage={false}
