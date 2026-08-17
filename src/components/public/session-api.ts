@@ -1,4 +1,10 @@
-import type { PublicQueueResponse, PublicSong } from "./api";
+import type {
+  PublicQueueResponse,
+  PublicSong,
+  PublicSongBrowseItem,
+  SessionSongBrowseInput,
+  SessionSongDiscovery,
+} from "./api";
 
 export type SessionEvent = {
   name: string;
@@ -65,6 +71,42 @@ export async function searchSessionSongs(publicToken: string, query: string) {
   );
 
   return response.items;
+}
+
+export function getSessionSongDiscovery(
+  publicToken: string,
+  signal?: AbortSignal,
+) {
+  return requestJson<SessionSongDiscovery>(
+    `/api/s/${encodeURIComponent(publicToken)}/songs/discovery`,
+    { signal },
+  );
+}
+
+export function browseSessionSongs(
+  publicToken: string,
+  input: SessionSongBrowseInput,
+  signal?: AbortSignal,
+) {
+  const searchParams = new URLSearchParams();
+
+  if (input.cursor) searchParams.set("cursor", input.cursor);
+  if (input.limit) searchParams.set("limit", String(input.limit));
+  if (input.q) searchParams.set("q", input.q);
+  if (input.genre) searchParams.set("genre", input.genre);
+  if (input.language) searchParams.set("language", input.language);
+  if (input.duet) searchParams.set("duet", "true");
+  if (input.hit) searchParams.set("hit", "true");
+  if (input.sort) searchParams.set("sort", input.sort);
+
+  const query = searchParams.toString();
+  return requestJson<{
+    items: PublicSongBrowseItem[];
+    nextCursor: string | null;
+  }>(
+    `/api/s/${encodeURIComponent(publicToken)}/songs/browse${query ? `?${query}` : ""}`,
+    { signal },
+  );
 }
 
 export function createSessionRequest(

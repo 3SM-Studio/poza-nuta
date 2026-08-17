@@ -306,6 +306,108 @@ test.describe("public event and session identity with local Supabase Auth", () =
     }
   });
 
+  test("lets a participant discover a song and submit it without knowing its title", async ({
+    browser,
+  }) => {
+    const dashboardContext = await browser.newContext();
+    const participantContext = await browser.newContext({
+      extraHTTPHeaders: { "x-forwarded-for": "203.0.113.42" },
+    });
+    const dashboardPage = await dashboardContext.newPage();
+    const participantPage = await participantContext.newPage();
+    const browserErrors: string[] = [];
+
+    observeBrowserErrors(dashboardPage, browserErrors);
+    observeBrowserErrors(participantPage, browserErrors);
+
+    try {
+      await signInLocalOperator(dashboardPage, fixture);
+      const dashboardQueuePath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+      const dashboardQueueApiPath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+      const dashboardRealtimeConnection = dashboardPage.waitForEvent(
+        "websocket",
+        {
+          predicate: (socket) =>
+            new URL(socket.url()).pathname === "/realtime/v1/websocket",
+        },
+      );
+
+      await dashboardPage.goto(dashboardQueuePath);
+      await expect(
+        dashboardPage.locator('[data-realtime-status="live"]'),
+      ).toBeVisible();
+      await dashboardRealtimeConnection;
+      await dashboardPage.waitForTimeout(500);
+
+      await participantPage.goto(`/s/${fixture.publicToken}`);
+      await participantPage
+        .getByLabel("Imię lub ksywka")
+        .fill("E2E Discovery User");
+      await participantPage
+        .getByRole("button", { name: "Dołącz do wydarzenia" })
+        .click();
+      await expect(
+        participantPage.getByText("Dołączono jako", { exact: false }),
+      ).toBeVisible();
+      await expect(
+        participantPage.getByRole("link", {
+          name: "Przeglądaj wszystkie piosenki",
+        }),
+      ).toBeVisible();
+
+      await participantPage
+        .getByRole("link", { name: "Przeglądaj wszystkie piosenki" })
+        .click();
+      await expect(
+        participantPage.getByRole("heading", { name: "Znajdź piosenkę" }),
+      ).toBeVisible();
+      await expect(participantPage.getByText("E2E Discovery Hit")).toBeVisible();
+
+      await participantPage.getByRole("button", { name: "Tylko hity" }).click();
+      await expect(participantPage).toHaveURL(
+        new RegExp(`/s/${escapeRegExp(fixture.publicToken)}/songs\\?hit=true$`),
+      );
+      await expect(
+        participantPage.getByRole("heading", { name: "E2E Song", exact: true }),
+      ).toHaveCount(0);
+      const discoveredSong = participantPage
+        .locator("[data-song-id]")
+        .filter({ hasText: "E2E Discovery Hit" });
+      await expect(discoveredSong).toBeVisible();
+
+      const dashboardRealtimeRefetch = dashboardPage.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === dashboardQueueApiPath &&
+          response.request().method() === "GET" &&
+          response.status() === 200,
+      );
+      await discoveredSong.getByRole("button", { name: "Zgłoś" }).click();
+      await dashboardRealtimeRefetch;
+
+      await expect(
+        queueLane(dashboardPage, "pending")
+          .locator("[data-queue-request-id]")
+          .filter({ hasText: "E2E Discovery User" })
+          .filter({ hasText: "E2E Discovery Hit" }),
+      ).toBeVisible();
+
+      await participantPage
+        .getByRole("link", { name: "Wróć do wydarzenia" })
+        .click();
+      await expect(
+        participantRequestsSection(participantPage)
+          .locator("[data-participant-request-id]")
+          .filter({ hasText: "E2E Discovery Hit" }),
+      ).toBeVisible();
+      expect(browserErrors).toEqual([]);
+    } finally {
+      await Promise.allSettled([
+        participantContext.close(),
+        dashboardContext.close(),
+      ]);
+    }
+  });
+
   test("covers authenticated lifecycle and canonical public access", async ({
     browser,
   }) => {

@@ -221,7 +221,10 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           artist,
           normalized_title,
           normalized_artist,
-          search_text
+          search_text,
+          genres,
+          languages,
+          is_hit
         )
         VALUES (
           'manual',
@@ -230,7 +233,10 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           ${"E2E Artist"},
           ${"e2e song"},
           ${"e2e artist"},
-          ${"e2e song e2e artist"}
+          ${"e2e song e2e artist"},
+          ARRAY[]::text[],
+          ARRAY[]::text[],
+          false
         ), (
           'manual',
           ${`e2e-second-${fixtureSuffix}`},
@@ -238,12 +244,26 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           ${"E2E Artist"},
           ${"e2e second song"},
           ${"e2e artist"},
-          ${"e2e second song e2e artist"}
+          ${"e2e second song e2e artist"},
+          ARRAY[]::text[],
+          ARRAY[]::text[],
+          false
+        ), (
+          'manual',
+          ${`e2e-discovery-${fixtureSuffix}`},
+          ${"E2E Discovery Hit"},
+          ${"E2E Discovery Artist"},
+          ${"e2e discovery hit"},
+          ${"e2e discovery artist"},
+          ${"e2e discovery hit e2e discovery artist pop english hit"},
+          ARRAY['Pop']::text[],
+          ARRAY['English']::text[],
+          true
         )
         RETURNING id
       `;
 
-      if (songs.length !== 2) {
+      if (songs.length !== 3) {
         throw new Error("Local song fixtures were not created.");
       }
 

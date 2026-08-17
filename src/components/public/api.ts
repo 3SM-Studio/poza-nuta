@@ -10,6 +10,38 @@ export type PublicSong = {
   isHit: boolean;
 };
 
+export type PublicSongBrowseItem = PublicSong & {
+  genres: string[];
+  languages: string[];
+};
+
+export type SongDiscoveryCategory = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+export type SessionSongDiscovery = {
+  genres: SongDiscoveryCategory[];
+  languages: SongDiscoveryCategory[];
+  features: {
+    duetCount: number;
+    hitCount: number;
+    plusCount: number;
+  };
+};
+
+export type SessionSongBrowseInput = {
+  cursor?: string | null;
+  limit?: number;
+  q?: string | null;
+  genre?: string | null;
+  language?: string | null;
+  duet?: boolean;
+  hit?: boolean;
+  sort?: "title" | "artist" | "newest";
+};
+
 export type PublicQueueItem = {
   id: number;
   singerName: string;

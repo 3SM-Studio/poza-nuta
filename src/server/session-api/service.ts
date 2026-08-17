@@ -1,6 +1,21 @@
 import "server-only";
 
-import { and, desc, eq, gt, ilike, inArray, isNull, lte, max, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  max,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import {
   eventSessionCodes,
@@ -39,7 +54,11 @@ import type {
   ParticipantJoinInput,
   ParticipantRenameInput,
   ParticipantSessionRequestInput,
+  PublicSongBrowseQuery,
+  SongBrowseCursor,
+  SongBrowseSort,
 } from "./validation";
+import { encodeSongBrowseCursor, getSongBrowseFilterKey } from "./validation";
 
 type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
@@ -100,6 +119,39 @@ export type PublicParticipantRequest = {
   isNext: boolean;
   createdAt: Date;
 };
+
+export type PublicSongBrowseItem = {
+  id: number;
+  source: (typeof songs.source.enumValues)[number];
+  title: string;
+  artist: string;
+  durationSeconds: number | null;
+  genres: string[];
+  languages: string[];
+  isDuet: boolean;
+  isExplicit: boolean;
+  isPlus: boolean;
+  isHit: boolean;
+};
+
+export type PublicSongDiscoveryCategory = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+export type PublicSongDiscovery = {
+  genres: PublicSongDiscoveryCategory[];
+  languages: PublicSongDiscoveryCategory[];
+  features: {
+    duetCount: number;
+    hitCount: number;
+    plusCount: number;
+  };
+};
+
+const PUBLIC_SONG_DISCOVERY_CATEGORY_LIMIT = 30;
+const PUBLIC_SONG_DISCOVERY_MIN_CATEGORY_COUNT = 20;
 
 type SessionLookup =
   | { kind: "code"; value: string }
@@ -216,6 +268,94 @@ export async function searchPublicSessionSongs(
   return searchSongs(query);
 }
 
+export async function getPublicSessionSongDiscovery(
+  publicToken: string,
+): Promise<PublicSongDiscovery> {
+  await requireSongRequestSession({ kind: "token", value: publicToken });
+
+  const [genres, languages, featureRows] = await Promise.all([
+    listSongDiscoveryCategories(songs.genres),
+    listSongDiscoveryCategories(songs.languages),
+    getDb()
+      .select({
+        duetCount: sql<number>`count(*) filter (where ${songs.isDuet})::integer`,
+        hitCount: sql<number>`count(*) filter (where ${songs.isHit})::integer`,
+        plusCount: sql<number>`count(*) filter (where ${songs.isPlus})::integer`,
+      })
+      .from(songs),
+  ]);
+  const featureCounts = featureRows[0] ?? {
+    duetCount: 0,
+    hitCount: 0,
+    plusCount: 0,
+  };
+
+  return {
+    genres,
+    languages,
+    features: featureCounts,
+  };
+}
+
+export async function browsePublicSessionSongs(
+  publicToken: string,
+  query: PublicSongBrowseQuery,
+) {
+  await requireSongRequestSession({ kind: "token", value: publicToken });
+
+  const conditions: SQL[] = [];
+  if (query.q) {
+    conditions.push(ilike(songs.searchText, `%${escapeLikePattern(query.q)}%`));
+  }
+  if (query.genre) {
+    conditions.push(matchesNormalizedSongCategory(songs.genres, query.genre));
+  }
+  if (query.language) {
+    conditions.push(
+      matchesNormalizedSongCategory(songs.languages, query.language),
+    );
+  }
+  if (query.duet) conditions.push(eq(songs.isDuet, true));
+  if (query.hit) conditions.push(eq(songs.isHit, true));
+  if (query.cursor) conditions.push(getSongBrowseCursorCondition(query.cursor));
+
+  const rows = await getDb()
+    .select({
+      id: songs.id,
+      source: songs.source,
+      title: songs.title,
+      artist: songs.artist,
+      durationSeconds: songs.durationSeconds,
+      genres: songs.genres,
+      languages: songs.languages,
+      isDuet: songs.isDuet,
+      isExplicit: songs.isExplicit,
+      isPlus: songs.isPlus,
+      isHit: songs.isHit,
+      normalizedTitle: songs.normalizedTitle,
+      normalizedArtist: songs.normalizedArtist,
+      createdAt: songs.createdAt,
+    })
+    .from(songs)
+    .where(and(...conditions))
+    .orderBy(...getSongBrowseOrderBy(query.sort))
+    .limit(query.limit + 1);
+
+  const pageRows = rows.slice(0, query.limit);
+  const lastRow = pageRows.at(-1);
+  const hasMore = rows.length > query.limit;
+
+  return {
+    items: pageRows.map(toPublicSongBrowseItem),
+    nextCursor:
+      hasMore && lastRow
+        ? encodeSongBrowseCursor(
+            toSongBrowseCursor(lastRow, query.sort, getSongBrowseFilterKey(query)),
+          )
+        : null,
+  };
+}
+
 function searchSongs(query: string | null) {
 
   if (query === null) {
@@ -241,6 +381,147 @@ function searchSongs(query: string | null) {
     .orderBy(songs.normalizedArtist, songs.normalizedTitle, songs.id)
     .limit(PUBLIC_SONG_SEARCH_LIMIT);
 }
+
+async function listSongDiscoveryCategories(
+  column: typeof songs.genres | typeof songs.languages,
+): Promise<PublicSongDiscoveryCategory[]> {
+  const rows = await getDb().execute<PublicSongDiscoveryCategory>(sql`
+    select
+      lower(trim(category.value)) as value,
+      min(category.value) as label,
+      count(*)::integer as count
+    from ${songs}
+    cross join lateral unnest(${column}) as category(value)
+    where trim(category.value) <> ''
+    group by lower(trim(category.value))
+    having count(*) >= ${PUBLIC_SONG_DISCOVERY_MIN_CATEGORY_COUNT}
+    order by count(*) desc, value asc
+    limit ${PUBLIC_SONG_DISCOVERY_CATEGORY_LIMIT}
+  `);
+
+  return Array.from(rows);
+}
+
+function matchesNormalizedSongCategory(
+  column: typeof songs.genres | typeof songs.languages,
+  value: string,
+) {
+  return sql`exists (
+    select 1
+    from unnest(${column}) as category(value)
+    where lower(trim(category.value)) = ${value}
+  )`;
+}
+
+function getSongBrowseOrderBy(sort: SongBrowseSort) {
+  if (sort === "artist") {
+    return [asc(songs.normalizedArtist), asc(songs.normalizedTitle), asc(songs.id)];
+  }
+
+  if (sort === "newest") {
+    return [desc(songs.createdAt), desc(songs.id)];
+  }
+
+  return [asc(songs.normalizedTitle), asc(songs.normalizedArtist), asc(songs.id)];
+}
+
+function getSongBrowseCursorCondition(cursor: SongBrowseCursor): SQL {
+  if (cursor.sort === "newest") {
+    const createdAt = new Date(cursor.createdAt);
+    return or(
+      lt(songs.createdAt, createdAt),
+      and(eq(songs.createdAt, createdAt), lt(songs.id, cursor.id)),
+    )!;
+  }
+
+  if (cursor.sort === "artist") {
+    return or(
+      gt(songs.normalizedArtist, cursor.normalizedArtist),
+      and(
+        eq(songs.normalizedArtist, cursor.normalizedArtist),
+        gt(songs.normalizedTitle, cursor.normalizedTitle),
+      ),
+      and(
+        eq(songs.normalizedArtist, cursor.normalizedArtist),
+        eq(songs.normalizedTitle, cursor.normalizedTitle),
+        gt(songs.id, cursor.id),
+      ),
+    )!;
+  }
+
+  return or(
+    gt(songs.normalizedTitle, cursor.normalizedTitle),
+    and(
+      eq(songs.normalizedTitle, cursor.normalizedTitle),
+      gt(songs.normalizedArtist, cursor.normalizedArtist),
+    ),
+    and(
+      eq(songs.normalizedTitle, cursor.normalizedTitle),
+      eq(songs.normalizedArtist, cursor.normalizedArtist),
+      gt(songs.id, cursor.id),
+    ),
+  )!;
+}
+
+function toPublicSongBrowseItem(
+  row: SongBrowseRow,
+): PublicSongBrowseItem {
+  return {
+    id: row.id,
+    source: row.source,
+    title: row.title,
+    artist: row.artist,
+    durationSeconds: row.durationSeconds,
+    genres: row.genres,
+    languages: row.languages,
+    isDuet: row.isDuet,
+    isExplicit: row.isExplicit,
+    isPlus: row.isPlus,
+    isHit: row.isHit,
+  };
+}
+
+function toSongBrowseCursor(
+  row: SongBrowseRow,
+  sort: SongBrowseSort,
+  filterKey: string,
+): SongBrowseCursor {
+  if (sort === "newest") {
+    return {
+      version: 1,
+      filterKey,
+      sort,
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  return {
+    version: 1,
+    filterKey,
+    sort,
+    id: row.id,
+    normalizedTitle: row.normalizedTitle,
+    normalizedArtist: row.normalizedArtist,
+  };
+}
+
+type SongBrowseRow = {
+  id: number;
+  source: "ising" | "karafun" | "manual";
+  title: string;
+  artist: string;
+  durationSeconds: number | null;
+  genres: string[];
+  languages: string[];
+  isDuet: boolean;
+  isExplicit: boolean;
+  isPlus: boolean;
+  isHit: boolean;
+  normalizedTitle: string;
+  normalizedArtist: string;
+  createdAt: Date;
+};
 
 export async function getSessionQueue(code: string) {
   return getQueueForLookup({ kind: "code", value: code });

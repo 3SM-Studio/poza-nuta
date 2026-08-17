@@ -13,6 +13,7 @@ import { consumeSessionRequestRateLimit } from "@/server/session-api/rate-limit"
 import { PARTICIPANT_CREDENTIAL_COOKIE } from "@/server/session-api/participant-credential";
 import {
   getPublicSessionParticipant,
+  getPublicSessionSongDiscovery,
   resolvePublicSessionEventAccess,
   type PublicSessionEvent,
 } from "@/server/session-api/service";
@@ -56,6 +57,12 @@ export default async function PublicSessionPage({
           (await cookies()).get(PARTICIPANT_CREDENTIAL_COOKIE)?.value,
         )
       : null;
+  const discovery =
+    participant &&
+    access.status === "active" &&
+    canUseSessionSongRequests(access.event)
+      ? await getPublicSessionSongDiscovery(token)
+      : null;
 
   return (
     <main className={styles.publicPage}>
@@ -83,6 +90,7 @@ export default async function PublicSessionPage({
                 sessionToken={token}
                 event={serializeSessionEvent(access.event)}
                 participantDisplayName={participant.displayName}
+                discovery={discovery ?? undefined}
               />
             ) : (
               <ParticipantJoinGate sessionToken={token} />

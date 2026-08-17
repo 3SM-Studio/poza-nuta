@@ -15,7 +15,12 @@ import {
   consumeSessionRateLimit,
   resetSessionRateLimitForTests,
 } from "../src/server/session-api/rate-limit-core.ts";
-import { validateParticipantSessionRequestInput } from "../src/server/session-api/validation.ts";
+import {
+  encodeSongBrowseCursor,
+  getSongBrowseFilterKey,
+  validateParticipantSessionRequestInput,
+  validatePublicSongBrowseQuery,
+} from "../src/server/session-api/validation.ts";
 
 const now = new Date("2026-07-18T18:00:00.000Z");
 const activeEvent = {
@@ -119,6 +124,82 @@ test("participant request validation accepts only a server-owned song selection"
   }
 });
 
+test("song browse validation keeps catalog pagination bounded and filter-bound", () => {
+  const defaultQuery = validatePublicSongBrowseQuery(new URLSearchParams());
+  assert.deepEqual(defaultQuery, {
+    success: true,
+    data: {
+      cursor: null,
+      limit: 24,
+      q: null,
+      genre: null,
+      language: null,
+      duet: false,
+      hit: false,
+      sort: "title",
+    },
+  });
+
+  const cappedQuery = validatePublicSongBrowseQuery(
+    new URLSearchParams({
+      limit: "999",
+      q: "  Maanam  ",
+      genre: "Pop",
+      language: "Polish",
+      duet: "true",
+      hit: "true",
+      sort: "artist",
+    }),
+  );
+  assert.equal(cappedQuery.success, true);
+  if (!cappedQuery.success) return;
+  assert.equal(cappedQuery.data.limit, 40);
+  assert.equal(cappedQuery.data.q, "maanam");
+  assert.equal(cappedQuery.data.genre, "pop");
+  assert.equal(cappedQuery.data.language, "polish");
+  assert.equal(cappedQuery.data.duet, true);
+  assert.equal(cappedQuery.data.hit, true);
+  assert.equal(cappedQuery.data.sort, "artist");
+
+  const cursor = encodeSongBrowseCursor({
+    version: 1,
+    filterKey: getSongBrowseFilterKey(cappedQuery.data),
+    sort: "artist",
+    id: 11,
+    normalizedTitle: "boskie buenos",
+    normalizedArtist: "maanam",
+  });
+  const paginated = validatePublicSongBrowseQuery(
+    new URLSearchParams({
+      limit: "24",
+      q: "Maanam",
+      genre: "pop",
+      language: "polish",
+      duet: "true",
+      hit: "true",
+      sort: "artist",
+      cursor,
+    }),
+  );
+  assert.equal(paginated.success, true);
+  if (paginated.success) assert.equal(paginated.data.cursor?.id, 11);
+
+  assert.equal(
+    validatePublicSongBrowseQuery(
+      new URLSearchParams({ cursor: "not-a-valid-cursor" }),
+    ).success,
+    false,
+  );
+  assert.equal(
+    validatePublicSongBrowseQuery(new URLSearchParams({ sort: "random" })).success,
+    false,
+  );
+  assert.equal(
+    validatePublicSongBrowseQuery(new URLSearchParams({ limit: "0" })).success,
+    false,
+  );
+});
+
 test("session resolver uses one token/code identity service and locks writes", () => {
   const source = readFileSync("src/server/session-api/service.ts", "utf8");
   const transactionLookup = source.slice(
@@ -195,6 +276,8 @@ test("session API remains anonymous, identity-scoped and rate limited", () => {
     "src/app/api/session/[code]/queue/route.ts",
     "src/app/api/s/[token]/event/route.ts",
     "src/app/api/s/[token]/songs/search/route.ts",
+    "src/app/api/s/[token]/songs/browse/route.ts",
+    "src/app/api/s/[token]/songs/discovery/route.ts",
     "src/app/api/s/[token]/requests/route.ts",
     "src/app/api/s/[token]/queue/route.ts",
     "src/app/api/s/[token]/join/route.ts",

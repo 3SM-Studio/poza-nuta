@@ -29,8 +29,13 @@ import {
 } from "@/lib/participant-nickname";
 import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 import { getSessionCapabilityState } from "@/lib/session-capabilities";
-import type { PublicQueueResponse, PublicSong } from "./api";
+import type {
+  PublicQueueResponse,
+  PublicSong,
+  SessionSongDiscovery,
+} from "./api";
 import styles from "./public.module.css";
+import { SongDiscoveryTeaser } from "./song-discovery-page";
 import {
   cancelParticipantRequest,
   createSessionRequest,
@@ -56,10 +61,12 @@ export function SessionRequestPage({
   sessionToken,
   event,
   participantDisplayName,
+  discovery,
 }: {
   sessionToken: string;
   event: SessionEvent;
   participantDisplayName?: string;
+  discovery?: SessionSongDiscovery;
 }) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
@@ -429,6 +436,13 @@ export function SessionRequestPage({
             {isSearching ? "Szukam..." : "Szukaj"}
           </Button>
         </form>
+
+        {discovery ? (
+          <SongDiscoveryTeaser
+            sessionToken={sessionToken}
+            discovery={discovery}
+          />
+        ) : null}
 
         {searchMessage ? (
           <p className={styles.inlineMessage} role="status">
