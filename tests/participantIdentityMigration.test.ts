@@ -26,7 +26,7 @@ test("0023 adds additive participant identity tables and nullable request owners
   assert.doesNotMatch(migration, /token[^\n]*DEFAULT|credential[^\n]*DEFAULT/i);
 });
 
-test("0023 is the next immutable Drizzle journal entry", () => {
+test("0023 remains immutable and 0024 is the next Drizzle journal entry", () => {
   const journal = JSON.parse(readFileSync("drizzle/meta/_journal.json", "utf8")) as {
     entries: Array<{
       idx: number;
@@ -36,11 +36,18 @@ test("0023 is the next immutable Drizzle journal entry", () => {
       breakpoints: boolean;
     }>;
   };
-  assert.deepEqual(journal.entries.at(-1), {
+  assert.deepEqual(journal.entries.at(-2), {
     idx: 23,
     version: "7",
-    when: journal.entries.at(-1)?.when,
+    when: journal.entries.at(-2)?.when,
     tag: "0023_foamy_gargoyle",
+    breakpoints: true,
+  });
+  assert.deepEqual(journal.entries.at(-1), {
+    idx: 24,
+    version: "7",
+    when: journal.entries.at(-1)?.when,
+    tag: "0024_remarkable_brother_voodoo",
     breakpoints: true,
   });
 });

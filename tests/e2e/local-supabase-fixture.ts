@@ -38,9 +38,13 @@ export type LocalSupabaseFixture = {
   readParticipantRequests(displayName: string): Promise<
     {
       requestId: number;
+      publicRequestId: string;
       eventParticipantId: number;
       participantId: number;
       songTitle: string;
+      status: string;
+      requestDisplayName: string;
+      currentDisplayName: string;
     }[]
   >;
   resetQueue(): Promise<void>;
@@ -377,30 +381,51 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       const rows = await sql<
         {
           request_id: number;
+          public_request_id: string;
           event_participant_id: number;
           participant_id: number;
           song_title: string;
+          status: string;
+          request_display_name: string;
+          current_display_name: string;
         }[]
       >`
         SELECT
           r.id AS request_id,
+          r.public_id AS public_request_id,
           r.event_participant_id,
           ep.participant_id,
-          s.title AS song_title
+          s.title AS song_title,
+          r.status,
+          r.display_name AS request_display_name,
+          ep.display_name AS current_display_name
         FROM public.song_requests r
         JOIN public.event_participants ep ON ep.id = r.event_participant_id
         JOIN public.songs s ON s.id = r.song_id
         JOIN public.events e ON e.id = r.event_id
         WHERE e.public_id = ${eventPublicId}::uuid
-          AND r.display_name = ${displayName}
+          AND ep.participant_id = (
+            SELECT ep2.participant_id
+            FROM public.event_participants ep2
+            JOIN public.event_sessions es2 ON es2.id = ep2.event_session_id
+            JOIN public.events e2 ON e2.id = es2.event_id
+            LEFT JOIN public.song_requests r2 ON r2.event_participant_id = ep2.id
+            WHERE e2.public_id = ${eventPublicId}::uuid
+              AND (ep2.display_name = ${displayName} OR r2.display_name = ${displayName})
+            LIMIT 1
+          )
         ORDER BY r.id
       `;
 
       return rows.map((row) => ({
         requestId: row.request_id,
+        publicRequestId: row.public_request_id,
         eventParticipantId: row.event_participant_id,
         participantId: row.participant_id,
         songTitle: row.song_title,
+        status: row.status,
+        requestDisplayName: row.request_display_name,
+        currentDisplayName: row.current_display_name,
       }));
     }
 

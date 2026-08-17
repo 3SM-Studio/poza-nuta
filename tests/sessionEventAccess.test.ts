@@ -179,7 +179,7 @@ test("participant request duplicate protection is serialized by the event lock",
   );
   assert.match(
     createRequest,
-    /inArray\(songRequests\.status, ACTIVE_SESSION_REQUEST_STATUSES\)/,
+    /inArray\(songRequests\.status, ACTIVE_PUBLIC_REQUEST_STATUSES\)/,
   );
   assert.match(createRequest, /SESSION_REQUEST_DUPLICATE/);
   assert.ok(

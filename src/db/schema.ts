@@ -567,6 +567,7 @@ export const songRequests = pgTable(
   "song_requests",
   {
     id: idColumn(),
+    publicId: uuid("public_id").notNull().defaultRandom(),
     eventId: bigint("event_id", { mode: "number" })
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
@@ -592,6 +593,7 @@ export const songRequests = pgTable(
     completedAt: timestampColumn("completed_at"),
   },
   (table) => [
+    uniqueIndex("song_requests_public_id_idx").on(table.publicId),
     index("song_requests_event_queue_idx").on(
       table.eventId,
       table.status,

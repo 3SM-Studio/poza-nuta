@@ -408,6 +408,45 @@
   margin-top: 1rem;
 }
 
+.renameForm {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.inlineForm {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.participantRequestList {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.participantRequestItem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-2);
+}
+
+.participantRequestItem h3 {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+}
+
+.participantRequestItem > div > p:not(.inlineMessage) {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
 .field {
   position: relative;
   display: grid;
@@ -571,6 +610,10 @@
   }
 
   .searchForm {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .inlineForm {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 

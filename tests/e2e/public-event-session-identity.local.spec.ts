@@ -280,6 +280,39 @@ test.describe("public event and session identity with local Supabase Auth", () =
         anonymousPage.getByText(`Dołączono jako ${participantName}`),
       ).toBeVisible();
 
+      const myRequests = participantRequestsSection(anonymousPage);
+      await expect(
+        myRequests.locator("[data-participant-request-id]").filter({ hasText: "E2E Song" }),
+      ).toBeVisible();
+
+      await page.goto(queuePath);
+      const participantQueueRow = queueLane(page, "pending")
+        .locator("[data-queue-request-id]")
+        .filter({ hasText: participantName })
+        .filter({ hasText: "E2E Song" });
+      await expect(participantQueueRow).toBeVisible();
+      await participantQueueRow.getByRole("button", { name: "Zaakceptuj" }).click();
+      await expect
+        .poll(async () =>
+          (await fixture.readParticipantRequests(participantName))[0]?.status,
+        )
+        .toBe("approved");
+      await expect(
+        myRequests
+          .locator("[data-participant-request-id]")
+          .filter({ hasText: "E2E Song" })
+          .getByText("Zaakceptowane"),
+      ).toBeVisible();
+
+      const renamedParticipant = "E2E Renamed";
+      await anonymousPage
+        .getByLabel("Zmień nazwę w tym wydarzeniu")
+        .fill(renamedParticipant);
+      await anonymousPage.getByRole("button", { name: "Zapisz" }).click();
+      await expect(
+        anonymousPage.getByText(`Dołączono jako ${renamedParticipant}`),
+      ).toBeVisible();
+
       await submitParticipantSong(anonymousPage, "E2E Second Song");
       await expect
         .poll(() => fixture.readParticipantRequests(participantName))
@@ -294,6 +327,42 @@ test.describe("public event and session identity with local Supabase Auth", () =
           ),
         ).size,
       ).toBe(1);
+      const secondRequest = myRequests
+        .locator("[data-participant-request-id]")
+        .filter({ hasText: "E2E Second Song" });
+      await expect(secondRequest.getByText("Oczekujące")).toBeVisible();
+      await secondRequest.getByRole("button", { name: "Anuluj" }).click();
+      await anonymousPage
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "Anuluj zgłoszenie" })
+        .click();
+      await expect(secondRequest.getByText("Pominięte")).toBeVisible();
+
+      const finalParticipantRequests =
+        await fixture.readParticipantRequests(participantName);
+      expect(finalParticipantRequests.map(({ status }) => status).sort()).toEqual([
+        "approved",
+        "skipped",
+      ]);
+      expect(
+        new Set(finalParticipantRequests.map(({ participantId }) => participantId)).size,
+      ).toBe(1);
+      expect(
+        new Set(
+          finalParticipantRequests.map(({ eventParticipantId }) => eventParticipantId),
+        ).size,
+      ).toBe(1);
+      expect(
+        new Set(finalParticipantRequests.map(({ currentDisplayName }) => currentDisplayName)),
+      ).toEqual(new Set([renamedParticipant]));
+      expect(
+        finalParticipantRequests.find(({ songTitle }) => songTitle === "E2E Song")
+          ?.requestDisplayName,
+      ).toBe(participantName);
+      expect(
+        finalParticipantRequests.find(({ songTitle }) => songTitle === "E2E Second Song")
+          ?.requestDisplayName,
+      ).toBe(renamedParticipant);
 
       await page.goto(sharePath);
       await expect(
@@ -433,7 +502,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
         anonymousPage.getByRole("heading", { name: "Dołącz do sesji" }),
       ).toHaveCount(0);
       await expect(
-        anonymousPage.getByText(`Dołączono jako ${participantName}`),
+        anonymousPage.getByText(`Dołączono jako ${renamedParticipant}`),
       ).toBeVisible();
 
       await page.goto(queuePath);
@@ -482,7 +551,15 @@ async function submitParticipantSong(
   await page.getByRole("button", { name: "Szukaj" }).click();
   await page.getByRole("button", { name: new RegExp(title) }).click();
   await page.getByRole("button", { name: "Dodaj do kolejki" }).click();
-  await expect(page.locator("[data-submitted-request]")).toBeVisible();
+  await expect(
+    participantRequestsSection(page)
+      .locator("[data-participant-request-id]")
+      .filter({ hasText: title }),
+  ).toBeVisible();
+}
+
+function participantRequestsSection(page: import("@playwright/test").Page) {
+  return page.locator('section[aria-labelledby="participant-requests-heading"]');
 }
 
 function sanitizeBrowserUrl(value: string) {

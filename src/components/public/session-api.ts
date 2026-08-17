@@ -13,6 +13,24 @@ export type SessionEvent = {
   closedAt: string | null;
 };
 
+export type ParticipantRequestStatus =
+  | "pending"
+  | "approved"
+  | "now"
+  | "done"
+  | "skipped"
+  | "rejected";
+
+export type ParticipantRequest = {
+  id: string;
+  title: string;
+  artist: string;
+  status: ParticipantRequestStatus;
+  queuePosition: number | null;
+  isNext: boolean;
+  createdAt: string;
+};
+
 type ApiErrorBody = {
   error?: {
     code?: string;
@@ -74,6 +92,27 @@ export function joinSession(publicToken: string, displayName: string) {
 export function getSessionParticipant(publicToken: string) {
   return requestJson<{ participant: { displayName: string } | null }>(
     `/api/s/${encodeURIComponent(publicToken)}/participant`,
+  );
+}
+
+export function renameSessionParticipant(publicToken: string, displayName: string) {
+  return requestJson<{ participant: { displayName: string } }>(
+    `/api/s/${encodeURIComponent(publicToken)}/participant`,
+    { method: "PATCH", body: JSON.stringify({ displayName }) },
+  );
+}
+
+export function getParticipantRequests(publicToken: string, signal?: AbortSignal) {
+  return requestJson<{ items: ParticipantRequest[] }>(
+    `/api/s/${encodeURIComponent(publicToken)}/requests/mine`,
+    { signal },
+  );
+}
+
+export function cancelParticipantRequest(publicToken: string, requestId: string) {
+  return requestJson<{ request: { id: string; status: "skipped" } }>(
+    `/api/s/${encodeURIComponent(publicToken)}/requests/${encodeURIComponent(requestId)}`,
+    { method: "DELETE", body: "{}" },
   );
 }
 

@@ -16,7 +16,11 @@ import {
   restoreDashboardEventQueueItems,
   type DashboardEventQueueOptimisticItem,
 } from "../src/lib/dashboard-event-queue-optimistic.ts";
-import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "../src/server/public-api/queue-policy.ts";
+import {
+  ACTIVE_PUBLIC_REQUEST_STATUSES,
+  PUBLIC_QUEUE_VISIBLE_STATUSES,
+  isActivePublicRequestStatus,
+} from "../src/server/public-api/queue-policy.ts";
 import {
   validateDashboardEventQueueActionInput,
   validateDashboardEventQueueFilter,
@@ -50,6 +54,20 @@ test("event queue uses the existing request statuses and ordering fields", () =>
 
 test("public queues expose approved and current requests only", () => {
   assert.deepEqual(PUBLIC_QUEUE_VISIBLE_STATUSES, ["approved", "now"]);
+});
+
+test("public request deduplication has one shared active status policy", () => {
+  assert.deepEqual(ACTIVE_PUBLIC_REQUEST_STATUSES, [
+    "pending",
+    "approved",
+    "now",
+  ]);
+  assert.equal(isActivePublicRequestStatus("pending"), true);
+  assert.equal(isActivePublicRequestStatus("approved"), true);
+  assert.equal(isActivePublicRequestStatus("now"), true);
+  assert.equal(isActivePublicRequestStatus("done"), false);
+  assert.equal(isActivePublicRequestStatus("skipped"), false);
+  assert.equal(isActivePublicRequestStatus("rejected"), false);
 });
 
 test("owner, manager and operator can manage event queues, viewer cannot", () => {

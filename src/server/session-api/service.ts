@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, gt, ilike, inArray, isNull, lte, max, or } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, inArray, isNull, lte, max, or, sql } from "drizzle-orm";
 
 import {
   eventSessionCodes,
@@ -25,7 +25,10 @@ import {
 } from "../../lib/session-event-access";
 import { getDb } from "../db";
 import { PublicApiError } from "../public-api/errors";
-import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "../public-api/queue-policy";
+import {
+  ACTIVE_PUBLIC_REQUEST_STATUSES,
+  PUBLIC_QUEUE_VISIBLE_STATUSES,
+} from "../public-api/queue-policy";
 import { PUBLIC_SONG_SEARCH_LIMIT } from "../public-api/service";
 import {
   generateParticipantCredential,
@@ -34,6 +37,7 @@ import {
 } from "./participant-credential";
 import type {
   ParticipantJoinInput,
+  ParticipantRenameInput,
   ParticipantSessionRequestInput,
 } from "./validation";
 
@@ -55,12 +59,6 @@ const sessionEventSelection = {
   closedAt: events.closedAt,
   closeReason: events.closeReason,
 };
-
-const ACTIVE_SESSION_REQUEST_STATUSES = [
-  "pending",
-  "approved",
-  "now",
-] as const;
 
 type SessionEventRecord = {
   id: number;
@@ -91,6 +89,16 @@ export type ParticipantJoinResult = {
   participant: PublicSessionParticipant;
   credential: string;
   credentialExpiresAt: Date;
+};
+
+export type PublicParticipantRequest = {
+  id: string;
+  title: string;
+  artist: string;
+  status: (typeof songRequests.status.enumValues)[number];
+  queuePosition: number | null;
+  isNext: boolean;
+  createdAt: Date;
 };
 
 type SessionLookup =
@@ -282,6 +290,162 @@ export async function getPublicSessionParticipant(
     .where(eq(participantCredentials.id, membership.credentialId));
 
   return { displayName: membership.displayName };
+}
+
+export async function getPublicParticipantRequests(
+  publicToken: string,
+  credential: string | null | undefined,
+): Promise<PublicParticipantRequest[]> {
+  const session = await requireLiveSession({ kind: "token", value: publicToken });
+  const membership = await requireParticipantMembership(
+    session.sessionId,
+    credential,
+  );
+
+  const rows = await getDb()
+    .select({
+      id: songRequests.publicId,
+      title: songs.title,
+      artist: songs.artist,
+      status: songRequests.status,
+      position: songRequests.position,
+      createdAt: songRequests.createdAt,
+    })
+    .from(songRequests)
+    .innerJoin(songs, eq(songs.id, songRequests.songId))
+    .where(
+      and(
+        eq(songRequests.eventId, session.event.id),
+        eq(songRequests.eventParticipantId, membership.id),
+      ),
+    )
+    .orderBy(desc(songRequests.createdAt), desc(songRequests.id));
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    artist: row.artist,
+    status: row.status,
+    queuePosition: row.status === "approved" ? row.position : null,
+    isNext: row.status === "approved" && row.position === 1,
+    createdAt: row.createdAt,
+  }));
+}
+
+export async function renamePublicSessionParticipant(
+  publicToken: string,
+  credential: string | null | undefined,
+  input: ParticipantRenameInput,
+): Promise<PublicSessionParticipant> {
+  try {
+    return await getDb().transaction(async (transaction) => {
+      const session = requireParticipantSessionRow(
+        requireLiveSessionRow(
+          await findSessionEventInTransaction(transaction, {
+            kind: "token",
+            value: publicToken,
+          }),
+        ),
+      );
+      const membership = await requireParticipantMembershipInTransaction(
+        transaction,
+        session.sessionId,
+        credential,
+      );
+      const [updated] = await transaction
+        .update(eventParticipants)
+        .set({
+          displayName: input.displayName,
+          normalizedDisplayName: input.normalizedDisplayName,
+          updatedAt: new Date(),
+        })
+        .where(eq(eventParticipants.id, membership.id))
+        .returning({ displayName: eventParticipants.displayName });
+
+      if (!updated) throw new Error("Participant membership could not be updated.");
+      return updated;
+    });
+  } catch (error) {
+    if (isNicknameUniqueViolation(error)) {
+      throw new PublicApiError(
+        409,
+        "SESSION_NICKNAME_TAKEN",
+        "This nickname is already used in the event.",
+      );
+    }
+    throw error;
+  }
+}
+
+export async function cancelPublicParticipantRequest(
+  publicToken: string,
+  credential: string | null | undefined,
+  publicRequestId: string,
+) {
+  return getDb().transaction(async (transaction) => {
+    const session = requireParticipantSessionRow(
+      requireLiveSessionRow(
+        await findSessionEventInTransaction(transaction, {
+          kind: "token",
+          value: publicToken,
+        }),
+      ),
+    );
+    const membership = await requireParticipantMembershipInTransaction(
+      transaction,
+      session.sessionId,
+      credential,
+    );
+    const now = new Date();
+    const [cancelled] = await transaction
+      .update(songRequests)
+      .set({
+        status: "skipped",
+        position: 0,
+        completedAt: now,
+        updatedAt: now,
+        version: sql`${songRequests.version} + 1`,
+      })
+      .where(
+        and(
+          eq(songRequests.publicId, publicRequestId),
+          eq(songRequests.eventId, session.event.id),
+          eq(songRequests.eventParticipantId, membership.id),
+          eq(songRequests.requestedBy, "public"),
+          eq(songRequests.status, "pending"),
+        ),
+      )
+      .returning({ id: songRequests.publicId, status: songRequests.status });
+
+    if (cancelled) return cancelled;
+
+    const [ownedRequest] = await transaction
+      .select({ status: songRequests.status })
+      .from(songRequests)
+      .where(
+        and(
+          eq(songRequests.publicId, publicRequestId),
+          eq(songRequests.eventId, session.event.id),
+          eq(songRequests.eventParticipantId, membership.id),
+          eq(songRequests.requestedBy, "public"),
+        ),
+      )
+      .limit(1);
+
+    if (!ownedRequest) {
+      throw new PublicApiError(
+        404,
+        "SESSION_REQUEST_NOT_FOUND",
+        "The request does not exist.",
+      );
+    }
+
+    throw new PublicApiError(
+      409,
+      "SESSION_REQUEST_CANNOT_CANCEL",
+      "Only a pending request can be cancelled.",
+    );
+  });
 }
 
 export async function joinPublicSession(
@@ -569,7 +733,7 @@ export async function createPublicSessionRequest(
           eq(songRequests.eventId, session.event.id),
           eq(songRequests.songId, song.id),
           eq(songRequests.eventParticipantId, membership.id),
-          inArray(songRequests.status, ACTIVE_SESSION_REQUEST_STATUSES),
+          inArray(songRequests.status, ACTIVE_PUBLIC_REQUEST_STATUSES),
         ),
       )
       .limit(1);
@@ -601,11 +765,100 @@ export async function createPublicSessionRequest(
         eventParticipantId: membership.id,
         updatedAt: now,
       })
-      .returning({ status: songRequests.status });
+      .returning({ id: songRequests.publicId, status: songRequests.status });
 
     if (!createdRequest) throw new Error("Session request could not be created.");
     return createdRequest;
   });
+}
+
+async function requireParticipantMembership(
+  sessionId: number,
+  credential: string | null | undefined,
+) {
+  const tokenHash = credential ? hashParticipantCredential(credential) : null;
+  if (!tokenHash) throw participantRequiredError();
+  const now = new Date();
+  const [membership] = await getDb()
+    .select({ id: eventParticipants.id, credentialId: participantCredentials.id })
+    .from(participantCredentials)
+    .innerJoin(
+      eventParticipants,
+      eq(eventParticipants.participantId, participantCredentials.participantId),
+    )
+    .where(
+      and(
+        eq(participantCredentials.tokenHash, tokenHash),
+        gt(participantCredentials.expiresAt, now),
+        isNull(participantCredentials.revokedAt),
+        eq(eventParticipants.eventSessionId, sessionId),
+      ),
+    )
+    .limit(1);
+  if (!membership) throw participantRequiredError();
+  return membership;
+}
+
+async function requireParticipantMembershipInTransaction(
+  transaction: DatabaseTransaction,
+  sessionId: number,
+  credential: string | null | undefined,
+) {
+  const tokenHash = credential ? hashParticipantCredential(credential) : null;
+  if (!tokenHash) throw participantRequiredError();
+  const now = new Date();
+  const [membership] = await transaction
+    .select({ id: eventParticipants.id, credentialId: participantCredentials.id })
+    .from(participantCredentials)
+    .innerJoin(
+      eventParticipants,
+      eq(eventParticipants.participantId, participantCredentials.participantId),
+    )
+    .where(
+      and(
+        eq(participantCredentials.tokenHash, tokenHash),
+        gt(participantCredentials.expiresAt, now),
+        isNull(participantCredentials.revokedAt),
+        eq(eventParticipants.eventSessionId, sessionId),
+      ),
+    )
+    .limit(1);
+  if (!membership) throw participantRequiredError();
+  await transaction
+    .update(participantCredentials)
+    .set({ lastUsedAt: now })
+    .where(eq(participantCredentials.id, membership.credentialId));
+  return membership;
+}
+
+function participantRequiredError() {
+  return new PublicApiError(
+    403,
+    "SESSION_PARTICIPANT_REQUIRED",
+    "Join this event before using participant features.",
+  );
+}
+
+function isNicknameUniqueViolation(error: unknown) {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current; depth += 1) {
+    if (
+      typeof current === "object" &&
+      "code" in current &&
+      current.code === "23505" &&
+      (("constraint" in current &&
+        current.constraint === "event_participants_session_nickname_idx") ||
+        ("constraint_name" in current &&
+          current.constraint_name === "event_participants_session_nickname_idx"))
+    ) {
+      return true;
+    }
+    current =
+      typeof current === "object" && current !== null && "cause" in current
+        ? current.cause
+        : null;
+  }
+  return false;
 }
 
 async function requireLiveSession(lookup: SessionLookup) {

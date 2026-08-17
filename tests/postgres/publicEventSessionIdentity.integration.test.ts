@@ -96,6 +96,7 @@ for (const image of images) {
       );
 
       await applyPostgresMigration(sql, 23);
+      await applyPostgresMigration(sql, 24);
 
       await assertCatalogContract(sql);
       await assertConstraintContract(sql);
@@ -774,8 +775,15 @@ async function assertPublicApiDtoContract(
     else process.env.SITE_URL = previousSiteUrl;
     assert.equal(requestResponse.status, 201);
     const requestBody = (await requestResponse.json()) as unknown;
-    assert.deepEqual(requestBody, { request: { status: "pending" } });
-    assertNoForbiddenPublicFields(requestBody);
+    const createdRequest = (requestBody as {
+      request: { id: string; status: string };
+    }).request;
+    assert.match(
+      createdRequest.id,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    assert.deepEqual(Object.keys(createdRequest).sort(), ["id", "status"]);
+    assert.equal(createdRequest.status, "pending");
   });
 }
 

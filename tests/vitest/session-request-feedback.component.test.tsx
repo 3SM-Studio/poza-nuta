@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +14,9 @@ import { SessionRequestPage } from "@/components/public/session-request-page";
 
 const {
   createRequest,
+  getParticipantRequests,
+  cancelParticipantRequest,
+  renameParticipant,
   getEvent,
   getQueue,
   realtime,
@@ -22,6 +26,9 @@ const {
   toastError,
 } = vi.hoisted(() => ({
     createRequest: vi.fn(),
+    getParticipantRequests: vi.fn(),
+    cancelParticipantRequest: vi.fn(),
+    renameParticipant: vi.fn(),
     getEvent: vi.fn(),
     getQueue: vi.fn(),
     realtime: {
@@ -39,9 +46,12 @@ const {
   }));
 
 vi.mock("@/components/public/session-api", () => ({
+  cancelParticipantRequest,
   createSessionRequest: createRequest,
+  getParticipantRequests,
   getSessionEvent: getEvent,
   getSessionQueue: getQueue,
+  renameSessionParticipant: renameParticipant,
   searchSessionSongs: searchSongs,
   SessionClientError: class SessionClientError extends Error {
     constructor(
@@ -100,6 +110,9 @@ const song = {
 describe("session request feedback", () => {
   beforeEach(() => {
     createRequest.mockReset();
+    getParticipantRequests.mockReset();
+    cancelParticipantRequest.mockReset();
+    renameParticipant.mockReset();
     getEvent.mockReset();
     getQueue.mockReset();
     realtime.onInvalidate = null;
@@ -113,6 +126,7 @@ describe("session request feedback", () => {
       items: [],
     });
     searchSongs.mockResolvedValue([song]);
+    getParticipantRequests.mockResolvedValue({ items: [] });
   });
 
   it("keeps field validation inline without a toast", () => {
@@ -128,8 +142,23 @@ describe("session request feedback", () => {
     expect(createRequest).not.toHaveBeenCalled();
   });
 
-  it("shows a success toast and a durable pending request state", async () => {
+  it("shows a success toast and refreshes the server-backed request list", async () => {
     createRequest.mockResolvedValue({});
+    getParticipantRequests
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({
+        items: [
+          {
+            id: "c09f9509-0677-45cc-98b2-b6f3892035de",
+            title: "Test Song",
+            artist: "Test Artist",
+            status: "pending",
+            queuePosition: null,
+            isNext: false,
+            createdAt: "2026-07-18T18:00:00.000Z",
+          },
+        ],
+      });
     render(
       <SessionRequestPage
         sessionToken="AbCdEfGhIjKlMnOpQrStUv"
@@ -143,10 +172,9 @@ describe("session request feedback", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Dodano zgłoszenie", {
       description: "Operator musi je zatwierdzić.",
     });
-    expect(screen.getByText("Twoje ostatnie zgłoszenie")).toBeVisible();
-    expect(screen.getByText("Oczekujące")).toBeVisible();
-    expect(screen.getByText(/Test Song/)).toBeVisible();
-    expect(screen.getByText(/Zgłaszający: Ala/)).toBeVisible();
+    expect(await screen.findByText("Moje zgłoszenia")).toBeVisible();
+    expect(await screen.findByText("Test Song")).toBeVisible();
+    expect(screen.queryByText("Twoje ostatnie zgłoszenie")).not.toBeInTheDocument();
     expect(createRequest).toHaveBeenCalledWith("AbCdEfGhIjKlMnOpQrStUv", {
       songId: 11,
     });
@@ -171,6 +199,193 @@ describe("session request feedback", () => {
     ).toBeVisible();
     expect(toastSuccess).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("renames the participant and cancels only a pending owned request", async () => {
+    const item = {
+      id: "c09f9509-0677-45cc-98b2-b6f3892035de",
+      title: "Test Song",
+      artist: "Test Artist",
+      status: "pending" as const,
+      queuePosition: null,
+      isNext: false,
+      createdAt: "2026-07-18T18:00:00.000Z",
+    };
+    getParticipantRequests.mockResolvedValue({ items: [item] });
+    renameParticipant.mockResolvedValue({ participant: { displayName: "Nowa Ala" } });
+    cancelParticipantRequest.mockResolvedValue({ request: { id: item.id, status: "skipped" } });
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={event}
+        participantDisplayName="Ala"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Zmień nazwę w tym wydarzeniu"), {
+      target: { value: "Nowa Ala" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Zapisz" }));
+    await waitFor(() =>
+      expect(renameParticipant).toHaveBeenCalledWith(
+        "AbCdEfGhIjKlMnOpQrStUv",
+        "Nowa Ala",
+      ),
+    );
+    expect(await screen.findByText("Nowa Ala")).toBeVisible();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Anuluj" }));
+    getParticipantRequests.mockResolvedValue({
+      items: [{ ...item, status: "skipped" }],
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Anuluj zgłoszenie" }));
+    await waitFor(() =>
+      expect(cancelParticipantRequest).toHaveBeenCalledWith(
+        "AbCdEfGhIjKlMnOpQrStUv",
+        item.id,
+      ),
+    );
+    expect(await screen.findByText("Pominięte")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Anuluj" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["one ASCII character", "A", null],
+    ["two ASCII characters", "AB", "AB"],
+    ["24 ASCII characters", "A".repeat(24), "A".repeat(24)],
+    ["25 ASCII characters", "A".repeat(25), null],
+    ["24 emoji", "🎤".repeat(24), "🎤".repeat(24)],
+    ["25 emoji", "🎤".repeat(25), null],
+    ["one emoji", "🎤", null],
+    ["decomposed Unicode and whitespace", "  Żo\u0301łć\t  A  ", "Żółć A"],
+  ] as const)(
+    "uses backend-compatible Unicode rename validation for %s",
+    async (_label, value, expectedDisplayName) => {
+      renameParticipant.mockResolvedValue({
+        participant: { displayName: expectedDisplayName ?? "unchanged" },
+      });
+      render(
+        <SessionRequestPage
+          sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+          event={event}
+          participantDisplayName="Ala"
+        />,
+      );
+      const input = screen.getByLabelText("Zmień nazwę w tym wydarzeniu");
+
+      expect(input).not.toHaveAttribute("minlength");
+      expect(input).not.toHaveAttribute("maxlength");
+      fireEvent.change(input, { target: { value } });
+      fireEvent.click(screen.getByRole("button", { name: "Zapisz" }));
+
+      if (expectedDisplayName === null) {
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+          "Nazwa musi mieć od 2 do 24 znaków.",
+        );
+        expect(renameParticipant).not.toHaveBeenCalled();
+        return;
+      }
+
+      await waitFor(() =>
+        expect(renameParticipant).toHaveBeenCalledWith(
+          "AbCdEfGhIjKlMnOpQrStUv",
+          expectedDisplayName,
+        ),
+      );
+    },
+  );
+
+  it("keeps one cancel dialog pending and blocks every other cancel trigger", async () => {
+    const first = {
+      id: "c09f9509-0677-45cc-98b2-b6f3892035de",
+      title: "First Song",
+      artist: "Test Artist",
+      status: "pending" as const,
+      queuePosition: null,
+      isNext: false,
+      createdAt: "2026-07-18T18:00:00.000Z",
+    };
+    const second = {
+      ...first,
+      id: "d09f9509-0677-45cc-98b2-b6f3892035de",
+      title: "Second Song",
+    };
+    const cancellation = deferred<{
+      request: { id: string; status: "skipped" };
+    }>();
+    getParticipantRequests.mockResolvedValue({ items: [first, second] });
+    cancelParticipantRequest.mockImplementation(() => {
+      getParticipantRequests.mockResolvedValue({
+        items: [{ ...first, status: "skipped" as const }, second],
+      });
+      return cancellation.promise;
+    });
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={event}
+        participantDisplayName="Ala"
+      />,
+    );
+
+    const firstRequest = await screen.findByText("First Song");
+    const firstArticle = firstRequest.closest("article")!;
+    const secondRequest = await screen.findByText("Second Song");
+    const secondArticle = secondRequest.closest("article")!;
+    const firstCancelTrigger = within(firstArticle).getByRole("button", {
+      name: "Anuluj",
+    });
+    const secondCancelTrigger = within(secondArticle).getByRole("button", {
+      name: "Anuluj",
+    });
+    fireEvent.click(firstCancelTrigger);
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Anuluj zgłoszenie",
+      }),
+    );
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).getByRole("button", { name: "Anuluję…" }),
+    ).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Wróć" })).toBeDisabled();
+    expect(firstCancelTrigger).toBeDisabled();
+    expect(secondCancelTrigger).toBeDisabled();
+    fireEvent.click(firstCancelTrigger);
+    fireEvent.click(secondCancelTrigger);
+    expect(cancelParticipantRequest).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      cancellation.resolve({
+        request: { id: first.id, status: "skipped" },
+      });
+      await cancellation.promise;
+    });
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(cancelParticipantRequest).toHaveBeenCalledOnce();
+    expect(await screen.findByText("Pominięte")).toBeVisible();
+  });
+
+  it("uses the public queue broadcast to refetch owned requests without polling", async () => {
+    getEvent.mockResolvedValue({ accessStatus: "active", event });
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={event}
+        participantDisplayName="Ala"
+      />,
+    );
+    await waitFor(() => expect(getParticipantRequests).toHaveBeenCalledOnce());
+    getParticipantRequests.mockClear();
+
+    await act(async () => {
+      await realtime.onInvalidate?.("broadcast", new AbortController().signal);
+    });
+
+    expect(getParticipantRequests).toHaveBeenCalled();
+    expect(getQueue).not.toHaveBeenCalled();
   });
 
   it("shows rate limiting as a persistent alert", async () => {
@@ -232,4 +447,14 @@ async function completeRequestForm() {
   fireEvent.click(screen.getByRole("button", { name: "Szukaj" }));
   fireEvent.click(await screen.findByRole("button", { name: /Test Song/ }));
   fireEvent.click(screen.getByRole("button", { name: "Dodaj do kolejki" }));
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }

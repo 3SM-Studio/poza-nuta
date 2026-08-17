@@ -605,7 +605,9 @@ export function EventQueuePanel({
     refreshFromRealtime,
   );
 
-  async function refreshQueue() {
+  async function refreshQueue({
+    announceSuccess = true,
+  }: { announceSuccess?: boolean } = {}): Promise<boolean> {
     const canonicalGeneration = beginCanonicalRequest();
     const mutationVersionAtStart = localMutationVersionRef.current;
     const controller = new AbortController();
@@ -626,7 +628,7 @@ export function EventQueuePanel({
       );
 
       if (!isCanonicalRequestCurrent(canonicalGeneration)) {
-        return;
+        return false;
       }
 
       if (
@@ -634,26 +636,28 @@ export function EventQueuePanel({
         localMutationVersionRef.current !== mutationVersionAtStart
       ) {
         realtimeRefreshQueuedRef.current = true;
-        return;
+        return false;
       }
 
       replaceQueueBase(response.items);
       setError(null);
       setErrorSource(null);
-      toast.success("Kolejka zaktualizowana");
+      if (announceSuccess) toast.success("Kolejka zaktualizowana");
+      return true;
     } catch (caughtError) {
       if (
         controller.signal.aborted ||
         isAbortError(caughtError) ||
         !isCanonicalRequestCurrent(canonicalGeneration)
       ) {
-        return;
+        return false;
       }
 
       if (!handleAuthenticationError(caughtError)) {
         setError(getRefreshErrorMessage());
         setErrorSource("refresh");
       }
+      return false;
     } finally {
       if (localRefreshAbortControllerRef.current === controller) {
         localRefreshAbortControllerRef.current = null;
@@ -921,6 +925,7 @@ export function EventQueuePanel({
     operationId: number,
   ) {
     const queueWasClosed = isEventQueueClosedError(caughtError);
+    const activeDuplicate = isActiveQueueDuplicateError(caughtError);
 
     if (queueWasClosed) {
       queueClosedRef.current = true;
@@ -982,6 +987,19 @@ export function EventQueuePanel({
         }
       }
 
+      return;
+    }
+
+    if (activeDuplicate) {
+      const refreshed = await refreshQueue({ announceSuccess: false });
+      if (mountedRef.current) {
+        setError(
+          refreshed
+            ? `${getClientErrorMessage(caughtError)} Kolejka została odświeżona.`
+            : `${getClientErrorMessage(caughtError)} Nie udało się odświeżyć kolejki. Odśwież ją ręcznie.`,
+        );
+        setErrorSource("mutation");
+      }
       return;
     }
 
@@ -1821,6 +1839,8 @@ function getClientErrorMessage(error: unknown) {
       return "Status zgłoszenia zmienił się i ta akcja nie jest już dostępna.";
     case "QUEUE_ACTION_CONFLICT":
       return "Zgłoszenie zostało w międzyczasie zmienione. Odśwież kolejkę.";
+    case "QUEUE_ACTIVE_DUPLICATE":
+      return "Ta osoba ma już aktywne zgłoszenie tej piosenki.";
     case "QUEUE_REQUEST_NOT_REORDERABLE":
       return "Można zmieniać kolejność tylko zaakceptowanych zgłoszeń.";
     case "EVENT_QUEUE_CLOSED":
@@ -1853,6 +1873,13 @@ function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
 function isEventQueueClosedError(error: unknown) {
   return (
     error instanceof OperatorClientError && error.code === "EVENT_QUEUE_CLOSED"
+  );
+}
+
+function isActiveQueueDuplicateError(error: unknown) {
+  return (
+    error instanceof OperatorClientError &&
+    error.code === "QUEUE_ACTIVE_DUPLICATE"
   );
 }
 

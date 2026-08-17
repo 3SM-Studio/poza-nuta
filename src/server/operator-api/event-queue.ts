@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, max, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, max, ne, sql } from "drizzle-orm";
 
 import {
   canApplyDashboardEventQueueAction,
@@ -23,6 +23,10 @@ import { isOrganizationPublicId } from "../../lib/organization-public-id";
 import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier";
 import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
 import { getDb } from "../db";
+import {
+  ACTIVE_PUBLIC_REQUEST_STATUSES,
+  isActivePublicRequestStatus,
+} from "../public-api/queue-policy";
 import {
   getDashboardOrganizationEventForAuthUser,
 } from "./organizations";
@@ -122,8 +126,11 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     const [queueRequest] = await transaction
       .select({
         id: songRequests.id,
+        songId: songRequests.songId,
         status: songRequests.status,
         position: songRequests.position,
+        requestedBy: songRequests.requestedBy,
+        eventParticipantId: songRequests.eventParticipantId,
         version: songRequests.version,
       })
       .from(songRequests)
@@ -154,6 +161,36 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       );
     }
 
+    const targetStatus = getDashboardEventQueueTargetStatus(input.action);
+
+    if (
+      queueRequest.requestedBy === "public" &&
+      queueRequest.eventParticipantId !== null &&
+      isActivePublicRequestStatus(targetStatus)
+    ) {
+      const [activeDuplicate] = await transaction
+        .select({ id: songRequests.id })
+        .from(songRequests)
+        .where(
+          and(
+            eq(songRequests.eventId, context.event.id),
+            eq(songRequests.eventParticipantId, queueRequest.eventParticipantId),
+            eq(songRequests.songId, queueRequest.songId),
+            inArray(songRequests.status, ACTIVE_PUBLIC_REQUEST_STATUSES),
+            ne(songRequests.id, queueRequest.id),
+          ),
+        )
+        .limit(1);
+
+      if (activeDuplicate) {
+        throw new OperatorApiError(
+          409,
+          "QUEUE_ACTIVE_DUPLICATE",
+          "This participant already has an active request for the selected song.",
+        );
+      }
+    }
+
     const changedAt = new Date();
     const completedNowRequestCount =
       input.action === "start"
@@ -163,7 +200,6 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
             changedAt,
           )
         : 0;
-    const targetStatus = getDashboardEventQueueTargetStatus(input.action);
     let targetPosition = 0;
 
     if (targetStatus === "approved") {

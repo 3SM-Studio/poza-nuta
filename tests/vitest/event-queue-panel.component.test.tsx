@@ -802,6 +802,62 @@ describe("EventQueuePanel", () => {
     finishCanonicalRefresh({ items: [pending] });
   });
 
+  it("refreshes the canonical queue after an active duplicate blocks restore", async () => {
+    const skipped = makeItem(1, "skipped");
+    const activeDuplicate = makeItem(2, "pending");
+    runAction.mockRejectedValue(
+      new OperatorClientError(
+        409,
+        "QUEUE_ACTIVE_DUPLICATE",
+        "Active duplicate",
+      ),
+    );
+    getQueue.mockResolvedValue({ items: [skipped, activeDuplicate] });
+    renderPanel([skipped]);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Przywróć: Singer 1 — Song 1",
+      }),
+    );
+
+    await waitFor(() => expect(getQueue).toHaveBeenCalled());
+    await waitFor(() => expect(getItemStatus(1)).toBe("skipped"));
+    expect(screen.getByText("Singer 2")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Ta osoba ma już aktywne zgłoszenie tej piosenki",
+    );
+    expect(toastSuccess).not.toHaveBeenCalledWith("Kolejka zaktualizowana");
+  });
+
+  it("reports when the canonical refresh after an active duplicate fails", async () => {
+    const skipped = makeItem(1, "skipped");
+    runAction.mockRejectedValue(
+      new OperatorClientError(
+        409,
+        "QUEUE_ACTIVE_DUPLICATE",
+        "Active duplicate",
+      ),
+    );
+    getQueue.mockRejectedValue(new Error("offline"));
+    renderPanel([skipped]);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Przywróć: Singer 1 — Song 1",
+      }),
+    );
+
+    await waitFor(() => expect(getQueue).toHaveBeenCalled());
+    await waitFor(() => expect(getItemStatus(1)).toBe("skipped"));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Nie udało się odświeżyć kolejki. Odśwież ją ręcznie.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "Kolejka została odświeżona",
+    );
+  });
+
   it("switches to dedicated read-only state when the server closes the queue", async () => {
     const pending = makeItem(1, "pending");
     runAction.mockRejectedValue(

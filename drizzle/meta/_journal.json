@@ -169,6 +169,13 @@
       "when": 1786975649380,
       "tag": "0023_foamy_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786979638742,
+      "tag": "0024_remarkable_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

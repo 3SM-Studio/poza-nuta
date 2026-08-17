@@ -16,6 +16,11 @@ export type ParticipantSessionRequestInput = {
   songId: number;
 };
 
+export type ParticipantRenameInput = ParticipantJoinInput;
+
+const PUBLIC_REQUEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function validateParticipantJoinInput(
   input: unknown,
 ): ValidationResult<ParticipantJoinInput> {
@@ -47,6 +52,12 @@ export function validateParticipantJoinInput(
   }
 
   return { success: true, data: nickname };
+}
+
+export const validateParticipantRenameInput = validateParticipantJoinInput;
+
+export function isPublicRequestId(value: string) {
+  return PUBLIC_REQUEST_ID_PATTERN.test(value);
 }
 
 export function validateParticipantSessionRequestInput(
