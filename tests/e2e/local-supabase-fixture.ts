@@ -12,6 +12,11 @@ export type LocalSupabaseFixture = {
   sessionCode: string;
   publicToken: string;
   requestDisplayName: string;
+  queueRequestNames: {
+    pending: string;
+    approved: string;
+    rejected: string;
+  };
   readEventState(): Promise<{
     status: string;
     isActivePublicEvent: boolean;
@@ -21,6 +26,16 @@ export type LocalSupabaseFixture = {
     publicToken: string;
     requestStatus: string;
   }>;
+  readQueueStatuses(): Promise<Record<string, string>>;
+  readQueueRows(): Promise<
+    {
+      requestId: number;
+      displayName: string;
+      status: string;
+      position: number;
+    }[]
+  >;
+  resetQueue(): Promise<void>;
   cleanup(): Promise<void>;
 };
 
@@ -46,6 +61,11 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
   const sessionCode = createSessionCode();
   const publicToken = randomBytes(16).toString("base64url");
   const requestDisplayName = "E2E Queue Evidence";
+  const queueRequestNames = {
+    pending: requestDisplayName,
+    approved: "E2E Queue Approved",
+    rejected: "E2E Queue Rejected",
+  };
   let authUserId: string | null = null;
   let workspaceId: number | null = null;
   let operatorId: number | null = null;
@@ -219,15 +239,34 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           position,
           requested_by
         )
-        VALUES (
-          ${event.id},
-          ${song.id},
-          ${requestDisplayName},
-          ${requestDisplayName},
-          'pending',
-          1,
-          'public'
-        )
+        VALUES
+          (
+            ${event.id},
+            ${song.id},
+            ${queueRequestNames.pending},
+            ${queueRequestNames.pending},
+            'pending',
+            0,
+            'public'
+          ),
+          (
+            ${event.id},
+            ${song.id},
+            ${queueRequestNames.approved},
+            ${queueRequestNames.approved},
+            'approved',
+            1,
+            'operator'
+          ),
+          (
+            ${event.id},
+            ${song.id},
+            ${queueRequestNames.rejected},
+            ${queueRequestNames.rejected},
+            'rejected',
+            0,
+            'operator'
+          )
       `;
     });
 
@@ -259,6 +298,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
          AND c.valid_until IS NULL
         JOIN public.song_requests r ON r.event_id = e.id
         WHERE e.public_id = ${eventPublicId}::uuid
+          AND r.display_name = ${requestDisplayName}
       `;
 
       if (!state) {
@@ -274,6 +314,77 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
         publicToken: state.public_token,
         requestStatus: state.request_status,
       };
+    }
+
+    async function readQueueStatuses() {
+      const rows = await sql<{ display_name: string; status: string }[]>`
+        SELECT r.display_name, r.status
+        FROM public.song_requests r
+        JOIN public.events e ON e.id = r.event_id
+        WHERE e.public_id = ${eventPublicId}::uuid
+      `;
+
+      return Object.fromEntries(
+        rows.map((row) => [row.display_name, row.status]),
+      );
+    }
+
+    async function readQueueRows() {
+      const rows = await sql<
+        {
+          request_id: number;
+          display_name: string;
+          status: string;
+          position: number;
+        }[]
+      >`
+        SELECT
+          r.id AS request_id,
+          r.display_name,
+          r.status,
+          r.position
+        FROM public.song_requests r
+        JOIN public.events e ON e.id = r.event_id
+        WHERE e.public_id = ${eventPublicId}::uuid
+        ORDER BY r.position, r.id
+      `;
+
+      return rows.map((row) => ({
+        requestId: row.request_id,
+        displayName: row.display_name,
+        status: row.status,
+        position: row.position,
+      }));
+    }
+
+    async function resetQueue() {
+      await sql`
+        UPDATE public.song_requests r
+        SET
+          status = (
+            CASE r.display_name
+              WHEN ${queueRequestNames.pending} THEN 'pending'
+              WHEN ${queueRequestNames.approved} THEN 'approved'
+              WHEN ${queueRequestNames.rejected} THEN 'rejected'
+            END
+          )::public.song_request_status,
+          position = CASE
+            WHEN r.display_name = ${queueRequestNames.approved} THEN 1
+            ELSE 0
+          END,
+          started_at = NULL,
+          completed_at = NULL,
+          updated_at = now(),
+          version = r.version + 1
+        FROM public.events e
+        WHERE r.event_id = e.id
+          AND e.public_id = ${eventPublicId}::uuid
+          AND r.display_name IN (
+            ${queueRequestNames.pending},
+            ${queueRequestNames.approved},
+            ${queueRequestNames.rejected}
+          )
+      `;
     }
 
     async function cleanup() {
@@ -332,7 +443,11 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       sessionCode,
       publicToken,
       requestDisplayName,
+      queueRequestNames,
       readEventState,
+      readQueueStatuses,
+      readQueueRows,
+      resetQueue,
       cleanup,
     };
   } catch (error) {

@@ -537,9 +537,10 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
   assert.match(panelSource, /onClick=\{\(\) => void refreshQueue\(\)\}/);
   assert.match(panelSource, /useDashboardQueueRealtime/);
   assert.match(panelSource, /applyOptimisticDashboardEventQueueAction/);
-  assert.match(panelSource, /restoreDashboardEventQueueItems/);
+  assert.match(panelSource, /type QueueOptimisticState/);
+  assert.match(panelSource, /replayQueueOptimisticOperations/);
   assert.match(panelSource, /reconcileDashboardEventQueueItem/);
-  assert.match(panelSource, /pendingMutationCountRef/);
+  assert.match(panelSource, /pendingOperations/);
   assert.match(panelSource, /localMutationVersionRef/);
   assert.match(panelSource, /realtimeRefreshQueuedRef/);
   assert.match(panelSource, /flushQueuedRealtimeRefresh/);
@@ -551,10 +552,10 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
   );
   assert.doesNotMatch(panelSource, /const isBusy = pendingOperation !== null/);
   assert.doesNotMatch(panelSource, /disabled=\{pendingOperation !== null\}/);
-  assert.doesNotMatch(panelSource, /pendingOperations|Zapisywanie\.\.\./);
+  assert.doesNotMatch(panelSource, /Zapisywanie\.\.\./);
   assert.doesNotMatch(panelSource, /disabled=\{isRequestPending/);
   assert.doesNotMatch(panelSource, /setInterval|setTimeout/);
-  assert.match(panelSource, /Nie ma jeszcze zgłoszeń z linku sesji/);
+  assert.match(panelSource, /Nowe zgłoszenia z linku sesji pojawią się tutaj/);
 });
 
 test("event queue panel does not refetch the whole queue after each mutation", () => {

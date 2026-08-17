@@ -20,6 +20,202 @@ test.describe("public event and session identity with local Supabase Auth", () =
     await fixture?.cleanup();
   });
 
+  test("keeps real pointer and keyboard DnD aligned across desktop and mobile", async ({
+    page,
+  }) => {
+    const browserErrors: string[] = [];
+    observeBrowserErrors(page, browserErrors);
+    await fixture.resetQueue();
+    await signInLocalOperator(page, fixture);
+
+    const queuePath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+    await page.setViewportSize({ width: 1440, height: 1200 });
+    await page.goto(queuePath);
+    await expect(
+      page.getByRole("heading", { name: "Kolejka operacyjna" }),
+    ).toBeVisible();
+
+    const rejectedName = fixture.queueRequestNames.rejected;
+    const approvedName = fixture.queueRequestNames.approved;
+    const pendingName = fixture.queueRequestNames.pending;
+
+    await dragQueueRequest({
+      page,
+      sourceLane: "rejected",
+      requestName: rejectedName,
+      targetLane: "approved",
+      cancel: true,
+      verifyGeometry: true,
+    });
+    await expectQueueStatus(fixture, rejectedName, "rejected");
+
+    await dragQueueRequest({
+      page,
+      sourceLane: "approved",
+      requestName: approvedName,
+      targetLane: "rejected",
+    });
+    await expectQueueStatus(fixture, approvedName, "rejected");
+
+    await dragQueueRequest({
+      page,
+      sourceLane: "rejected",
+      requestName: rejectedName,
+      targetLane: "approved",
+      verifyGeometry: true,
+    });
+    await expectQueueStatus(fixture, rejectedName, "approved");
+
+    await dragQueueRequest({
+      page,
+      sourceLane: "pending",
+      requestName: pendingName,
+      targetLane: "approved",
+    });
+    await expectQueueStatus(fixture, pendingName, "approved");
+
+    const approvedLane = queueLane(page, "approved");
+    const orderBefore = await queueRequestNamesInLane(approvedLane);
+    await dragQueueRequest({
+      page,
+      sourceLane: "approved",
+      requestName: pendingName,
+      targetLane: "approved",
+      targetRequestName: rejectedName,
+    });
+    await expect
+      .poll(() => queueRequestNamesInLane(approvedLane))
+      .not.toEqual(orderBefore);
+    const persistedOrder = await queueRequestNamesInLane(approvedLane);
+    await expect
+      .poll(async () =>
+        (await fixture.readQueueRows())
+          .filter((row) => row.status === "approved")
+          .sort(
+            (left, right) =>
+              left.position - right.position || left.requestId - right.requestId,
+          )
+          .map((row) => ({
+            displayName: row.displayName,
+            position: row.position,
+          })),
+      )
+      .toEqual(
+        persistedOrder.map((displayName, index) => ({
+          displayName,
+          position: index + 1,
+        })),
+      );
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Kolejka operacyjna" }),
+    ).toBeVisible();
+    expect(await queueRequestNamesInLane(approvedLane)).toEqual(persistedOrder);
+
+    await dragQueueRequest({
+      page,
+      sourceLane: "rejected",
+      requestName: approvedName,
+      targetLane: "pending",
+    });
+    await expectQueueStatus(fixture, approvedName, "pending");
+
+    const [keyboardReorderName, keyboardNeighborName] =
+      await queueRequestNamesInLane(approvedLane);
+    if (!keyboardReorderName || !keyboardNeighborName) {
+      throw new Error("Keyboard DnD requires two approved requests.");
+    }
+
+    const keyboardReorderSource = queueRequest(
+      page,
+      "approved",
+      keyboardReorderName,
+    );
+    const keyboardReorderHandle = keyboardReorderSource.getByRole("button", {
+      name: new RegExp(
+        `^Przeciągnij zgłoszenie: ${escapeRegExp(keyboardReorderName)}`,
+      ),
+    });
+    await keyboardReorderHandle.focus();
+    await keyboardReorderHandle.press("Space");
+    await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await page.keyboard.press("Space");
+    await expect
+      .poll(() => queueRequestNamesInLane(approvedLane))
+      .toEqual([keyboardNeighborName, keyboardReorderName]);
+    await expect(
+      queueRequest(page, "approved", keyboardReorderName),
+    ).toBeFocused();
+
+    const keyboardSource = queueRequest(
+      page,
+      "approved",
+      keyboardReorderName,
+    );
+    const keyboardHandle = keyboardSource.getByRole("button", {
+      name: new RegExp(
+        `^Przeciągnij zgłoszenie: ${escapeRegExp(keyboardReorderName)}`,
+      ),
+    });
+    await keyboardHandle.focus();
+    await keyboardHandle.press("Space");
+    await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
+    const rejectedDropStatus = queueLane(page, "rejected").getByRole("status");
+    await page.keyboard.press("ArrowDown");
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    await expect(rejectedDropStatus).toContainText("Upuść w sekcji");
+    await page.keyboard.press("Space");
+    await expectQueueStatus(fixture, keyboardReorderName, "rejected");
+    await expect(
+      queueRequest(page, "rejected", keyboardReorderName),
+    ).toBeFocused();
+
+    const keyboardCancelSource = queueRequest(
+      page,
+      "approved",
+      keyboardNeighborName,
+    );
+    const keyboardCancelHandle = keyboardCancelSource.getByRole("button", {
+      name: new RegExp(
+        `^Przeciągnij zgłoszenie: ${escapeRegExp(keyboardNeighborName)}`,
+      ),
+    });
+    await keyboardCancelHandle.focus();
+    await keyboardCancelHandle.press("Space");
+    await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
+    await keyboardCancelHandle.press("Escape");
+    await expect(page.locator("[data-queue-drag-overlay]")).toHaveCount(0);
+    await expectQueueStatus(fixture, keyboardNeighborName, "approved");
+    await expect(keyboardCancelSource).toBeFocused();
+
+    await fixture.resetQueue();
+    await page.setViewportSize({ width: 390, height: 390 });
+    await page.reload();
+    await expect(page.locator("[data-queue-board]:visible")).toBeVisible();
+    await expect(queueLane(page, "pending")).toHaveCSS(
+      "grid-column-start",
+      "auto",
+    );
+
+    await dragQueueRequest({
+      page,
+      sourceLane: "rejected",
+      requestName: rejectedName,
+      targetLane: "pending",
+      verifyGeometry: true,
+      verifyAutoScroll: true,
+    });
+    await expectQueueStatus(fixture, rejectedName, "pending");
+    expect(browserErrors).toEqual([]);
+  });
+
   test("covers authenticated lifecycle and canonical public access", async ({
     browser,
   }) => {
@@ -33,11 +229,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
     observeBrowserErrors(anonymousPage, browserErrors);
 
     try {
-      await page.goto("/sign-in");
-      await page.getByLabel("E-mail").fill(fixture.email);
-      await page.getByLabel("Hasło").fill(fixture.password);
-      await page.getByRole("button", { name: "Zaloguj się" }).click();
-      await expect(page).toHaveURL(/\/dashboard(?:\/|$)/);
+      await signInLocalOperator(page, fixture);
 
       const eventBasePath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}`;
       const settingsPath = `${eventBasePath}/settings`;
@@ -60,10 +252,18 @@ test.describe("public event and session identity with local Supabase Auth", () =
 
       await page.goto(sharePath);
       await expect(
-        page.getByRole("heading", { name: "Udostępnij wydarzenie" }),
+        page.getByRole("heading", { name: fixture.eventName }),
       ).toBeVisible();
-      await expect(page.getByText(`/s/${fixture.publicToken}`, { exact: false })).toBeVisible();
-      await expect(page.getByAltText(/Kod QR/)).toBeVisible();
+      const shareMain = page.locator("#dashboard-main");
+      await expect(
+        shareMain.getByText("Dostęp do sesji", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        shareMain.getByText(`/s/${fixture.publicToken}`, { exact: false }),
+      ).toBeVisible();
+      await expect(
+        shareMain.getByAltText("Kod QR prowadzący do stałego adresu sesji"),
+      ).toBeVisible();
 
       await page.goto(settingsPath);
       const beforeRotation = await fixture.readEventState();
@@ -124,7 +324,9 @@ test.describe("public event and session identity with local Supabase Auth", () =
 
       await page.goto(queuePath);
       await expect(
-        page.getByRole("heading", { name: "Kolejka wydarzenia" }),
+        page
+          .locator("#dashboard-main")
+          .getByRole("heading", { name: "Kolejka operacyjna" }),
       ).toBeVisible();
       await expect(
         page
@@ -231,6 +433,219 @@ function sanitizeBrowserUrl(value: string) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function signInLocalOperator(
+  page: import("@playwright/test").Page,
+  fixture: LocalSupabaseFixture,
+) {
+  await page.goto("/sign-in");
+  await page.getByLabel("E-mail").fill(fixture.email);
+  await page.getByLabel("Hasło").fill(fixture.password);
+  await page.getByRole("button", { name: "Zaloguj się" }).click();
+  await expect(page).toHaveURL(/\/dashboard(?:\/|$)/);
+  await page.waitForLoadState("networkidle");
+}
+
+function queueLane(
+  page: import("@playwright/test").Page,
+  lane: "pending" | "approved" | "rejected",
+) {
+  return page.locator(`[data-queue-lane="${lane}"]:visible`);
+}
+
+function queueRequest(
+  page: import("@playwright/test").Page,
+  lane: "pending" | "approved" | "rejected",
+  requestName: string,
+) {
+  return queueLane(page, lane)
+    .locator("[data-queue-request-id]")
+    .filter({ hasText: requestName });
+}
+
+async function queueRequestNamesInLane(
+  lane: import("@playwright/test").Locator,
+) {
+  return lane.locator("[data-queue-request-id] strong").allTextContents();
+}
+
+async function dragQueueRequest({
+  page,
+  sourceLane,
+  requestName,
+  targetLane,
+  targetRequestName,
+  cancel = false,
+  verifyGeometry = false,
+  verifyAutoScroll = false,
+}: {
+  page: import("@playwright/test").Page;
+  sourceLane: "pending" | "approved" | "rejected";
+  requestName: string;
+  targetLane: "pending" | "approved" | "rejected";
+  targetRequestName?: string;
+  cancel?: boolean;
+  verifyGeometry?: boolean;
+  verifyAutoScroll?: boolean;
+}) {
+  const source = queueRequest(page, sourceLane, requestName);
+  const handle = source.getByRole("button", {
+    name: new RegExp(`^Przeciągnij zgłoszenie: ${escapeRegExp(requestName)}`),
+  });
+  const target = targetRequestName
+    ? queueRequest(page, targetLane, targetRequestName)
+    : queueLane(page, targetLane);
+
+  await expect(source).toBeVisible();
+  await expect(target).toBeVisible();
+  await source.scrollIntoViewIfNeeded();
+  const sourceBox = await source.boundingBox();
+  const handleBox = await handle.boundingBox();
+  let targetBox = await target.boundingBox();
+
+  if (!sourceBox || !handleBox || !targetBox) {
+    throw new Error("Queue DnD geometry is unavailable.");
+  }
+
+  const grabPoint = {
+    x: handleBox.x + handleBox.width / 2,
+    y: handleBox.y + handleBox.height / 2,
+  };
+  const grabOffset = {
+    x: grabPoint.x - sourceBox.x,
+    y: grabPoint.y - sourceBox.y,
+  };
+  const scrollTopBeforeDrag = verifyAutoScroll
+    ? await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0)
+    : null;
+  const viewportBeforeDrag = page.viewportSize();
+
+  if (verifyAutoScroll) {
+    if (!viewportBeforeDrag) {
+      throw new Error("Queue DnD viewport geometry is unavailable.");
+    }
+    expect(
+      targetBox.y + targetBox.height <= 0 ||
+        targetBox.y >= viewportBeforeDrag.height,
+    ).toBe(true);
+  }
+
+  await page.mouse.move(grabPoint.x, grabPoint.y);
+  await page.mouse.down();
+  const activationPoint = { x: grabPoint.x + 12, y: grabPoint.y + 8 };
+  await page.mouse.move(activationPoint.x, activationPoint.y, { steps: 3 });
+
+  const overlay = page.locator("[data-queue-drag-overlay]");
+  await expect(overlay).toBeVisible();
+
+  if (verifyGeometry) {
+    const overlayBox = await overlay.boundingBox();
+    if (!overlayBox) {
+      throw new Error("Queue DragOverlay geometry is unavailable.");
+    }
+
+    expect(Math.abs(overlayBox.width - sourceBox.width)).toBeLessThan(2);
+    expect(Math.abs(overlayBox.height - sourceBox.height)).toBeLessThan(2);
+    expect(Math.abs(activationPoint.x - overlayBox.x - grabOffset.x)).toBeLessThan(
+      3,
+    );
+    expect(Math.abs(activationPoint.y - overlayBox.y - grabOffset.y)).toBeLessThan(
+      3,
+    );
+  }
+
+  if (cancel) {
+    await page.keyboard.press("Escape");
+    await expect(overlay).toHaveCount(0);
+    return;
+  }
+
+  const viewport = page.viewportSize();
+  if (viewport) {
+    const maxScrollAttempts = verifyAutoScroll ? 30 : 12;
+    for (let attempt = 0; attempt < maxScrollAttempts; attempt += 1) {
+      targetBox = await target.boundingBox();
+      const targetDropY = targetBox
+        ? targetBox.y + Math.min(targetBox.height / 2, 120)
+        : null;
+      if (
+        targetBox &&
+        targetDropY !== null &&
+        targetDropY >= 8 &&
+        targetDropY <= viewport.height - 8
+      ) {
+        break;
+      }
+
+      await page.mouse.move(
+        grabPoint.x,
+        targetBox && targetBox.y < 0 ? 8 : viewport.height - 8,
+        { steps: 4 },
+      );
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+    }
+  }
+
+  if (verifyAutoScroll) {
+    const scrollTopAfterDrag = await page.evaluate(
+      () => document.scrollingElement?.scrollTop ?? 0,
+    );
+    expect(Math.abs(scrollTopAfterDrag - (scrollTopBeforeDrag ?? 0))).toBeGreaterThan(
+      1,
+    );
+  }
+
+  targetBox = await target.boundingBox();
+  if (!targetBox) {
+    throw new Error("Queue DnD target geometry is unavailable after scroll.");
+  }
+
+  const targetPoint = {
+    x: targetBox.x + targetBox.width / 2,
+    y: targetBox.y + Math.min(targetBox.height / 2, 120),
+  };
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 12 });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+
+  if (verifyGeometry) {
+    const targetOverlayBox = await overlay.boundingBox();
+    if (!targetOverlayBox) {
+      throw new Error("Queue DragOverlay target geometry is unavailable.");
+    }
+
+    expect(Math.abs(targetOverlayBox.width - sourceBox.width)).toBeLessThan(2);
+    expect(Math.abs(targetOverlayBox.height - sourceBox.height)).toBeLessThan(2);
+    expect(Math.abs(targetPoint.x - targetOverlayBox.x - grabOffset.x)).toBeLessThan(
+      3,
+    );
+    expect(Math.abs(targetPoint.y - targetOverlayBox.y - grabOffset.y)).toBeLessThan(
+      3,
+    );
+  }
+
+  await page.mouse.up();
+  await expect(overlay).toHaveCount(0);
+}
+
+async function expectQueueStatus(
+  fixture: LocalSupabaseFixture,
+  requestName: string,
+  expectedStatus: string,
+) {
+  await expect
+    .poll(async () => (await fixture.readQueueStatuses())[requestName])
+    .toBe(expectedStatus);
 }
 
 async function waitForEventMutationOrActionError({

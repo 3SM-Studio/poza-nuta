@@ -2,13 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { EventQueuePanel } from "@/components/operator/event-queue-panel";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { getDashboardEventLifecycleStatus } from "@/lib/dashboard-event-lifecycle";
 import { getDashboardOrganizationEventCompatibilityRedirectPath } from "@/lib/dashboard-routes";
 import { getDashboardOrganizationEventQueueForAuthUser } from "@/server/operator-api/event-queue";
 import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/event-route-compatibility";
@@ -69,45 +63,20 @@ export default async function OrganizationEventQueuePage({
   }
 
   return (
-    <div className="grid min-w-0 gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Kolejka wydarzenia</CardTitle>
-          <CardDescription>
-            Zgłoszenia przypisane wyłącznie do tego wydarzenia.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold">
-            <div>
-              <dt>Publiczna kolejka</dt>
-              <dd>
-                {result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"}
-              </dd>
-            </div>
-            <div>
-              <dt>Uprawnienia</dt>
-              <dd>
-                {result.canManage ? "Zarządzanie kolejką" : "Tylko podgląd"}
-              </dd>
-            </div>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <EventQueuePanel
-        organizationId={result.organization.publicId}
-        eventId={result.event.publicId}
-        realtimeEventId={result.event.id}
-        canManage={result.canManage}
-        initialItems={result.items.map((item) => ({
-          ...item,
-          createdAt: item.createdAt.toISOString(),
-          updatedAt: item.updatedAt.toISOString(),
-          startedAt: item.startedAt?.toISOString() ?? null,
-          completedAt: item.completedAt?.toISOString() ?? null,
-        }))}
-      />
-    </div>
+    <EventQueuePanel
+      organizationId={result.organization.publicId}
+      eventId={result.event.publicId}
+      realtimeEventId={result.event.id}
+      canManage={result.canManage}
+      lifecycle={getDashboardEventLifecycleStatus(result.event)}
+      publicQueueEnabled={result.event.publicQueueEnabled}
+      initialItems={result.items.map((item) => ({
+        ...item,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
+        startedAt: item.startedAt?.toISOString() ?? null,
+        completedAt: item.completedAt?.toISOString() ?? null,
+      }))}
+    />
   );
 }

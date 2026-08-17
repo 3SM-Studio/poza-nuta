@@ -1428,7 +1428,8 @@ test("organization event queue route renders the event-scoped management panel",
 
   assert.match(queuePageSource, /getDashboardOrganizationEventQueueForAuthUser/);
   assert.match(queuePageSource, /EventQueuePanel/);
-  assert.match(queuePageSource, /Kolejka wydarzenia/);
+  assert.match(queuePageSource, /getDashboardEventLifecycleStatus/);
+  assert.match(queuePageSource, /publicQueueEnabled={result\.event\.publicQueueEnabled}/);
   assert.doesNotMatch(queuePageSource, /Powrót do wydarzenia|Udostępnij/);
   assert.match(sidebarSource, /getDashboardOrganizationEventQueuePath/);
   assert.match(sidebarSource, /label: "Kolejka"/);
@@ -1681,10 +1682,9 @@ test("event workspace shell owns one safe header while event navigation stays in
     assert.doesNotMatch(pageSource, /<h1\b/);
   }
 
-  assert.match(pageSources[1] ?? "", /Zgłoszenia przypisane wyłącznie/);
-  assert.match(pageSources[1] ?? "", /Publiczna kolejka/);
-  assert.match(pageSources[1] ?? "", /Uprawnienia/);
   assert.match(pageSources[1] ?? "", /<EventQueuePanel/);
+  assert.match(pageSources[1] ?? "", /lifecycle={getDashboardEventLifecycleStatus/);
+  assert.match(pageSources[1] ?? "", /publicQueueEnabled=/);
   assert.match(pageSources[2] ?? "", /kanonicznej sesji wydarzenia/);
   assert.match(pageSources[2] ?? "", /Ogólny kod wejścia/);
   assert.match(pageSources[2] ?? "", /\/join/);
