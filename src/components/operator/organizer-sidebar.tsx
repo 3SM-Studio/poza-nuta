@@ -111,8 +111,8 @@ export function getOrganizerNavigationGroups({
     return [
       {
         label: "Wydarzenie",
-        contextLabel: event.name,
         ariaLabel: "Nawigacja wydarzenia",
+        hideLabel: true,
         items: [
           {
             href: getDashboardOrganizationEventPath(
@@ -222,6 +222,9 @@ export function OrganizerSidebar({
       pathname={pathname}
       managementTheme
       header={<DashboardOrganizationSwitcher organizations={organizations} />}
+      navigationHeading={
+        event ? { label: "Wydarzenie", title: event.name } : undefined
+      }
       user={{
         displayName: operatorName,
         initials: getInitials(operatorName),

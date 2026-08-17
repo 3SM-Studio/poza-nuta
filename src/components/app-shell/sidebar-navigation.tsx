@@ -11,11 +11,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 import {
   getActiveNavigationHref,
@@ -43,30 +38,9 @@ export function SidebarNavigation({
           key={group.label}
           {...(group.ariaLabel ? { "aria-label": group.ariaLabel } : {})}
         >
-          <SidebarGroupLabel
-            className={
-              group.contextLabel
-                ? "h-auto min-w-0 flex-col items-start gap-0.5 py-2"
-                : undefined
-            }
-          >
-            <span>{group.label}</span>
-            {group.contextLabel ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="w-full min-w-0 truncate font-semibold text-sidebar-foreground">
-                    {group.contextLabel}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  data-management-theme={managementTheme ? "true" : undefined}
-                >
-                  {group.contextLabel}
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
-          </SidebarGroupLabel>
+          {group.hideLabel ? null : (
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu>
               {group.items.map((item) => {

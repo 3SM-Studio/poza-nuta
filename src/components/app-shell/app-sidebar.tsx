@@ -16,6 +16,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 import type { AppNavigationGroup } from "./navigation";
 import { AppSidebarUser, type AppSidebarUserModel } from "./app-sidebar-user";
@@ -30,6 +31,7 @@ export function AppSidebar({
   user,
   managementTheme = false,
   header,
+  navigationHeading,
 }: {
   ariaLabel: string;
   homeHref: string;
@@ -39,6 +41,10 @@ export function AppSidebar({
   user: AppSidebarUserModel;
   managementTheme?: boolean;
   header?: ReactNode;
+  navigationHeading?: {
+    label: string;
+    title: string;
+  };
 }) {
   const { setOpenMobile } = useSidebar();
 
@@ -76,15 +82,39 @@ export function AppSidebar({
             </SidebarMenuItem>
           </SidebarMenu>
         )}
+        {navigationHeading ? (
+          <div
+            data-slot="sidebar-navigation-heading"
+            className="min-w-0 px-2 pb-1 group-data-[collapsible=icon]:hidden"
+          >
+            <span className="block text-xs font-medium text-muted-foreground">
+              {navigationHeading.label}
+            </span>
+            <strong
+              className="mt-0.5 block truncate text-sm text-sidebar-foreground"
+              title={navigationHeading.title}
+            >
+              {navigationHeading.title}
+            </strong>
+          </div>
+        ) : null}
       </SidebarHeader>
       <SidebarSeparator />
-      <SidebarContent>
-        <SidebarNavigation
-          groups={groups}
-          pathname={pathname}
-          ariaLabel={ariaLabel}
-          managementTheme={managementTheme}
-        />
+      <SidebarContent className="overflow-hidden">
+        <ScrollArea
+          data-sidebar-navigation-scroll
+          className="min-h-0 flex-1"
+          viewportProps={{
+            "aria-label": `${ariaLabel} — przewijana sekcja`,
+          }}
+        >
+          <SidebarNavigation
+            groups={groups}
+            pathname={pathname}
+            ariaLabel={ariaLabel}
+            managementTheme={managementTheme}
+          />
+        </ScrollArea>
       </SidebarContent>
       <SidebarSeparator />
       <SidebarFooter>

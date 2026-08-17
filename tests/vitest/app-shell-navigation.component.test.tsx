@@ -224,6 +224,44 @@ describe("shared application shell", () => {
     expect(within(menu).getByRole("menuitem", { name: /Druga Scena/ })).toBeVisible();
   });
 
+  it("keeps the event heading and user footer fixed around scrollable navigation", async () => {
+    pathname = eventPath;
+    renderDashboard({ event: { eventId, name: "Wieczór testowy" } });
+
+    const sidebar = screen.getByRole("complementary", {
+      name: "Nawigacja panelu organizatora",
+    });
+    const header = sidebar.querySelector<HTMLElement>(
+      "[data-slot='sidebar-header']",
+    );
+    const scrollArea = sidebar.querySelector<HTMLElement>(
+      "[data-sidebar-navigation-scroll]",
+    );
+    const viewport = scrollArea?.querySelector<HTMLElement>(
+      "[data-slot='scroll-area-viewport']",
+    );
+    const footer = sidebar.querySelector<HTMLElement>(
+      "[data-slot='sidebar-footer']",
+    );
+    const eventNavigation = sidebar.querySelector<HTMLElement>(
+      '[aria-label="Nawigacja wydarzenia"]',
+    );
+
+    expect(within(header as HTMLElement).getByText("Wieczór testowy")).toBeVisible();
+    expect(scrollArea).toContainElement(eventNavigation);
+    expect(viewport).toHaveClass("overscroll-contain");
+    expect(viewport).toHaveAttribute("tabindex", "0");
+    expect(footer).toContainElement(
+      screen.getByRole("button", { name: "Menu użytkownika: Jan Operator" }),
+    );
+    expect(
+      header?.compareDocumentPosition(scrollArea as Node) ?? 0,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(
+      scrollArea?.compareDocumentPosition(footer as Node) ?? 0,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it("uses the existing logout path from the sidebar footer", async () => {
     renderDashboard({ canAccessAdmin: true });
     openUserMenu();
