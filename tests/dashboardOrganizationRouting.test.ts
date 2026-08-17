@@ -1050,6 +1050,10 @@ test("organization events support owner and manager create flow", () => {
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
     "utf8",
   );
+  const overviewSource = readFileSync(
+    "src/components/operator/event-overview.tsx",
+    "utf8",
+  );
   const sharePageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
     "utf8",
@@ -1076,7 +1080,8 @@ test("organization events support owner and manager create flow", () => {
   assert.match(newPageSource, /redirect\(/);
   assert.match(sharePageSource, /EventSessionAccessPanel/);
   assert.match(sharePageSource, /result\.event\.sessionCode/);
-  assert.match(detailPageSource, /result\.event\.autoCloseAt/);
+  assert.match(detailPageSource, /<EventOverview/);
+  assert.match(overviewSource, /publicShowSongTitles/);
   assert.match(settingsPageSource, /result\.event\.songRequestsEnabled/);
   assert.match(detailPageSource, /result\.event\.facebookUrl/);
   assert.match(
@@ -1096,6 +1101,10 @@ test("organization event list and detail present the same effective closed statu
   );
   const detailPageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const overviewSource = readFileSync(
+    "src/components/operator/event-overview.tsx",
     "utf8",
   );
   const organizationsSource = readFileSync(
@@ -1124,9 +1133,13 @@ test("organization event list and detail present the same effective closed statu
     /return getEffectiveEventLifecycleStatus\(/,
   );
   assert.match(listPageSource, /case "closed":\s+return "Zamknięte";/);
-  assert.match(detailPageSource, /case "closed":\s+return "Zamknięte";/);
+  assert.match(overviewSource, /case "closed":/);
+  assert.match(
+    overviewSource,
+    /case "closed":[\s\S]{0,250}value: "Zamknięte"/,
+  );
   assert.equal(listPageSource.includes('return "Zamknięty";'), false);
-  assert.equal(detailPageSource.includes('return "Zamknięty";'), false);
+  assert.equal(overviewSource.includes('return "Zamknięty";'), false);
 });
 
 test("organization event create persists scheduling and public visibility fields", () => {
@@ -1183,9 +1196,16 @@ test("organization event detail and settings keep one focused responsibility", (
     "src/components/operator/event-management-panel.tsx",
     "utf8",
   );
+  const overviewSource = readFileSync(
+    "src/components/operator/event-overview.tsx",
+    "utf8",
+  );
 
   assert.match(detailPageSource, /getDashboardEventLifecycleStatus/);
-  assert.match(detailPageSource, /areDashboardEventRequestsOpen/);
+  assert.match(detailPageSource, /getDashboardOrganizationEventForAuthUser/);
+  assert.match(detailPageSource, /<EventOverview/);
+  assert.match(overviewSource, /songRequestsEnabled/);
+  assert.match(overviewSource, /publicQueueEnabled/);
   assert.doesNotMatch(detailPageSource, /EventManagementPanel|EventSessionAccessPanel/);
   assert.match(settingsPageSource, /shouldShowDashboardEventClosingWarning/);
   assert.match(settingsPageSource, /EventManagementPanel/);

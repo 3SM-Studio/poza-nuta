@@ -1,22 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  areDashboardEventRequestsOpen,
-  getDashboardEventLifecycleStatus,
-} from "@/lib/dashboard-event-lifecycle";
+import { EventOverview } from "@/components/operator/event-overview";
+import { getDashboardEventLifecycleStatus } from "@/lib/dashboard-event-lifecycle";
 import { getDashboardOrganizationEventCompatibilityRedirectPath } from "@/lib/dashboard-routes";
-import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/event-route-compatibility";
-import { getDashboardOrganizationEventSessionAccessForAuthUser } from "@/server/operator-api/organizations";
+import { getDashboardOrganizationEventForAuthUser } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 
 export const metadata: Metadata = {
@@ -48,7 +37,7 @@ export default async function OrganizationEventDetailPage({
     );
   }
 
-  const result = await getDashboardOrganizationEventSessionAccessForAuthUser({
+  const result = await getDashboardOrganizationEventForAuthUser({
     authUserId: session.authUser.id,
     organizationId,
     eventId: routeResolution.eventPublicId,
@@ -66,79 +55,25 @@ export default async function OrganizationEventDetailPage({
   }
 
   const lifecycleStatus = getDashboardEventLifecycleStatus(result.event);
-  const requestsOpen = areDashboardEventRequestsOpen(result.event);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Szczegóły wydarzenia</CardTitle>
-        <CardDescription>
-          Bieżący stan i publiczna konfiguracja wydarzenia.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold">
-          <Detail label="Status" value={formatLifecycleStatus(lifecycleStatus)} />
-          <Detail label="Zgłoszenia" value={requestsOpen ? "Otwarte" : "Zamknięte"} />
-          <Detail label="Start (czas polski)" value={formatDateTime(result.event.startsAt)} />
-          <Detail label="Czas zamknięcia (czas polski)" value={formatDateTime(result.event.autoCloseAt)} />
-          <Detail label="Publiczne wydarzenie" value={result.event.isActivePublicEvent ? "Tak" : "Nie"} />
-          <Detail label="Katalog wydarzeń" value={result.event.visibility === "public" ? "Opublikowane" : "Prywatne"} />
-          <div>
-            <dt>Publiczny URL</dt>
-            <dd>
-              {result.event.slug ? (
-                <Link className="font-semibold text-primary underline-offset-4 hover:underline" href={`/events/${result.event.slug}`}>
-                  /events/{result.event.slug}
-                </Link>
-              ) : (
-                "Nie ustawiono"
-              )}
-            </dd>
-          </div>
-          <Detail label="Publiczna kolejka" value={result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"} />
-          <div>
-            <dt>Facebook</dt>
-            <dd>
-              {result.event.facebookUrl ? (
-                <a className="font-semibold text-primary underline-offset-4 hover:underline" href={result.event.facebookUrl} rel="noreferrer" target="_blank">
-                  Otwórz wydarzenie
-                </a>
-              ) : (
-                "Nie ustawiono"
-              )}
-            </dd>
-          </div>
-        </dl>
-      </CardContent>
-    </Card>
+    <EventOverview
+      overview={{
+        organizationId: result.organization.publicId,
+        role: result.organization.role,
+        event: {
+          publicId: result.event.publicId,
+          lifecycle: lifecycleStatus,
+          visibility: result.event.visibility,
+          publishedAt: result.event.publishedAt,
+          slug: result.event.slug,
+          facebookUrl: result.event.facebookUrl,
+          isActivePublicEvent: result.event.isActivePublicEvent,
+          songRequestsEnabled: result.event.songRequestsEnabled,
+          publicQueueEnabled: result.event.publicQueueEnabled,
+          publicShowSongTitles: result.event.publicShowSongTitles,
+        },
+      }}
+    />
   );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-
-function formatLifecycleStatus(status: string) {
-  switch (status) {
-    case "active":
-      return "Aktywne";
-    case "cancelled":
-      return "Anulowane";
-    case "closed":
-      return "Zamknięte";
-    case "scheduled":
-      return "Zaplanowane";
-    default:
-      return status;
-  }
-}
-
-function formatDateTime(date: Date | null) {
-  return date ? formatWarsawDateTime(date) : "Brak terminu";
 }
