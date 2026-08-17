@@ -216,6 +216,96 @@ test.describe("public event and session identity with local Supabase Auth", () =
     expect(browserErrors).toEqual([]);
   });
 
+  test("synchronizes the participant and dashboard queues through real Realtime", async ({
+    browser,
+  }) => {
+    const dashboardContext = await browser.newContext();
+    const participantContext = await browser.newContext();
+    const dashboardPage = await dashboardContext.newPage();
+    const participantPage = await participantContext.newPage();
+    const browserErrors: string[] = [];
+
+    observeBrowserErrors(dashboardPage, browserErrors);
+    observeBrowserErrors(participantPage, browserErrors);
+
+    try {
+      await signInLocalOperator(dashboardPage, fixture);
+
+      const queuePath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+      const dashboardQueueApiPath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+      const participantRequestsApiPath = `/api/s/${fixture.publicToken}/requests/mine`;
+      const dashboardRealtimeConnection = dashboardPage.waitForEvent(
+        "websocket",
+        {
+          predicate: (socket) =>
+            new URL(socket.url()).pathname === "/realtime/v1/websocket",
+        },
+      );
+
+      await dashboardPage.goto(queuePath);
+      await expect(
+        dashboardPage.locator('[data-realtime-status="live"]'),
+      ).toBeVisible();
+      await dashboardRealtimeConnection;
+      await dashboardPage.waitForTimeout(500);
+
+      await participantPage.goto(`/s/${fixture.publicToken}`);
+      await participantPage
+        .getByLabel("Imię lub ksywka")
+        .fill("E2E Realtime Participant");
+      const participantRealtimeConnection = participantPage.waitForEvent(
+        "websocket",
+        {
+          predicate: (socket) =>
+            new URL(socket.url()).pathname === "/realtime/v1/websocket",
+        },
+      );
+      await participantPage
+        .getByRole("button", { name: "Dołącz do wydarzenia" })
+        .click();
+      await expect(participantPage.getByText("Połączenie live", { exact: true })).toBeVisible();
+      await participantRealtimeConnection;
+      await participantPage.waitForTimeout(500);
+
+      const dashboardRealtimeRefetch = dashboardPage.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === dashboardQueueApiPath &&
+          response.request().method() === "GET" &&
+          response.status() === 200,
+      );
+      await submitParticipantSong(participantPage, "E2E Song");
+      await dashboardRealtimeRefetch;
+
+      const participantQueueRow = queueLane(dashboardPage, "pending")
+        .locator("[data-queue-request-id]")
+        .filter({ hasText: "E2E Realtime Participant" })
+        .filter({ hasText: "E2E Song" });
+      await expect(participantQueueRow).toBeVisible();
+
+      const participantRealtimeRefetch = participantPage.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === participantRequestsApiPath &&
+          response.request().method() === "GET" &&
+          response.status() === 200,
+      );
+      await participantQueueRow
+        .getByRole("button", { name: "Zaakceptuj" })
+        .click();
+      await participantRealtimeRefetch;
+
+      const participantRequest = participantRequestsSection(participantPage)
+        .locator("[data-participant-request-id]")
+        .filter({ hasText: "E2E Song" });
+      await expect(participantRequest.getByText("Zaakceptowane")).toBeVisible();
+      expect(browserErrors).toEqual([]);
+    } finally {
+      await Promise.allSettled([
+        participantContext.close(),
+        dashboardContext.close(),
+      ]);
+    }
+  });
+
   test("covers authenticated lifecycle and canonical public access", async ({
     browser,
   }) => {
