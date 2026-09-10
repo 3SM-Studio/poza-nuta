@@ -30,7 +30,11 @@ export function getSafeDashboardAuthNextPath(
 
     const nextPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
 
-    if (nextPath === "/dashboard" || nextPath.startsWith("/dashboard/")) {
+    if (
+      nextPath === "/setup" ||
+      nextPath === "/dashboard" ||
+      nextPath.startsWith("/dashboard/")
+    ) {
       return nextPath;
     }
   } catch {

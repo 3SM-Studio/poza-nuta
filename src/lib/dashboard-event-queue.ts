@@ -22,6 +22,9 @@ export type DashboardEventQueueAction =
   (typeof DASHBOARD_EVENT_QUEUE_ACTIONS)[number];
 export type DashboardEventQueueMoveDirection =
   (typeof DASHBOARD_EVENT_QUEUE_MOVE_DIRECTIONS)[number];
+export type DashboardEventQueueMoveInput =
+  | { direction: DashboardEventQueueMoveDirection }
+  | { targetPosition: number };
 export type DashboardEventQueueRole =
   | "owner"
   | "manager"
@@ -39,7 +42,7 @@ const allowedSourceStatuses: Record<
   DashboardEventQueueAction,
   readonly DashboardEventQueueRequestStatus[]
 > = {
-  approve: ["pending"],
+  approve: ["pending", "rejected"],
   start: ["pending", "approved"],
   reject: ["pending", "approved"],
   done: ["approved", "now"],

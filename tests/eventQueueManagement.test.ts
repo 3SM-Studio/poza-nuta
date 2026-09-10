@@ -11,13 +11,16 @@ import {
 } from "../src/lib/dashboard-event-queue.ts";
 import {
   applyOptimisticDashboardEventQueueAction,
-  getDashboardEventQueueActionOperationKey,
-  isDashboardEventQueueRequestPending,
+  applyOptimisticDashboardEventQueueMoveToPosition,
   reconcileDashboardEventQueueItem,
   restoreDashboardEventQueueItems,
   type DashboardEventQueueOptimisticItem,
 } from "../src/lib/dashboard-event-queue-optimistic.ts";
-import { PUBLIC_QUEUE_VISIBLE_STATUSES } from "../src/server/public-api/queue-policy.ts";
+import {
+  ACTIVE_PUBLIC_REQUEST_STATUSES,
+  PUBLIC_QUEUE_VISIBLE_STATUSES,
+  isActivePublicRequestStatus,
+} from "../src/server/public-api/queue-policy.ts";
 import {
   validateDashboardEventQueueActionInput,
   validateDashboardEventQueueFilter,
@@ -53,6 +56,20 @@ test("public queues expose approved and current requests only", () => {
   assert.deepEqual(PUBLIC_QUEUE_VISIBLE_STATUSES, ["approved", "now"]);
 });
 
+test("public request deduplication has one shared active status policy", () => {
+  assert.deepEqual(ACTIVE_PUBLIC_REQUEST_STATUSES, [
+    "pending",
+    "approved",
+    "now",
+  ]);
+  assert.equal(isActivePublicRequestStatus("pending"), true);
+  assert.equal(isActivePublicRequestStatus("approved"), true);
+  assert.equal(isActivePublicRequestStatus("now"), true);
+  assert.equal(isActivePublicRequestStatus("done"), false);
+  assert.equal(isActivePublicRequestStatus("skipped"), false);
+  assert.equal(isActivePublicRequestStatus("rejected"), false);
+});
+
 test("owner, manager and operator can manage event queues, viewer cannot", () => {
   assert.equal(canManageDashboardEventQueue("owner"), true);
   assert.equal(canManageDashboardEventQueue("manager"), true);
@@ -62,6 +79,7 @@ test("owner, manager and operator can manage event queues, viewer cannot", () =>
 
 test("event queue actions preserve the existing request status model", () => {
   assert.equal(canApplyDashboardEventQueueAction("approve", "pending"), true);
+  assert.equal(canApplyDashboardEventQueueAction("approve", "rejected"), true);
   assert.equal(canApplyDashboardEventQueueAction("start", "pending"), true);
   assert.equal(canApplyDashboardEventQueueAction("start", "approved"), true);
   assert.equal(canApplyDashboardEventQueueAction("reject", "pending"), true);
@@ -80,17 +98,44 @@ test("event queue actions preserve the existing request status model", () => {
   assert.equal(getDashboardEventQueueTargetStatus("restore"), "pending");
 });
 
-test("event queue pending keys are scoped per request and action", () => {
-  const pendingOperations = new Set([
-    getDashboardEventQueueActionOperationKey(10, "approve"),
-  ]);
-
-  assert.equal(
-    getDashboardEventQueueActionOperationKey(10, "approve"),
-    "10:approve",
+test("queue feedback is immediate and keeps destructive confirmation", () => {
+  const panel = readFileSync(
+    "src/components/operator/event-queue-panel.tsx",
+    "utf8",
   );
-  assert.equal(isDashboardEventQueueRequestPending(pendingOperations, 10), true);
-  assert.equal(isDashboardEventQueueRequestPending(pendingOperations, 11), false);
+  const badge = readFileSync(
+    "src/components/request-status-badge.tsx",
+    "utf8",
+  );
+
+  assert.match(panel, /toast\.success\("Kolejka zaktualizowana"/);
+  assert.match(panel, /<AlertDialog key=\{action\}>/);
+  assert.match(panel, /<AlertDialogCancel>Anuluj<\/AlertDialogCancel>/);
+  assert.match(panel, /<RequestStatusBadge status=\{item\.status\}/);
+  assert.doesNotMatch(panel, /setMessage\(/);
+  assert.doesNotMatch(panel, /Zmieniono status|Zapisywanie\.\.\./);
+
+  for (const status of [
+    "pending",
+    "approved",
+    "now",
+    "done",
+    "skipped",
+    "rejected",
+  ]) {
+    assert.match(badge, new RegExp(`${status}: \\{`));
+  }
+
+  for (const label of [
+    "Oczekujące",
+    "Zaakceptowane",
+    "W trakcie",
+    "Zagrane",
+    "Pominięte",
+    "Odrzucone",
+  ]) {
+    assert.match(badge, new RegExp(label));
+  }
 });
 
 test("optimistic accept moves a pending request into the approved queue", () => {
@@ -110,6 +155,32 @@ test("optimistic accept moves a pending request into the approved queue", () => 
   assert.equal(acceptedRequest?.status, "approved");
   assert.equal(acceptedRequest?.position, 2);
   assert.equal(acceptedRequest?.version, 2);
+});
+
+test("optimistic drag moves an approved request to any queue position", () => {
+  const items = [
+    makeQueueItem({ id: 1, status: "approved", position: 1 }),
+    makeQueueItem({ id: 2, status: "approved", position: 2 }),
+    makeQueueItem({ id: 3, status: "approved", position: 3 }),
+  ];
+
+  const nextItems = applyOptimisticDashboardEventQueueMoveToPosition(
+    items,
+    3,
+    1,
+    "2026-07-06T18:00:00.000Z",
+  );
+
+  assert.deepEqual(
+    nextItems
+      .filter((item) => item.status === "approved")
+      .map((item) => [item.id, item.position]),
+    [
+      [3, 1],
+      [1, 2],
+      [2, 3],
+    ],
+  );
 });
 
 test("optimistic now marks the previous current request as done", () => {
@@ -198,10 +269,25 @@ test("event queue API validation rejects unsupported actions and moves", () => {
   });
   assert.deepEqual(validateDashboardEventQueueMoveInput({ direction: "up" }), {
     success: true,
-    data: "up",
+    data: { direction: "up" },
+  });
+  assert.deepEqual(validateDashboardEventQueueMoveInput({ targetPosition: 3 }), {
+    success: true,
+    data: { targetPosition: 3 },
   });
   assert.equal(
     validateDashboardEventQueueMoveInput({ direction: "sideways" }).success,
+    false,
+  );
+  assert.equal(
+    validateDashboardEventQueueMoveInput({ targetPosition: 0 }).success,
+    false,
+  );
+  assert.equal(
+    validateDashboardEventQueueMoveInput({
+      direction: "up",
+      targetPosition: 1,
+    }).success,
     false,
   );
 });
@@ -211,6 +297,13 @@ test("event queue reads and writes are scoped to the resolved event", () => {
     new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
     "utf8",
   );
+  const itemStart = serviceSource.indexOf(
+    "async function requireDashboardEventQueueItem",
+  );
+  const renumberStart = serviceSource.indexOf(
+    "async function renumberApprovedQueue",
+  );
+  const itemSource = serviceSource.slice(itemStart, renumberStart);
 
   assert.match(
     serviceSource,
@@ -225,9 +318,73 @@ test("event queue reads and writes are scoped to the resolved event", () => {
     /eq\(songRequests\.id, input\.requestId\),\s*eq\(songRequests\.eventId, context\.event\.id\)/s,
   );
   assert.match(
-    serviceSource,
-    /eq\(events\.id, eventId\), eq\(events\.workspaceId, organization\.id\)/,
+    itemSource,
+    /eq\(songRequests\.id, requestId\),\s*eq\(songRequests\.eventId, eventId\)/s,
   );
+  assert.match(itemSource, /404,\s*"REQUEST_NOT_FOUND"/s);
+  assert.match(
+    itemSource,
+    /"The request does not belong to this event\."/,
+  );
+  assert.match(
+    serviceSource,
+    /eq\(events\.publicId, eventIdentifier\.value\),\s*eq\(events\.workspaceId, organization\.id\)/s,
+  );
+  assert.match(serviceSource, /parseDashboardEventIdentifier\(eventId\)/);
+  assert.doesNotMatch(serviceSource, /eq\(events\.id, identifier\.value\)/);
+});
+
+test("event queue mutations recheck the effective lifecycle while holding the event lock", () => {
+  const serviceSource = readFileSync(
+    new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(serviceSource, /for\("update"\)/);
+  assert.match(
+    serviceSource,
+    /getEffectiveEventLifecycleStatus\(event\) !== "active"/,
+  );
+  assert.match(serviceSource, /"EVENT_QUEUE_CLOSED"/);
+});
+
+test("event queue isolation returns safe 404 before mutating a request from another event", () => {
+  const serviceSource = readFileSync(
+    new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
+    "utf8",
+  );
+  const actionStart = serviceSource.indexOf(
+    "export async function applyDashboardOrganizationEventQueueActionForAuthUser",
+  );
+  const moveStart = serviceSource.indexOf(
+    "export async function moveDashboardOrganizationEventQueueRequestForAuthUser",
+  );
+  const actionSource = serviceSource.slice(actionStart, moveStart);
+  const itemStart = serviceSource.indexOf(
+    "async function requireDashboardEventQueueItem",
+  );
+  const renumberStart = serviceSource.indexOf(
+    "async function renumberApprovedQueue",
+  );
+  const itemSource = serviceSource.slice(itemStart, renumberStart);
+
+  assert.match(actionSource, /const \[queueRequest\] = await transaction/);
+  assert.match(actionSource, /\.for\("update"\)/);
+  assert.match(
+    actionSource,
+    /eq\(songRequests\.id, input\.requestId\),\s*eq\(songRequests\.eventId, context\.event\.id\)/s,
+  );
+  assert.match(actionSource, /if \(!queueRequest\) \{/);
+  assert.match(actionSource, /404,\s*"REQUEST_NOT_FOUND"/s);
+  assert.match(
+    actionSource,
+    /eq\(songRequests\.id, queueRequest\.id\),\s*eq\(songRequests\.eventId, context\.event\.id\)/s,
+  );
+  assert.match(
+    itemSource,
+    /eq\(songRequests\.id, requestId\),\s*eq\(songRequests\.eventId, eventId\)/s,
+  );
+  assert.match(itemSource, /404,\s*"REQUEST_NOT_FOUND"/s);
 });
 
 test("event queue mutations require active workspace membership", () => {
@@ -248,6 +405,11 @@ test("event queue mutations require active workspace membership", () => {
   assert.match(contextSource, /eq\(operatorUsers\.active, true\)/);
   assert.match(contextSource, /eq\(workspaceMembers\.active, true\)/);
   assert.match(contextSource, /canManageDashboardEventQueue\(organization\.role\)/);
+  assert.match(contextSource, /const recheckedOrganization = await findEventQueueManagerOrganization/);
+  assert.ok(
+    contextSource.indexOf('for("update")') <
+      contextSource.indexOf("const recheckedOrganization"),
+  );
 });
 
 test("approved queue reorder is transactional and event-scoped", () => {
@@ -270,6 +432,8 @@ test("approved queue reorder is transactional and event-scoped", () => {
   assert.match(moveSource, /\.orderBy\(asc\(songRequests\.id\)\)\s*\.for\("update"\)/s);
   assert.match(moveSource, /position: request\.position/);
   assert.match(moveSource, /eq\(songRequests\.eventId, context\.event\.id\)/);
+  assert.match(moveSource, /input\.move\.targetPosition/);
+  assert.match(moveSource, /orderedRequests\.splice\(targetIndex, 0, targetRequest\)/);
 });
 
 test("starting a request completes the previous current request in the same event", () => {
@@ -277,40 +441,42 @@ test("starting a request completes the previous current request in the same even
     new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
     "utf8",
   );
-  const serviceSource = readFileSync(
-    new URL("../src/server/operator-api/service.ts", import.meta.url),
-    "utf8",
-  );
 
   assert.match(eventQueueSource, /completeCurrentEventQueueRequests/);
 
-  for (const source of [eventQueueSource, serviceSource]) {
-    assert.match(source, /eq\(songRequests\.status, "now"\)/);
-    assert.match(source, /\.orderBy\(asc\(songRequests\.id\)\)\s*\.for\("update"\)/s);
-    assert.match(source, /status: "done"/);
-    assert.match(source, /completedAt: changedAt/);
-    assert.match(source, /startedAt: changedAt/);
-    assert.match(source, /version: sql`\$\{songRequests\.version\} \+ 1`/);
-  }
+  assert.match(eventQueueSource, /eq\(songRequests\.status, "now"\)/);
+  assert.match(
+    eventQueueSource,
+    /\.orderBy\(asc\(songRequests\.id\)\)\s*\.for\("update"\)/s,
+  );
+  assert.match(eventQueueSource, /status: "done"/);
+  assert.match(eventQueueSource, /completedAt: changedAt/);
+  assert.match(eventQueueSource, /startedAt: changedAt/);
+  assert.match(
+    eventQueueSource,
+    /version: sql`\$\{songRequests\.version\} \+ 1`/,
+  );
 
   assert.match(eventQueueSource, /status: targetStatus/);
-  assert.match(serviceSource, /status: targetStatus/);
   assert.match(eventQueueSource, /eq\(songRequests\.eventId, context\.event\.id\)/);
-  assert.match(serviceSource, /eq\(songRequests\.eventId, event\.id\)/);
 });
 
 test("public queue broadcast migration does not expose song requests to browsers", () => {
   const source = readFileSync(
     new URL(
-      "../drizzle/0008_public_queue_realtime_broadcast.sql",
+      "../drizzle/0021_public_event_session_identity_expand.sql",
       import.meta.url,
     ),
     "utf8",
   );
-  const publicTopicIndex = source.indexOf("'public:event:'");
-  const publicPayloadSource = source.slice(
+  const publicTopicIndex = source.indexOf("'public:session:'");
+  const publicSendSource = source.slice(
     source.lastIndexOf("PERFORM", publicTopicIndex),
     source.indexOf(");", publicTopicIndex) + 2,
+  );
+  const publicPayloadSource = publicSendSource.slice(
+    publicSendSource.indexOf("jsonb_build_object"),
+    publicSendSource.indexOf("),", publicSendSource.indexOf("jsonb_build_object")) + 1,
   );
 
   assert.match(
@@ -323,10 +489,10 @@ test("public queue broadcast migration does not expose song requests to browsers
   );
   assert.match(
     source,
-    /'public:event:' \|\| changed_event_id::text \|\| ':queue'/,
+    /'public:session:' \|\| changed_public_token \|\| ':queue'/,
   );
   assert.match(source, /FOR SELECT\s+TO "anon", "authenticated"/);
-  assert.match(source, /\^public:event:\[0-9\]\+:queue\$/);
+  assert.match(source, /\^public:session:\[A-Za-z0-9_-\]\{22\}:queue\$/);
   assert.doesNotMatch(source, /ALTER\s+PUBLICATION\s+supabase_realtime/i);
   assert.doesNotMatch(
     source,
@@ -339,20 +505,20 @@ test("public queue broadcast migration does not expose song requests to browsers
   );
 });
 
-test("public session and global queues keep their existing privacy paths", () => {
+test("session queue keeps privacy paths and global public queue is removed", () => {
   const sessionServiceSource = readFileSync(
     new URL("../src/server/session-api/service.ts", import.meta.url),
     "utf8",
   );
-  const publicServiceSource = readFileSync(
-    new URL("../src/server/public-api/service.ts", import.meta.url),
+  const publicQueueRouteSource = readFileSync(
+    new URL("../src/app/api/public/queue/route.ts", import.meta.url),
     "utf8",
   );
   const sessionQueueStart = sessionServiceSource.indexOf(
     "export async function getSessionQueue",
   );
   const sessionRequestStart = sessionServiceSource.indexOf(
-    "export async function createSessionRequest",
+    "export async function createPublicSessionRequest",
   );
   const sessionQueueSource = sessionServiceSource.slice(
     sessionQueueStart,
@@ -373,8 +539,8 @@ test("public session and global queues keep their existing privacy paths", () =>
     /eq\(songRequests\.eventId, session\.event\.id\)/,
   );
   assert.doesNotMatch(hiddenSessionQueueSource, /songs\.title|songs\.artist/);
-  assert.match(publicServiceSource, /export async function getPublicQueue/);
-  assert.match(publicServiceSource, /showSongTitles: event\.publicShowSongTitles/);
+  assert.match(publicQueueRouteSource, /PUBLIC_QUEUE_ENDPOINT_GONE/);
+  assert.doesNotMatch(publicQueueRouteSource, /getPublicQueue/);
 });
 
 test("event queue panel uses Supabase Realtime invalidation without polling", () => {
@@ -388,19 +554,26 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
 
   assert.match(panelSource, /onClick=\{\(\) => void refreshQueue\(\)\}/);
   assert.match(panelSource, /useDashboardQueueRealtime/);
-  assert.match(panelSource, /pendingOperations/);
-  assert.match(panelSource, /getDashboardEventQueueActionOperationKey/);
   assert.match(panelSource, /applyOptimisticDashboardEventQueueAction/);
-  assert.match(panelSource, /restoreDashboardEventQueueItems/);
+  assert.match(panelSource, /type QueueOptimisticState/);
+  assert.match(panelSource, /replayQueueOptimisticOperations/);
   assert.match(panelSource, /reconcileDashboardEventQueueItem/);
+  assert.match(panelSource, /pendingOperations/);
+  assert.match(panelSource, /localMutationVersionRef/);
+  assert.match(panelSource, /realtimeRefreshQueuedRef/);
+  assert.match(panelSource, /flushQueuedRealtimeRefresh/);
+  assert.match(panelSource, /mutationQueueRef/);
+  assert.match(panelSource, /scheduleMutation/);
   assert.match(
     panelSource,
     /getDashboardEventQueue\(\s*organizationId,\s*eventId,\s*signal/s,
   );
   assert.doesNotMatch(panelSource, /const isBusy = pendingOperation !== null/);
   assert.doesNotMatch(panelSource, /disabled=\{pendingOperation !== null\}/);
-  assert.doesNotMatch(panelSource, /setInterval|setTimeout|useEffect/);
-  assert.match(panelSource, /Nie ma jeszcze zgłoszeń z linku sesji/);
+  assert.doesNotMatch(panelSource, /Zapisywanie\.\.\./);
+  assert.doesNotMatch(panelSource, /disabled=\{isRequestPending/);
+  assert.doesNotMatch(panelSource, /setInterval|setTimeout/);
+  assert.match(panelSource, /Nowe zgłoszenia z linku sesji pojawią się tutaj/);
 });
 
 test("event queue panel does not refetch the whole queue after each mutation", () => {
@@ -411,9 +584,9 @@ test("event queue panel does not refetch the whole queue after each mutation", (
     ),
     "utf8",
   );
-  const actionStart = panelSource.indexOf("async function handleAction");
-  const moveStart = panelSource.indexOf("async function handleMove");
-  const pendingStart = panelSource.indexOf("function markOperationPending");
+  const actionStart = panelSource.indexOf("function handleAction");
+  const moveStart = panelSource.indexOf("function handleMove");
+  const pendingStart = panelSource.indexOf("function beginLocalMutation");
   const actionSource = panelSource.slice(actionStart, moveStart);
   const moveSource = panelSource.slice(moveStart, pendingStart);
 

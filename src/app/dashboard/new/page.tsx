@@ -18,7 +18,6 @@ import {
   getDashboardProfileOnboardingPath,
 } from "@/lib/dashboard-routes";
 
-import styles from "../../../components/operator/operator.module.css";
 import {
   createDashboardOrganizationForOperator,
   listDashboardOrganizationsForAuthUser,
@@ -51,9 +50,9 @@ export default async function NewDashboardOrganizationPage() {
     organizations.length > 0 ? getDashboardOrganizationsPath() : "/dashboard";
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.onboardingShell}>
-        <Card className={styles.onboardingCard}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto grid min-h-[calc(100vh-7.5rem)] w-full max-w-[42rem] place-items-center"}>
+        <Card className={"w-full"}>
           <CardHeader>
             <CardTitle>Utwórz nową organizację</CardTitle>
             <CardDescription>
@@ -62,8 +61,8 @@ export default async function NewDashboardOrganizationPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className={styles.settingsForm} action={createOrganization}>
-              <div className={styles.dashboardField}>
+            <form className={"grid gap-4 [&_button]:justify-self-start"} action={createOrganization}>
+              <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
                 <label htmlFor="organization-name">Nazwa</label>
                 <input
                   id="organization-name"
@@ -75,33 +74,33 @@ export default async function NewDashboardOrganizationPage() {
                 />
               </div>
 
-              <section className={styles.formSection} aria-labelledby="type-title">
+              <section className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"} aria-labelledby="type-title">
                 <div>
                   <h2 id="type-title">Typ</h2>
-                  <p className={styles.eventMeta}>
+                  <p className={"mt-1.5 text-sm text-muted-foreground"}>
                     To pole jest teraz tylko informacyjne i nie jest zapisywane
                     w bazie.
                   </p>
                 </div>
-                <div className={styles.readOnlyOption}>Osobista</div>
+                <div className={"w-fit rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-foreground"}>Osobista</div>
               </section>
 
-              <section className={styles.formSection} aria-labelledby="plan-title">
+              <section className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"} aria-labelledby="plan-title">
                 <div>
                   <h2 id="plan-title">Plan</h2>
-                  <p className={styles.eventMeta}>
+                  <p className={"mt-1.5 text-sm text-muted-foreground"}>
                     Rozliczenia nie są wdrażane w tym etapie.
                   </p>
                 </div>
-                <div className={styles.readOnlyOption}>Darmowy</div>
+                <div className={"w-fit rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-foreground"}>Darmowy</div>
               </section>
 
-              <div className={styles.formActions}>
+              <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
                 <Button variant="outline" asChild>
                   <Link href={cancelPath}>Anuluj</Link>
                 </Button>
                 <button
-                  className={`${styles.button} ${styles.primaryButton}`}
+                  className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"}`}
                   type="submit"
                 >
                   Utwórz organizację
@@ -110,7 +109,7 @@ export default async function NewDashboardOrganizationPage() {
             </form>
           </CardContent>
           <CardFooter>
-            <p className={styles.eventMeta}>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>
               ID organizacji jest generowane automatycznie po utworzeniu.
             </p>
           </CardFooter>

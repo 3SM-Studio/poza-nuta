@@ -18,7 +18,6 @@ import {
   OperatorProfileOnboardingForm,
   type OperatorProfileOnboardingState,
 } from "../../../../components/operator/operator-profile-onboarding-form";
-import styles from "../../../../components/operator/operator.module.css";
 import { listDashboardOrganizationsForAuthUser } from "../../../../server/operator-api/organizations";
 import {
   isOperatorProfileCompleted,
@@ -44,9 +43,9 @@ export default async function DashboardProfileOnboardingPage() {
   }
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.onboardingShell}>
-        <Card className={styles.onboardingCard}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto grid min-h-[calc(100vh-7.5rem)] w-full max-w-[42rem] place-items-center"}>
+        <Card className={"w-full"}>
           <CardHeader>
             <CardTitle>Przedstaw się</CardTitle>
             <CardDescription>

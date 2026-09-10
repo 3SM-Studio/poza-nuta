@@ -17,7 +17,6 @@ import {
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventsPath,
 } from "@/lib/dashboard-routes";
-import styles from "@/components/operator/operator.module.css";
 import { OperatorApiError } from "@/server/operator-api/errors";
 import {
   canCreateDashboardOrganizationEvent,
@@ -56,12 +55,12 @@ export default async function NewOrganizationEventPage({
   const eventsPath = getDashboardOrganizationEventsPath(organization.publicId);
 
   return (
-    <main className={styles.queuePage}>
-      <section className={styles.settingsShell}>
-        <header className={styles.pageHeader}>
+    <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
+      <section className={"mx-auto w-full min-w-0 max-w-[58rem]"}>
+        <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
             <h1>Utwórz wydarzenie</h1>
-            <p className={styles.eventMeta}>{organization.name}</p>
+            <p className={"mt-1.5 text-sm text-muted-foreground"}>{organization.name}</p>
           </div>
         </header>
 
@@ -70,8 +69,7 @@ export default async function NewOrganizationEventPage({
             <CardHeader>
               <CardTitle>Dane wydarzenia</CardTitle>
               <CardDescription>
-                Czas zamknięcia zapisujemy jako auto_close_at. Link sesji
-                zostanie dodany w kolejnym etapie.
+                Kod sesji zostanie utworzony automatycznie razem z wydarzeniem.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -110,6 +108,7 @@ async function createEvent(
     startsAt: formData.get("startsAt"),
     autoCloseAt: formData.get("autoCloseAt"),
     facebookUrl: formData.get("facebookUrl"),
+    songRequestsEnabled: formData.has("songRequestsEnabled"),
     publicQueueEnabled: formData.has("publicQueueEnabled"),
     publicShowSongTitles: formData.has("publicShowSongTitles"),
     isActivePublicEvent: formData.has("isActivePublicEvent"),
@@ -138,7 +137,7 @@ async function createEvent(
     redirect(
       getDashboardOrganizationEventPath(
         result.organization.publicId,
-        result.event.id,
+        result.event.publicId,
       ),
     );
   } catch (error) {
@@ -146,19 +145,6 @@ async function createEvent(
       return {
         issues: [],
         message: "Nie masz uprawnień do tworzenia wydarzeń w tej organizacji.",
-      };
-    }
-
-    if (error instanceof OperatorApiError && error.status === 409) {
-      return {
-        issues: [
-          {
-            field: "isActivePublicEvent",
-            message:
-              "Ta organizacja ma już aktywny publicznie event. Wyłącz go przed ustawieniem kolejnego.",
-          },
-        ],
-        message: "Nie można ustawić dwóch aktywnych publicznie eventów.",
       };
     }
 

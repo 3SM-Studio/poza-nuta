@@ -8,6 +8,7 @@ data changes, production changes, or implementation changes by itself.
 Related documents:
 - [ADR: Multi-Tenant Karaoke Platform](../architecture/adr-multi-tenant-karaoke-platform.md)
 - [Current To Target Model Audit](../architecture/current-to-target-model-audit.md)
+- [Platform Admin Dashboard Contract](../features/platform-admin-dashboard.md)
 
 Decision labels:
 - **Accepted decision**: binding product rule for the platform rebuild.
@@ -99,18 +100,22 @@ Find karaoke:
 4. User views organizer, venue and event capabilities.
 
 Submit a guest song request:
-1. Guest opens `/events/[slug]`.
-2. Event page carries or resolves a concrete event id.
+1. Guest opens an event access link at `/session/[code]` from the organizer's QR
+   code or shared session code.
+2. The session code resolves exactly one concrete event id on the backend.
 3. Guest fills required participant data, such as pseudonym.
 4. Backend validates event visibility, publication, phase, capability and
    cancellation state.
 5. Request is stored against the exact event id.
 
 Submit as a logged-in user:
-1. User opens the same event flow.
+1. User opens the same `/session/[code]` event access flow.
 2. Backend still accepts the request by event id.
 3. If a valid user session exists, request may be linked to user profile.
 4. Account gives history and later points features, but is not required.
+
+`/events/[slug]` is the public informational catalog page for an event. The
+public slug does not grant request permission and must not create song requests.
 
 Publish an event:
 1. Authorized organization or event manager creates a draft.
@@ -160,6 +165,70 @@ Authorization comes from memberships and roles:
 Account identity is provided by Supabase Auth. Business permissions are decided
 by local application records. Do not trust client-supplied roles or profile
 claims.
+
+## Platform Administration
+
+**Accepted decision.**
+
+Platform administration uses `/admin`; organization administration remains at
+`/dashboard/org/[organizationId]`. Organization membership never grants a
+platform role, and organization owners can manage members and roles only in
+their own organization.
+
+Platform roles are:
+
+- `platform_owner`: full platform access, platform-role management, imports,
+  audit and owner-only critical settings;
+- `platform_admin`: application suspension of ordinary users, imports and
+  read-only operational oversight of users and organizations, but no mutation
+  of any platform role or owner-only setting;
+- `support`: read-only access to users, organizations, imports and safe error
+  information; no imports or role mutations.
+
+Only `platform_owner` may grant, change, deactivate or remove any
+`platform_members` role, including `platform_owner`, `platform_admin` and
+`support`. `platform_admin` performs no `platform_members` mutations.
+
+An eligible platform owner is a user who simultaneously has an active local
+application profile, is not suspended, and has an active `platform_members`
+membership with role `platform_owner`.
+
+Multiple eligible platform owners are allowed. No operation or race may remove,
+deactivate, demote, suspend or delete the last eligible platform owner.
+
+Application-level account suspension is part of the Users MVP. It requires a
+reason and audit record, preserves identity, memberships and history, and is
+reversed by unlock. It does not delete or directly block the Supabase Auth
+identity. A user cannot suspend themself. A `platform_admin` cannot suspend a
+`platform_owner`; a `platform_owner` may suspend another owner only when at
+least one other eligible platform owner remains. Physical account/Auth identity
+deletion is outside the MVP.
+
+The first `/admin` MVP contains a secure guard and AdminShell, read-only
+Overview, Imports, Users, Organizations and Audit. Catalog, Events, Moderation
+and System remain later modules.
+
+The first Organizations module is read-only: search, organization detail,
+status, memberships and roles, event count and safe audit history. Platform
+cross-organization mutations require a separate product decision and
+specification. Organization owners continue to manage members only in their own
+organization dashboard.
+
+Imports are durable, idempotent, upsert-based background jobs. They never
+truncate or destructively replace songs, and only one job per source may be
+active. The worker, private storage and scheduler technologies require separate
+technical decisions.
+
+Retention is fixed at 365 days from record creation for audit records, 365 days
+from terminal state for import job metadata, 30 days from recording for safe
+error details, and at most 7 days from upload for private KaraFun source files,
+regardless of job state. Files may be deleted sooner after diagnostics. A job
+that never becomes terminal requires a stale-job and maximum-retention rule in
+the worker/cleanup ADR. Cleanup cannot extend retention by rewriting its anchor
+timestamp. Timestamp names are semantic, not preselected columns. Cleanup must
+be operationally verifiable and audited. Audit export is outside the first MVP.
+Secrets, tokens, credentials and raw sensitive errors must never enter audit or
+durable logs.
 
 ## Organizations
 
@@ -300,12 +369,16 @@ Guest request is allowed when the event:
 - is not cancelled, postponed away from current time, or closed early.
 
 The backend must not require a session user for normal public requests.
+It must require a valid event access link at `/session/[code]`; the code, not a
+public slug, grants access to the event features.
 
 Every request must point to a concrete `eventId`. The backend must not globally
 search for one active event.
 
-Logged-in users may link a request to their user profile. Guest requests may be
-linked later through a secure guest session, code or claim flow.
+Logged-in users may link a request to their user profile. Guest continuity is a
+separate future session/token model for tracking a guest's own requests,
+cancellation and later account claim. It is not the same thing as the event
+access link that unlocks `/session/[code]`.
 
 ## Queue
 
@@ -397,7 +470,7 @@ link. The exact claim mechanism is an open decision.
 
 ## Privacy Rules
 
-**Accepted decision, with open retention details.**
+**Accepted decision.**
 
 Public event pages must not expose:
 - operator internal ids;
@@ -407,13 +480,19 @@ Public event pages must not expose:
 - private notes;
 - unpublished/private events.
 
-Guest session tokens must not be stored in localStorage or sessionStorage.
+Future guest continuity/session tokens must not be stored in localStorage or
+sessionStorage. Event access links for `/session/[code]` are separate
+organizer-issued access codes that resolve the event.
 Prefer HttpOnly cookies or short-lived signed claim links.
 
 Participant personal data must be scoped to event operations and should be
 minimized in public queue views.
 
-Detailed data retention and anonymization policy is an open decision.
+Administrative retention is closed with the clock anchors defined in Platform
+Administration: audit from creation, import job metadata from terminal state,
+safe error detail from recording and KaraFun file from upload. Detailed
+retention and anonymization remain open only for other data domains, including
+participants, events, profiles, requests and performance history.
 
 ## Cancellation And Postponement
 
@@ -442,7 +521,8 @@ Closed early event:
 - `@PozaNuta` is one organizer profile.
 - One account can hold many roles.
 - Guest song requests remain allowed.
-- Public request creation must use concrete event id.
+- Public request creation must use a valid `/session/[code]` event access link
+  that resolves a concrete event id.
 - Event capabilities are optional.
 - Multiple events can be live at the same time.
 - No global active public event should exist in the target model.
@@ -464,4 +544,6 @@ Closed early event:
 - Notification channels and notification consent model.
 - Ranking and points display policy.
 - Exact mechanism for assigning a guest performance to a user account.
-- Data retention and anonymization policy.
+- Detailed retention and anonymization for participants, events, profiles,
+  requests and performance history. Administrative retention is already
+  accepted and is not open.

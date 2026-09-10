@@ -1,7 +1,7 @@
 const SENSITIVE_LINE_PATTERN = /^(\s*params:\s*).+$/gim;
 const CONNECTION_URL_PATTERN = /\bpostgres(?:ql)?:\/\/[^\s'"]+/gi;
 const ENV_SECRET_PATTERN =
-  /\b(DATABASE_URL|OPERATOR_BOOTSTRAP_PIN|PASSWORD|TOKEN|SECRET)=\S+/gi;
+  /\b(DATABASE_URL|DIRECT_URL|IMPORT_WORKER_DATABASE_URL|OPERATOR_BOOTSTRAP_PIN|PASSWORD|TOKEN|SECRET)=\S+/gi;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object"

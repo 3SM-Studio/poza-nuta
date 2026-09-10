@@ -1,6 +1,7 @@
 import { config } from "dotenv";
 import postgres from "postgres";
 
+import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
@@ -107,11 +108,7 @@ async function getExecutedMigrations(
 }
 
 async function checkDbState() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
+  const databaseUrl = requireAdminDatabaseUrl();
 
   const client = postgres(databaseUrl, {
     connect_timeout: 5,

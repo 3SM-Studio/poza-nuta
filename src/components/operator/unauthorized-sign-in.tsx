@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { logoutOperator, OperatorClientError } from "./api";
-import styles from "./operator.module.css";
 
 export function UnauthorizedSignIn() {
   const router = useRouter();
@@ -35,19 +34,19 @@ export function UnauthorizedSignIn() {
   return (
     <>
       <h1>Brak dostępu do dashboardu</h1>
-      <p className={styles.loginIntro}>
+      <p className={"mt-3 mb-7 leading-relaxed text-muted-foreground"}>
         To konto jest zalogowane w Supabase, ale nie ma aktywnego dostępu
         operatora.
       </p>
 
       {error ? (
-        <p className={styles.formError} role="alert">
+        <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
           {error}
         </p>
       ) : null}
 
       <button
-        className={`${styles.button} ${styles.secondaryButton} ${styles.loginButton}`}
+        className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-border bg-secondary text-secondary-foreground hover:bg-secondary/80"} ${"mt-1 w-full"}`}
         type="button"
         onClick={() => void handleLogout()}
         disabled={isLoggingOut}

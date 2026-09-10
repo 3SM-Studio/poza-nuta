@@ -17,11 +17,11 @@ rollback/backup plan.
 
 ## Connection strings
 
-Use a Direct connection or Supabase Session pooler for Drizzle migrations and
-one-off database scripts. Use the Supabase Transaction pooler for Vercel
-runtime.
+Use `DIRECT_URL` with a Direct connection or Supabase Session Pooler for
+Drizzle migrations and one-off database scripts. Use `DATABASE_URL` with the
+Supabase Transaction Pooler on port `6543` for Vercel runtime.
 
-`DATABASE_URL` must never be committed or printed in logs.
+Neither connection variable may be committed or printed in logs.
 
 ## Vercel production runtime
 
@@ -30,9 +30,15 @@ Transaction pooler, not a Direct database connection. Direct connections are
 better suited for migrations and short one-off scripts, while serverless
 runtime needs a small connection footprint.
 
+The runtime validates this contract when it creates the database client. A
+Session Pooler or Direct connection configured as Vercel `DATABASE_URL` fails
+closed with a safe configuration error instead of consuming session clients.
+
 The runtime Postgres client is configured with:
 
-- a very small pool (`max: 1`),
+- a bounded two-connection pool per Vercel isolate (`max: 2`), which preserves
+  concurrent transactional work while the Transaction Pooler shares backend
+  connections across isolates,
 - prepared statements disabled (`prepare: false`) for pooler compatibility,
 - connection timeout,
 - idle timeout,
@@ -42,9 +48,13 @@ If Supabase Auth or Postgres is unavailable, API routes should return a
 controlled `503 SERVICE_UNAVAILABLE` response instead of waiting for the Vercel
 function timeout.
 
-Do not log `DATABASE_URL` or full connection strings. After changing Vercel
-environment variables, redeploy the project so the serverless runtime receives
-the new configuration.
+`EMAXCONNSESSION` means the Session Pooler client limit was exhausted. Runtime
+logs normalize it to `error_code="EMAXCONNSESSION"` without logging connection
+strings, database hosts, query parameters, cookies, or tokens.
+
+Do not log `DATABASE_URL`, `DIRECT_URL`, or full connection strings. After
+changing Vercel environment variables, redeploy the project so the serverless
+runtime receives the new configuration.
 
 ## Checking state
 

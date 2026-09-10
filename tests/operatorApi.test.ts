@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -8,10 +9,6 @@ import {
   resolveOperatorAccess,
   resolveSignInPageAccess,
 } from "../src/server/operator-api/auth-policy.ts";
-import {
-  canApplyQueueAction,
-  getTargetStatus,
-} from "../src/server/operator-api/transitions.ts";
 import {
   validateLoginInput,
   validateRequestId,
@@ -94,6 +91,7 @@ test("Supabase Auth users must map to an active local operator", () => {
       displayName: null,
       profileCompletedAt: null,
       active: false,
+      suspendedAt: null,
     }),
     {
       allowed: false,
@@ -109,6 +107,7 @@ test("Supabase Auth users must map to an active local operator", () => {
       displayName: null,
       profileCompletedAt: null,
       active: true,
+      suspendedAt: null,
     }),
     {
       allowed: true,
@@ -149,6 +148,30 @@ test("operator session lookup is memoized without routeName as cache key", () =>
   assert.equal(source.includes("getCachedOperatorSession(routeName"), false);
 });
 
+test("operator session hot path verifies cached JWT claims without a remote getUser call", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/supabase-session.ts", import.meta.url),
+    "utf8",
+  );
+  const sessionStart = source.indexOf("async function resolveOperatorSession");
+  const logoutStart = source.indexOf("export async function logoutOperator");
+  const sessionSource = source.slice(sessionStart, logoutStart);
+
+  assert.match(sessionSource, /getVerifiedAuthIdentity/);
+  assert.match(sessionSource, /supabase\.auth\.getClaims\(\)/);
+  assert.doesNotMatch(sessionSource, /supabase\.auth\.getUser\(\)/);
+});
+
+test("operator login performs one full navigation after the session cookie is written", () => {
+  const source = readFileSync(
+    new URL("../src/components/operator/login-form.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /window\.location\.replace\("\/dashboard"\)/);
+  assert.doesNotMatch(source, /useRouter|router\.replace|router\.refresh/);
+});
+
 test("dashboard organization list is memoized per request render", () => {
   const source = readFileSync(
     new URL("../src/server/operator-api/organizations.ts", import.meta.url),
@@ -158,6 +181,75 @@ test("dashboard organization list is memoized per request render", () => {
   assert.match(source, /import \{ cache \} from "react"/);
   assert.match(source, /export const listDashboardOrganizationsForAuthUser = cache\(/);
   assert.match(source, /async \(authUserId: string\)/);
+});
+
+test("dashboard event base loader deduplicates only within one request and key", () => {
+  const source = readFileSync(
+    new URL("../src/server/operator-api/organizations.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /const getCachedDashboardOrganizationEventForAuthUser = cache\(/,
+  );
+  assert.match(
+    source,
+    /async \(authUserId: string, organizationId: string, eventId: string\)/,
+  );
+  assert.match(
+    source,
+    /getCachedDashboardOrganizationEventForAuthUser\(\s*input\.authUserId,\s*input\.organizationId,\s*input\.eventId,\s*\)/,
+  );
+  assert.doesNotMatch(source, /unstable_cache|new Map/);
+
+  const script = String.raw`
+    const React = require("react");
+    const {
+      renderToReadableStream,
+    } = require("next/dist/compiled/react-server-dom-webpack/server.node");
+
+    const calls = [];
+    const loader = React.cache(async (authUserId, organizationId, eventId) => {
+      calls.push([authUserId, organizationId, eventId]);
+      return { authUserId, organizationId, eventId };
+    });
+
+    async function Page({ users }) {
+      await Promise.all(
+        users.flatMap((authUserId) => [
+          loader(authUserId, "org-a", "event-a"),
+          loader(authUserId, "org-a", "event-a"),
+        ]),
+      );
+      return React.createElement("div", null, "ok");
+    }
+
+    async function renderRequest(users) {
+      const stream = renderToReadableStream(
+        React.createElement(Page, { users }),
+        {},
+      );
+      for await (const chunk of stream) void chunk;
+    }
+
+    (async () => {
+      await renderRequest(["user-a", "user-b"]);
+      await renderRequest(["user-a"]);
+      process.stdout.write(JSON.stringify(calls));
+    })();
+  `;
+  const output = execFileSync(
+    process.execPath,
+    ["--conditions=react-server", "--eval", script],
+    { cwd: process.cwd(), encoding: "utf8" },
+  );
+
+  assert.deepEqual(JSON.parse(output), [
+    ["user-a", "org-a", "event-a"],
+    ["user-b", "org-a", "event-a"],
+    ["user-a", "org-a", "event-a"],
+  ]);
 });
 
 test("operator API preserves auth and permission errors before infra fallback", () => {
@@ -208,6 +300,7 @@ test("sign-in page distinguishes guests, authorized operators and denied users",
       displayName: null,
       profileCompletedAt: null,
       active: false,
+      suspendedAt: null,
     }),
     {
       state: "unauthorized",
@@ -221,6 +314,7 @@ test("sign-in page distinguishes guests, authorized operators and denied users",
       displayName: null,
       profileCompletedAt: null,
       active: true,
+      suspendedAt: null,
     }),
     {
       state: "authorized",
@@ -243,22 +337,4 @@ test("validateRequestId accepts only safe positive integer path values", () => {
   assert.equal(validateRequestId("0").success, false);
   assert.equal(validateRequestId("1.5").success, false);
   assert.equal(validateRequestId("abc").success, false);
-});
-
-test("operator queue transition policy matches the API contract", () => {
-  assert.equal(canApplyQueueAction("approve", "pending"), true);
-  assert.equal(canApplyQueueAction("approve", "approved"), false);
-  assert.equal(canApplyQueueAction("reject", "pending"), true);
-  assert.equal(canApplyQueueAction("reject", "approved"), true);
-  assert.equal(canApplyQueueAction("start", "approved"), true);
-  assert.equal(canApplyQueueAction("done", "now"), true);
-  assert.equal(canApplyQueueAction("skip", "approved"), true);
-  assert.equal(canApplyQueueAction("skip", "now"), true);
-  assert.equal(canApplyQueueAction("skip", "pending"), false);
-
-  assert.equal(getTargetStatus("approve"), "approved");
-  assert.equal(getTargetStatus("reject"), "rejected");
-  assert.equal(getTargetStatus("start"), "now");
-  assert.equal(getTargetStatus("done"), "done");
-  assert.equal(getTargetStatus("skip"), "skipped");
 });

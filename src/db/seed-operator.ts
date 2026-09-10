@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { operatorUsers } from "./schema.ts";
+import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { hashPin } from "../server/operator-api/crypto.ts";
 import { DEFAULT_OPERATOR_NAME } from "../server/operator-api/validation.ts";
 import { logDatabaseError } from "./log-db-error.ts";
@@ -11,14 +12,10 @@ import { logDatabaseError } from "./log-db-error.ts";
 config({ path: [".env.local", ".env"], quiet: true });
 
 async function seedOperator() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = requireAdminDatabaseUrl();
   const pin = process.env.OPERATOR_BOOTSTRAP_PIN;
   const name =
     process.env.OPERATOR_BOOTSTRAP_NAME?.trim() || DEFAULT_OPERATOR_NAME;
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
 
   if (!pin) {
     throw new Error("OPERATOR_BOOTSTRAP_PIN is not configured.");

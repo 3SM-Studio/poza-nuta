@@ -71,6 +71,111 @@
       "when": 1783359877379,
       "tag": "0009_operator_profile_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783612800000,
+      "tag": "0010_public_event_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783616400000,
+      "tag": "0011_platform_initial_setup",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783690082637,
+      "tag": "0012_low_morgan_stark",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784122758564,
+      "tag": "0013_operator_suspension",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784125796532,
+      "tag": "0014_multiple_platform_owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1784129618961,
+      "tag": "0015_platform_owner_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784184774352,
+      "tag": "0016_import_job_status_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784188892791,
+      "tag": "0017_import_job_data_foundation_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784204366417,
+      "tag": "0018_import_job_data_foundation_contract",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784224352535,
+      "tag": "0019_import_job_worker_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784316785661,
+      "tag": "0020_canonical_session_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784367510314,
+      "tag": "0021_public_event_session_identity_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785875185006,
+      "tag": "0022_multi_active_public_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786975649380,
+      "tag": "0023_foamy_gargoyle",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786979638742,
+      "tag": "0024_remarkable_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

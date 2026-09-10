@@ -7,6 +7,8 @@ import {
   DATABASE_STATEMENT_TIMEOUT_MS,
 } from "../src/server/db-client-options.ts";
 import {
+  getSafeErrorCode,
+  getSafeErrorMessage,
   isInfrastructureTimeout,
   isTransientInfrastructureError,
   SERVER_STEP_TIMEOUT_MS,
@@ -31,6 +33,34 @@ test("database client uses serverless-safe Postgres options", () => {
     databaseClientOptions.connection.idle_in_transaction_session_timeout,
     DATABASE_STATEMENT_TIMEOUT_MS,
   );
+});
+
+test("runtime diagnostics identify nested Session Pooler exhaustion safely", () => {
+  const directFailure = Object.assign(new Error("Session capacity exhausted"), {
+    code: "EMAXCONNSESSION",
+  });
+  const nestedFailure = Object.assign(
+    new Error("EMAXCONNSESSION: max clients in session mode reached secret-host"),
+    { code: "XX000" },
+  );
+  const failure = new Error("Failed query: select sensitive_business_data", {
+    cause: nestedFailure,
+  });
+  const cyclicFailure = new Error("Outer database failure", { cause: failure });
+  Object.assign(nestedFailure, { cause: cyclicFailure });
+
+  assert.equal(isTransientInfrastructureError(directFailure), true);
+  assert.equal(getSafeErrorCode(directFailure), "EMAXCONNSESSION");
+  assert.equal(isTransientInfrastructureError(failure), true);
+  assert.equal(getSafeErrorCode(failure), "EMAXCONNSESSION");
+  assert.equal(isTransientInfrastructureError(cyclicFailure), true);
+  assert.equal(getSafeErrorCode(cyclicFailure), "EMAXCONNSESSION");
+  assert.equal(
+    getSafeErrorMessage(failure),
+    "Database connection capacity exhausted.",
+  );
+  assert.equal(getSafeErrorMessage(failure).includes("secret-host"), false);
+  assert.equal(getSafeErrorMessage(failure).includes("select"), false);
 });
 
 test("runtime diagnostics can log an aggregate step without adding a timeout race", async () => {

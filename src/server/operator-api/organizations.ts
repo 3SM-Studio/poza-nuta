@@ -1,10 +1,11 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 
 import {
-  eventAccessLinks,
+  eventSessionCodes,
+  eventSessions,
   events,
   operatorAuditLog,
   operatorUsers,
@@ -21,14 +22,33 @@ import {
   buildWorkspaceHandleFromName,
   validateOrganizationName,
 } from "../../lib/organization-workspace";
+import type { DashboardOrganizationRole } from "../../lib/dashboard-organization-access";
 import {
-  calculateDashboardEventExtendedAutoCloseAt,
   canManageDashboardEventLifecycle,
+  resolveDashboardEventCloseAt,
 } from "../../lib/dashboard-event-lifecycle";
 import {
-  generateEventAccessCode,
-  hashEventAccessCode,
-} from "./crypto";
+  canReopenEvent,
+  canResolveEventJoinCode,
+  getEffectiveEventCloseInstant,
+} from "../../lib/event-session-lifecycle";
+import {
+  buildEventSlugCandidate,
+  buildEventSlugCollisionCandidate,
+  isValidEventSlug,
+} from "../../lib/event-slug";
+import { isEventSlugUniqueViolation } from "../../lib/event-slug-db-error";
+import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
+import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier";
+import { withEventSessionIdentityRetry } from "../../lib/event-session-identity";
+import { isEventSessionIdentityUniqueViolation } from "../../lib/event-session-identity-db-error";
+import { withSessionCodeCollisionRetry } from "../../lib/session-code";
+import { isSessionCodeUniqueViolation } from "../../lib/session-code-db-error";
+import {
+  insertEventSessionIdentity,
+  lockEventSessionIdentity,
+  publishEventSessionInvalidation,
+} from "../event-session-identity-store";
 import { OperatorApiError } from "./errors";
 import type {
   CreateDashboardEventInput,
@@ -37,11 +57,14 @@ import type {
   UpdateDashboardEventAutoCloseAtInput,
 } from "./validation";
 
-export type DashboardOrganizationRole =
-  | "owner"
-  | "manager"
-  | "operator"
-  | "viewer";
+export {
+  canCreateDashboardOrganizationEvent,
+  canManageDashboardOrganizationEvent,
+  canShareDashboardOrganizationEvent,
+} from "../../lib/dashboard-organization-access";
+export type {
+  DashboardOrganizationRole,
+} from "../../lib/dashboard-organization-access";
 
 export type DashboardOrganization = {
   id: number;
@@ -54,30 +77,27 @@ export type DashboardOrganization = {
 
 export type DashboardOrganizationEvent = {
   id: number;
+  publicId: string;
   name: string;
+  slug: string | null;
   venue: string | null;
+  city: string | null;
+  sessionCode: string;
   startsAt: Date;
   facebookUrl: string | null;
-  status: "draft" | "active" | "closed";
+  status: "draft" | "active" | "closed" | "cancelled";
+  visibility: "private" | "public";
+  publishedAt: Date | null;
   isActivePublicEvent: boolean;
   publicQueueEnabled: boolean;
+  songRequestsEnabled: boolean;
   publicShowSongTitles: boolean;
   autoCloseAt: Date | null;
+  endsAt: Date;
   closedAt: Date | null;
+  closeReason: string | null;
   createdAt: Date;
   updatedAt: Date;
-};
-
-export type DashboardOrganizationEventSessionLink = {
-  id: number;
-  eventId: number;
-  label: string | null;
-  active: boolean;
-  createdAt: Date;
-  revokedAt: Date | null;
-  lastUsedAt: Date | null;
-  useCount: number;
-  createdByOperatorId: number | null;
 };
 
 export type DashboardOrganizationMember = {
@@ -108,30 +128,27 @@ const workspaceSelection = {
 
 const dashboardEventSelection = {
   id: events.id,
+  publicId: events.publicId,
   name: events.name,
+  slug: events.slug,
   venue: events.venue,
+  city: events.city,
+  sessionCode: events.sessionCode,
   startsAt: events.startsAt,
   facebookUrl: events.facebookUrl,
   status: events.status,
+  visibility: events.visibility,
+  publishedAt: events.publishedAt,
   isActivePublicEvent: events.isActivePublicEvent,
   publicQueueEnabled: events.publicQueueEnabled,
+  songRequestsEnabled: events.songRequestsEnabled,
   publicShowSongTitles: events.publicShowSongTitles,
   autoCloseAt: events.autoCloseAt,
+  endsAt: events.endsAt,
   closedAt: events.closedAt,
+  closeReason: events.closeReason,
   createdAt: events.createdAt,
   updatedAt: events.updatedAt,
-};
-
-const dashboardEventSessionLinkSelection = {
-  id: eventAccessLinks.id,
-  eventId: eventAccessLinks.eventId,
-  label: eventAccessLinks.label,
-  active: eventAccessLinks.active,
-  createdAt: eventAccessLinks.createdAt,
-  revokedAt: eventAccessLinks.revokedAt,
-  lastUsedAt: eventAccessLinks.lastUsedAt,
-  useCount: eventAccessLinks.useCount,
-  createdByOperatorId: eventAccessLinks.createdByOperatorId,
 };
 
 const ownerOrganizationSelection = {
@@ -224,62 +241,65 @@ export async function listDashboardOrganizationEventsForAuthUser(
 
   return {
     organization,
-    events: organizationEvents,
+    events: organizationEvents.map((event) => ({
+      ...event,
+      effectiveStatus: getEffectiveEventLifecycleStatus(event),
+    })),
   };
-}
-
-export function canCreateDashboardOrganizationEvent(
-  role: DashboardOrganizationRole,
-) {
-  return role === "owner" || role === "manager";
-}
-
-export function canManageDashboardOrganizationEvent(
-  role: DashboardOrganizationRole,
-) {
-  return role === "owner" || role === "manager";
-}
-
-export function canShareDashboardOrganizationEvent(
-  role: DashboardOrganizationRole,
-) {
-  return role === "owner" || role === "manager" || role === "operator";
 }
 
 export async function getDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
 }) {
-  const organization = await getDashboardOrganizationForAuthUser(
+  return getCachedDashboardOrganizationEventForAuthUser(
     input.authUserId,
     input.organizationId,
+    input.eventId,
   );
-
-  if (!organization) {
-    return null;
-  }
-
-  const [event] = await getDb()
-    .select(dashboardEventSelection)
-    .from(events)
-    .where(and(eq(events.workspaceId, organization.id), eq(events.id, input.eventId)))
-    .limit(1);
-
-  if (!event) {
-    return null;
-  }
-
-  return {
-    organization,
-    event,
-  };
 }
 
-export async function getDashboardOrganizationEventSessionLinkForAuthUser(input: {
+const getCachedDashboardOrganizationEventForAuthUser = cache(
+  async (authUserId: string, organizationId: string, eventId: string) => {
+    const organization = await getDashboardOrganizationForAuthUser(
+      authUserId,
+      organizationId,
+    );
+
+    if (!organization) {
+      return null;
+    }
+
+    const [event] = await getDb()
+      .select(dashboardEventSelection)
+      .from(events)
+      .where(
+        and(
+          eq(events.workspaceId, organization.id),
+          getEventIdentifierCondition(eventId),
+        ),
+      )
+      .limit(1);
+
+    if (!event) {
+      return null;
+    }
+
+    return {
+      organization,
+      event: {
+        ...event,
+        effectiveStatus: getEffectiveEventLifecycleStatus(event),
+      },
+    };
+  },
+);
+
+export async function getDashboardOrganizationEventSessionAccessForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
 }) {
   const result = await getDashboardOrganizationEventForAuthUser(input);
 
@@ -287,59 +307,21 @@ export async function getDashboardOrganizationEventSessionLinkForAuthUser(input:
     return null;
   }
 
-  const [link] = await getDb()
-    .select(dashboardEventSessionLinkSelection)
-    .from(eventAccessLinks)
-    .where(
-      and(
-        eq(eventAccessLinks.eventId, result.event.id),
-        eq(eventAccessLinks.active, true),
-        isNull(eventAccessLinks.revokedAt),
-      ),
-    )
-    .orderBy(desc(eventAccessLinks.createdAt), desc(eventAccessLinks.id))
+  const [identity] = await getDb()
+    .select({ publicToken: eventSessions.publicToken })
+    .from(eventSessions)
+    .where(eq(eventSessions.eventId, result.event.id))
     .limit(1);
+
+  if (!identity) return null;
 
   return {
     ...result,
-    sessionLink: link ?? null,
+    event: {
+      ...result.event,
+      publicToken: identity.publicToken,
+    },
   };
-}
-
-export async function generateDashboardOrganizationEventSessionLinkForAuthUser(input: {
-  authUserId: string;
-  organizationId: string;
-  eventId: number;
-}) {
-  return getDb().transaction(async (transaction) => {
-    const { organization, event } =
-      await requireEventManagerOrganizationEventInTransaction(
-        transaction,
-        input.authUserId,
-        input.organizationId,
-        input.eventId,
-      );
-
-    return createEventSessionLinkInTransaction(transaction, organization, event);
-  });
-}
-
-export async function generateDashboardOrganizationEventShareLinkForAuthUser(input: {
-  authUserId: string;
-  organizationId: string;
-  eventId: number;
-}) {
-  return getDb().transaction(async (transaction) => {
-    const { organization, event } =
-      await requireEventSharerOrganizationEventInTransaction(
-        transaction,
-        input.authUserId,
-        input.organizationId,
-        input.eventId,
-      );
-
-    return createEventSessionLinkInTransaction(transaction, organization, event);
-  });
 }
 
 export async function createDashboardOrganizationEventForAuthUser(input: {
@@ -347,41 +329,82 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
   organizationId: string;
   event: CreateDashboardEventInput;
 }) {
-  return getDb().transaction(async (transaction) => {
-    const organization = await requireEventCreatorOrganizationInTransaction(
-      transaction,
-      input.authUserId,
-      input.organizationId,
-    );
-    const now = new Date();
+  return withEventSessionIdentityRetry(
+      (identity) =>
+        withSessionCodeCollisionRetry(
+          (sessionCode) =>
+            getDb().transaction(async (transaction) => {
+        const organization =
+          await requireEventCreatorOrganizationInTransaction(
+            transaction,
+            input.authUserId,
+            input.organizationId,
+          );
+        const now = new Date();
 
-    await assertNoActivePublicEventConflictInTransaction(transaction, {
-      workspaceId: organization.id,
-      nextIsActivePublicEvent: input.event.isActivePublicEvent,
-    });
-
-    const [event] = await transaction
+    const [createdEvent] = await transaction
       .insert(events)
       .values({
         workspaceId: organization.id,
+        publicId: identity.eventPublicId,
         name: input.event.title,
         venue: input.event.venue,
+        city: input.event.city,
+        sessionCode,
         startsAt: input.event.startsAt,
         autoCloseAt: input.event.autoCloseAt,
+        endsAt: input.event.autoCloseAt,
         facebookUrl: input.event.facebookUrl,
         status: input.event.isActivePublicEvent ? "active" : "draft",
         isActivePublicEvent: input.event.isActivePublicEvent,
+        songRequestsEnabled: input.event.songRequestsEnabled,
         publicQueueEnabled: input.event.publicQueueEnabled,
         publicShowSongTitles: input.event.publicShowSongTitles,
         updatedAt: now,
       })
       .returning(dashboardEventSelection);
 
-    if (!event) {
+    if (!createdEvent) {
       throw new Error("Event could not be created.");
     }
 
+    const catalogFields = await resolveDashboardEventCatalogFieldsInTransaction(
+      transaction,
+      createdEvent,
+      input.event,
+      now,
+    );
+
+    const [event] = await mapEventSlugUniqueViolation(async () =>
+      transaction
+        .update(events)
+        .set({
+          ...catalogFields,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(events.workspaceId, organization.id),
+            eq(events.id, createdEvent.id),
+          ),
+        )
+        .returning(dashboardEventSelection),
+    );
+
+    if (!event) {
+      throw new Error("Event catalog metadata could not be created.");
+    }
+
+    await insertEventSessionIdentity(transaction, {
+      eventId: event.id,
+      publicToken: identity.publicToken,
+      sessionCode,
+      createdByOperatorId: organization.operatorId,
+      createdAt: event.createdAt,
+    });
+
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "create_event",
@@ -389,24 +412,32 @@ export async function createDashboardOrganizationEventForAuthUser(input: {
       payload: {
         startsAt: input.event.startsAt.toISOString(),
         autoCloseAt: input.event.autoCloseAt.toISOString(),
+        endsAt: input.event.autoCloseAt.toISOString(),
+        songRequestsEnabled: input.event.songRequestsEnabled,
         publicQueueEnabled: input.event.publicQueueEnabled,
         publicShowSongTitles: input.event.publicShowSongTitles,
         isActivePublicEvent: input.event.isActivePublicEvent,
+        visibility: event.visibility,
+        slug: event.slug,
         facebookUrlProvided: Boolean(input.event.facebookUrl),
       },
     });
 
-    return {
-      organization,
-      event,
-    };
-  });
+            return {
+              organization,
+              event,
+            };
+            }),
+          isSessionCodeUniqueViolation,
+        ),
+      isEventSessionIdentityUniqueViolation,
+  );
 }
 
 export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
   event: UpdateDashboardEventAutoCloseAtInput;
 }) {
   return getDb().transaction(async (transaction) => {
@@ -433,6 +464,7 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
       .update(events)
       .set({
         autoCloseAt: input.event.autoCloseAt,
+        endsAt: input.event.autoCloseAt,
         updatedAt: now,
       })
       .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
@@ -447,6 +479,7 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "update_event_auto_close_at",
@@ -456,6 +489,8 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
         autoCloseAt: input.event.autoCloseAt.toISOString(),
       },
     });
+
+    await publishEventSessionInvalidation(transaction, event.id);
 
     return {
       organization,
@@ -467,17 +502,17 @@ export async function updateDashboardOrganizationEventAutoCloseAtForAuthUser(inp
 export async function updateDashboardOrganizationEventDetailsForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
   event: UpdateDashboardEventDetailsInput;
 }) {
   return getDb().transaction(async (transaction) => {
-    const { organization, event } =
-      await requireEventManagerOrganizationEventInTransaction(
-        transaction,
-        input.authUserId,
-        input.organizationId,
-        input.eventId,
-      );
+      const { organization, event } =
+        await requireEventManagerOrganizationEventInTransaction(
+          transaction,
+          input.authUserId,
+          input.organizationId,
+          input.eventId,
+        );
     const now = new Date();
 
     assertDashboardEventCanBeManaged(event, now);
@@ -490,28 +525,39 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
       );
     }
 
-    await assertNoActivePublicEventConflictInTransaction(transaction, {
-      workspaceId: organization.id,
-      nextIsActivePublicEvent: input.event.isActivePublicEvent,
-      eventId: event.id,
-    });
+    const catalogFields = await resolveDashboardEventCatalogFieldsInTransaction(
+      transaction,
+      event,
+      input.event,
+      now,
+    );
 
-    const [updatedEvent] = await transaction
-      .update(events)
-      .set({
-        name: input.event.title,
-        venue: input.event.venue,
-        startsAt: input.event.startsAt,
-        autoCloseAt: input.event.autoCloseAt,
-        facebookUrl: input.event.facebookUrl,
-        status: input.event.isActivePublicEvent ? "active" : event.status,
-        isActivePublicEvent: input.event.isActivePublicEvent,
-        publicQueueEnabled: input.event.publicQueueEnabled,
-        publicShowSongTitles: input.event.publicShowSongTitles,
-        updatedAt: now,
-      })
-      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
-      .returning(dashboardEventSelection);
+    const [updatedEvent] = await mapEventSlugUniqueViolation(async () =>
+      transaction
+        .update(events)
+        .set({
+          name: input.event.title,
+          venue: input.event.venue,
+          city: input.event.city,
+          slug: catalogFields.slug,
+          visibility: catalogFields.visibility,
+          publishedAt: catalogFields.publishedAt,
+          startsAt: input.event.startsAt,
+          autoCloseAt: input.event.autoCloseAt,
+          endsAt: input.event.autoCloseAt,
+          facebookUrl: input.event.facebookUrl,
+          status: input.event.isActivePublicEvent ? "active" : event.status,
+          isActivePublicEvent: input.event.isActivePublicEvent,
+          songRequestsEnabled: input.event.songRequestsEnabled,
+          publicQueueEnabled: input.event.publicQueueEnabled,
+          publicShowSongTitles: input.event.publicShowSongTitles,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(events.workspaceId, organization.id), eq(events.id, event.id)),
+        )
+        .returning(dashboardEventSelection),
+    );
 
     if (!updatedEvent) {
       throw new OperatorApiError(
@@ -522,6 +568,7 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "update_dashboard_event_details",
@@ -530,33 +577,43 @@ export async function updateDashboardOrganizationEventDetailsForAuthUser(input: 
         previous: {
           startsAt: event.startsAt.toISOString(),
           autoCloseAt: event.autoCloseAt?.toISOString() ?? null,
+          endsAt: event.endsAt.toISOString(),
+          songRequestsEnabled: event.songRequestsEnabled,
           publicQueueEnabled: event.publicQueueEnabled,
           publicShowSongTitles: event.publicShowSongTitles,
           isActivePublicEvent: event.isActivePublicEvent,
+          visibility: event.visibility,
+          slug: event.slug,
           facebookUrlProvided: Boolean(event.facebookUrl),
         },
         next: {
           startsAt: input.event.startsAt.toISOString(),
           autoCloseAt: input.event.autoCloseAt.toISOString(),
+          endsAt: input.event.autoCloseAt.toISOString(),
+          songRequestsEnabled: input.event.songRequestsEnabled,
           publicQueueEnabled: input.event.publicQueueEnabled,
           publicShowSongTitles: input.event.publicShowSongTitles,
           isActivePublicEvent: input.event.isActivePublicEvent,
+          visibility: updatedEvent.visibility,
+          slug: updatedEvent.slug,
           facebookUrlProvided: Boolean(input.event.facebookUrl),
         },
       },
     });
 
-    return {
-      organization,
-      event: updatedEvent,
-    };
-  });
+    await publishEventSessionInvalidation(transaction, event.id);
+
+      return {
+        organization,
+        event: updatedEvent,
+      };
+    });
 }
 
 export async function extendDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
   extension: ExtendDashboardEventInput;
 }) {
   return getDb().transaction(async (transaction) => {
@@ -571,13 +628,17 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
 
     assertDashboardEventCanBeManaged(event, now);
 
-    const autoCloseAt = calculateDashboardEventExtendedAutoCloseAt({
+    const autoCloseAt = resolveDashboardEventCloseAt({
       autoCloseAt: event.autoCloseAt,
       minutes: input.extension.minutes,
+      closesAt: input.extension.closesAt,
       now,
     });
 
-    if (autoCloseAt.getTime() <= event.startsAt.getTime()) {
+    if (
+      autoCloseAt.getTime() <= event.startsAt.getTime() ||
+      autoCloseAt.getTime() <= now.getTime()
+    ) {
       throw new OperatorApiError(
         400,
         "EVENT_AUTO_CLOSE_BEFORE_START",
@@ -589,6 +650,7 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
       .update(events)
       .set({
         autoCloseAt,
+        endsAt: autoCloseAt,
         updatedAt: now,
       })
       .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
@@ -603,16 +665,30 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
-      action: "extend_dashboard_event",
+      action: "event.extend",
       entityId: String(event.id),
       payload: {
+        schemaVersion: 1,
+        targetType: "event",
+        outcome: "success",
+        operation: "extend",
+        reason:
+          input.extension.closesAt === null
+            ? "duration_extension"
+            : "custom_close_time",
         minutes: input.extension.minutes,
-        previousAutoCloseAt: event.autoCloseAt?.toISOString() ?? null,
-        autoCloseAt: autoCloseAt.toISOString(),
+        customCloseAt: input.extension.closesAt !== null,
+        previousCloseAt: (
+          event.autoCloseAt ?? event.endsAt
+        ).toISOString(),
+        newCloseAt: autoCloseAt.toISOString(),
       },
     });
+
+    await publishEventSessionInvalidation(transaction, event.id);
 
     return {
       organization,
@@ -624,7 +700,7 @@ export async function extendDashboardOrganizationEventForAuthUser(input: {
 export async function closeDashboardOrganizationEventForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
 }) {
   return getDb().transaction(async (transaction) => {
     const { organization, event } =
@@ -644,6 +720,7 @@ export async function closeDashboardOrganizationEventForAuthUser(input: {
         status: "closed",
         isActivePublicEvent: false,
         closedAt: now,
+        closeReason: "manual",
         updatedAt: now,
       })
       .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
@@ -658,6 +735,7 @@ export async function closeDashboardOrganizationEventForAuthUser(input: {
     }
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: organization.operatorId,
       eventId: event.id,
       action: "close_dashboard_event",
@@ -669,11 +747,199 @@ export async function closeDashboardOrganizationEventForAuthUser(input: {
       },
     });
 
+    await publishEventSessionInvalidation(transaction, event.id);
+
     return {
       organization,
       event: closedEvent,
     };
   });
+}
+
+export async function reopenDashboardOrganizationEventForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: string;
+  extension: ExtendDashboardEventInput;
+}) {
+  return getDb().transaction(async (transaction) => {
+      const { organization, event } =
+        await requireEventManagerOrganizationEventInTransaction(
+          transaction,
+          input.authUserId,
+          input.organizationId,
+          input.eventId,
+        );
+    const now = new Date();
+
+    if (!canReopenEvent(event, now)) {
+      throw new OperatorApiError(
+        409,
+        "EVENT_REOPEN_WINDOW_EXPIRED",
+        "The event can no longer be reopened.",
+      );
+    }
+
+    const autoCloseAt = resolveDashboardEventCloseAt({
+      autoCloseAt: null,
+      minutes: input.extension.minutes,
+      closesAt: input.extension.closesAt,
+      now,
+    });
+
+    if (autoCloseAt.getTime() <= now.getTime()) {
+      throw new OperatorApiError(
+        400,
+        "EVENT_CLOSE_TIME_INVALID",
+        "The new event close time must be in the future.",
+      );
+    }
+
+    const [reopenedEvent] = await transaction
+      .update(events)
+      .set({
+        status: "active",
+        isActivePublicEvent: true,
+        autoCloseAt,
+        endsAt: autoCloseAt,
+        closedAt: null,
+        closeReason: null,
+        updatedAt: now,
+      })
+      .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+      .returning(dashboardEventSelection);
+
+    if (!reopenedEvent) {
+      throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+    }
+
+    await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
+      operatorId: organization.operatorId,
+      eventId: event.id,
+      action: "event.reopen",
+      entityId: String(event.id),
+      payload: {
+        schemaVersion: 1,
+        targetType: "event",
+        outcome: "success",
+        operation: "reopen",
+        reason: "operator_requested",
+        previousCloseAt:
+          getEffectiveEventCloseInstant(event)?.toISOString() ?? null,
+        newCloseAt: autoCloseAt.toISOString(),
+        previousCloseReason: event.closeReason,
+        minutes: input.extension.minutes,
+        customCloseAt: input.extension.closesAt !== null,
+      },
+    });
+
+    await publishEventSessionInvalidation(transaction, event.id);
+
+      return { organization, event: reopenedEvent };
+    });
+}
+
+export async function rotateDashboardOrganizationEventSessionCodeForAuthUser(input: {
+  authUserId: string;
+  organizationId: string;
+  eventId: string;
+  expectedSessionCode: string;
+}) {
+  return withSessionCodeCollisionRetry(
+    (sessionCode) =>
+      getDb().transaction(async (transaction) => {
+        const { organization, event } =
+          await requireEventManagerOrganizationEventInTransaction(
+            transaction,
+            input.authUserId,
+            input.organizationId,
+            input.eventId,
+          );
+        const now = new Date();
+
+        if (!canResolveEventJoinCode(event, now)) {
+          throw new OperatorApiError(
+            409,
+            "EVENT_SESSION_CODE_FINALIZED",
+            "The event join code can no longer be rotated.",
+          );
+        }
+
+        const identity = await lockEventSessionIdentity(transaction, event.id);
+        if (!identity) {
+          throw new OperatorApiError(
+            409,
+            "EVENT_SESSION_IDENTITY_MISSING",
+            "The event session identity is unavailable.",
+          );
+        }
+
+        if (identity.sessionCode !== input.expectedSessionCode) {
+          throw new OperatorApiError(
+            409,
+            "EVENT_SESSION_CODE_STALE",
+            "The event join code changed. Refresh and try again.",
+          );
+        }
+
+        await transaction
+          .update(eventSessionCodes)
+          .set({
+            validUntil: now,
+            revokedAt: now,
+            releaseAfter: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1_000),
+            revokedByOperatorId: organization.operatorId,
+          })
+          .where(eq(eventSessionCodes.id, identity.codeId));
+
+        await transaction.insert(eventSessionCodes).values({
+          sessionId: identity.sessionId,
+          code: sessionCode,
+          validFrom: now,
+          createdByOperatorId: organization.operatorId,
+          rotationReason: "operator_rotation",
+          createdAt: now,
+        });
+
+        const [updatedEvent] = await transaction
+          .update(events)
+          .set({ sessionCode, updatedAt: now })
+          .where(and(eq(events.workspaceId, organization.id), eq(events.id, event.id)))
+          .returning(dashboardEventSelection);
+
+        if (!updatedEvent) {
+          throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+        }
+
+        await transaction.insert(operatorAuditLog).values({
+          actorKind: "operator",
+          operatorId: organization.operatorId,
+          eventId: event.id,
+          action: "event.session_code.rotate",
+          entityId: String(event.id),
+          payload: {
+            schemaVersion: 1,
+            targetType: "event",
+            outcome: "success",
+            operation: "session_code_rotation",
+            reason: "operator_requested",
+          },
+        });
+
+        await publishEventSessionInvalidation(
+          transaction,
+          event.id,
+          identity.publicToken,
+        );
+
+        return {
+          organization,
+          event: { ...updatedEvent, publicToken: identity.publicToken },
+        };
+      }),
+    isSessionCodeUniqueViolation,
+  );
 }
 
 export async function listDashboardOrganizationMembersForAuthUser(
@@ -878,79 +1144,114 @@ type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
 >[0];
 
-type DashboardOrganizationEventActionOrganization = DashboardOrganization & {
-  operatorId: number;
-};
+type DashboardEventCatalogInput = Pick<
+  CreateDashboardEventInput | UpdateDashboardEventDetailsInput,
+  "city" | "slug" | "title" | "visibility"
+>;
 
-async function createEventSessionLinkInTransaction(
+async function resolveDashboardEventCatalogFieldsInTransaction(
   transaction: DatabaseTransaction,
-  organization: DashboardOrganizationEventActionOrganization,
   event: DashboardOrganizationEvent,
+  input: DashboardEventCatalogInput,
+  now: Date,
 ) {
-  const now = new Date();
-  const code = generateEventAccessCode();
-  const codeHash = hashEventAccessCode(code);
-
-  const activeLinks = await transaction
-    .select({ id: eventAccessLinks.id })
-    .from(eventAccessLinks)
-    .where(
-      and(
-        eq(eventAccessLinks.eventId, event.id),
-        eq(eventAccessLinks.active, true),
-        isNull(eventAccessLinks.revokedAt),
-      ),
-    )
-    .for("update");
-
-  if (activeLinks.length > 0) {
-    await transaction
-      .update(eventAccessLinks)
-      .set({
-        active: false,
-        revokedAt: now,
-      })
-      .where(
-        and(
-          eq(eventAccessLinks.eventId, event.id),
-          eq(eventAccessLinks.active, true),
-          isNull(eventAccessLinks.revokedAt),
-        ),
-      );
-  }
-
-  const [link] = await transaction
-    .insert(eventAccessLinks)
-    .values({
-      eventId: event.id,
-      codeHash,
-      label: "Link sesji",
-      createdByOperatorId: organization.operatorId,
-    })
-    .returning(dashboardEventSessionLinkSelection);
-
-  if (!link) {
-    throw new Error("Session link could not be created.");
-  }
-
-  await transaction.insert(operatorAuditLog).values({
-    operatorId: organization.operatorId,
-    eventId: event.id,
-    action: "generate_event_session_link",
-    entityId: String(link.id),
-    payload: {
-      active: link.active,
-      revokedPreviousLinks: activeLinks.length,
-    },
+  const baseSlug = buildEventSlugCandidate({
+    requestedSlug: input.slug,
+    name: input.title,
   });
+  const slug = baseSlug
+    ? await resolveUniqueEventSlugInTransaction(transaction, event.id, baseSlug)
+    : null;
+
+  if (input.visibility === "public") {
+    if (!slug || !isValidEventSlug(slug)) {
+      throw new OperatorApiError(
+        400,
+        "EVENT_PUBLICATION_SLUG_REQUIRED",
+        "A public event requires a valid slug.",
+      );
+    }
+
+    return {
+      city: input.city,
+      slug,
+      visibility: "public" as const,
+      publishedAt: event.publishedAt ?? now,
+    };
+  }
 
   return {
-    organization,
-    event,
-    link,
-    code,
-    sessionPath: `/session/${encodeURIComponent(code)}`,
+    city: input.city,
+    slug,
+    visibility: "private" as const,
+    publishedAt: event.publishedAt,
   };
+}
+
+async function resolveUniqueEventSlugInTransaction(
+  transaction: DatabaseTransaction,
+  eventId: number,
+  baseSlug: string,
+) {
+  if (!isValidEventSlug(baseSlug)) {
+    throw new OperatorApiError(
+      400,
+      "EVENT_SLUG_INVALID",
+      "Event slug is invalid.",
+    );
+  }
+
+  if (!(await eventSlugExistsInTransaction(transaction, eventId, baseSlug))) {
+    return baseSlug;
+  }
+
+  const collisionSlug = buildEventSlugCollisionCandidate({
+    baseSlug,
+    eventId,
+  });
+
+  if (
+    !isValidEventSlug(collisionSlug) ||
+    (await eventSlugExistsInTransaction(transaction, eventId, collisionSlug))
+  ) {
+    throw new OperatorApiError(
+      409,
+      "EVENT_SLUG_ALREADY_EXISTS",
+      "Event slug is already used by another event.",
+    );
+  }
+
+  return collisionSlug;
+}
+
+async function eventSlugExistsInTransaction(
+  transaction: DatabaseTransaction,
+  eventId: number,
+  slug: string,
+) {
+  const [eventWithSlug] = await transaction
+    .select({ id: events.id })
+    .from(events)
+    .where(and(eq(events.slug, slug), ne(events.id, eventId)))
+    .limit(1);
+
+  return Boolean(eventWithSlug);
+}
+
+async function mapEventSlugUniqueViolation<T>(action: () => Promise<T>) {
+  try {
+    return await action();
+  } catch (error) {
+    if (isEventSlugUniqueViolation(error)) {
+      throw new OperatorApiError(
+        409,
+        "EVENT_SLUG_ALREADY_EXISTS",
+        "Event slug is already used by another event.",
+      );
+    }
+
+    throw error;
+  }
 }
 
 async function requireOwnerOrganizationInTransaction(
@@ -1051,7 +1352,7 @@ async function requireEventManagerOrganizationEventInTransaction(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
-  eventId: number,
+  eventId: string,
 ) {
   if (!isOrganizationPublicId(organizationId)) {
     throw new OperatorApiError(
@@ -1103,10 +1404,20 @@ async function requireEventManagerOrganizationEventInTransaction(
     );
   }
 
+  const eventIdentifier = parseDashboardEventIdentifier(eventId);
+  if (!eventIdentifier) {
+    throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+  }
+
   const [event] = await transaction
     .select(dashboardEventSelection)
     .from(events)
-    .where(and(eq(events.workspaceId, organization.id), eq(events.id, eventId)))
+    .where(
+      and(
+        eq(events.workspaceId, organization.id),
+        eq(events.publicId, eventIdentifier.value),
+      ),
+    )
     .for("update")
     .limit(1);
 
@@ -1118,26 +1429,54 @@ async function requireEventManagerOrganizationEventInTransaction(
     );
   }
 
+  const recheckedOrganization =
+    await findEventManagerOrganizationInTransaction(
+      transaction,
+      authUserId,
+      organizationId,
+    );
+
+  if (!recheckedOrganization || recheckedOrganization.id !== organization.id) {
+    throw new OperatorApiError(
+      403,
+      "WORKSPACE_EVENT_MANAGE_FORBIDDEN",
+      "Only an owner or manager can manage events.",
+    );
+  }
+
   return {
-    organization,
+    organization: recheckedOrganization,
     event,
   };
 }
 
-async function requireEventSharerOrganizationEventInTransaction(
+function getEventIdentifierCondition(eventId: string) {
+  const identifier = parseDashboardEventIdentifier(eventId);
+
+  if (!identifier) return sql`false`;
+  return eq(events.publicId, identifier.value);
+}
+
+function assertDashboardEventCanBeManaged(
+  event: DashboardOrganizationEvent,
+  now: Date,
+) {
+  if (canManageDashboardEventLifecycle(event, now)) {
+    return;
+  }
+
+  throw new OperatorApiError(
+    409,
+    "EVENT_MANAGEMENT_LOCKED",
+    "Closed or cancelled events cannot be managed in this MVP.",
+  );
+}
+
+async function findEventManagerOrganizationInTransaction(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
-  eventId: number,
 ) {
-  if (!isOrganizationPublicId(organizationId)) {
-    throw new OperatorApiError(
-      404,
-      "WORKSPACE_NOT_FOUND",
-      "Organization was not found.",
-    );
-  }
-
   const [organization] = await transaction
     .select({
       id: workspaces.id,
@@ -1164,88 +1503,13 @@ async function requireEventSharerOrganizationEventInTransaction(
         eq(operatorUsers.authUserId, authUserId),
         eq(operatorUsers.active, true),
         eq(workspaceMembers.active, true),
+        or(
+          eq(workspaceMembers.role, "owner"),
+          eq(workspaceMembers.role, "manager"),
+        ),
       ),
     )
     .limit(1);
 
-  if (!organization || !canShareDashboardOrganizationEvent(organization.role)) {
-    throw new OperatorApiError(
-      403,
-      "WORKSPACE_EVENT_SHARE_FORBIDDEN",
-      "Only an owner, manager, or operator can share events.",
-    );
-  }
-
-  const [event] = await transaction
-    .select(dashboardEventSelection)
-    .from(events)
-    .where(and(eq(events.workspaceId, organization.id), eq(events.id, eventId)))
-    .for("update")
-    .limit(1);
-
-  if (!event) {
-    throw new OperatorApiError(
-      404,
-      "EVENT_NOT_FOUND",
-      "Event was not found.",
-    );
-  }
-
-  return {
-    organization,
-    event,
-  };
-}
-
-function assertDashboardEventCanBeManaged(
-  event: DashboardOrganizationEvent,
-  now: Date,
-) {
-  if (canManageDashboardEventLifecycle(event, now)) {
-    return;
-  }
-
-  throw new OperatorApiError(
-    409,
-    "EVENT_MANAGEMENT_LOCKED",
-    "Closed or cancelled events cannot be managed in this MVP.",
-  );
-}
-
-async function assertNoActivePublicEventConflictInTransaction(
-  transaction: DatabaseTransaction,
-  input: {
-    workspaceId: number;
-    nextIsActivePublicEvent: boolean;
-    eventId?: number;
-  },
-) {
-  if (!input.nextIsActivePublicEvent) {
-    return;
-  }
-
-  const filters = [
-    eq(events.workspaceId, input.workspaceId),
-    eq(events.isActivePublicEvent, true),
-  ];
-
-  if (input.eventId !== undefined) {
-    filters.push(ne(events.id, input.eventId));
-  }
-
-  const [activePublicEvent] = await transaction
-    .select({ id: events.id })
-    .from(events)
-    .where(and(...filters))
-    .limit(1);
-
-  if (!activePublicEvent) {
-    return;
-  }
-
-  throw new OperatorApiError(
-    409,
-    "ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS",
-    "Another public event is already active for this organization.",
-  );
+  return organization ?? null;
 }

@@ -1,9 +1,26 @@
 "use client";
 
-import { useActionState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useState,
+  type MouseEvent,
+} from "react";
+import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -13,7 +30,6 @@ import {
 } from "@/components/ui/card";
 import { DASHBOARD_EVENT_EXTENSION_MINUTES } from "@/lib/dashboard-event-lifecycle";
 
-import styles from "./operator.module.css";
 
 export type EventManagementActionIssue = {
   field: string;
@@ -33,9 +49,13 @@ export type EventManagementAction = (
 export type EventManagementInitialValues = {
   title: string;
   venue: string;
+  city: string;
+  slug: string;
+  visibility: "private" | "public";
   startsAtInputValue: string;
   autoCloseAtInputValue: string;
   facebookUrl: string;
+  songRequestsEnabled: boolean;
   publicQueueEnabled: boolean;
   publicShowSongTitles: boolean;
   isActivePublicEvent: boolean;
@@ -54,6 +74,12 @@ export function EventManagementPanel({
   detailsAction,
   extendAction,
   closeAction,
+  reopenAction,
+  rotateCodeAction,
+  canReopen,
+  reopenDeadline,
+  canRotateCode,
+  successMessage,
 }: {
   canManage: boolean;
   manageBlockedReason: string;
@@ -62,6 +88,12 @@ export function EventManagementPanel({
   detailsAction: EventManagementAction;
   extendAction: EventManagementAction;
   closeAction: EventManagementAction;
+  reopenAction: EventManagementAction;
+  rotateCodeAction: EventManagementAction;
+  canReopen: boolean;
+  reopenDeadline: string | null;
+  canRotateCode: boolean;
+  successMessage: string | null;
 }) {
   const [detailsState, detailsFormAction, isSavingDetails] = useActionState(
     detailsAction,
@@ -75,8 +107,22 @@ export function EventManagementPanel({
     closeAction,
     initialState,
   );
+  const [reopenState, reopenFormAction, isReopening] = useActionState(
+    reopenAction,
+    initialState,
+  );
+  const [rotateState, rotateFormAction, isRotating] = useActionState(
+    rotateCodeAction,
+    initialState,
+  );
 
-  if (!canManage) {
+  useEffect(() => {
+    if (successMessage) {
+      toast.success(successMessage);
+    }
+  }, [successMessage]);
+
+  if (!canManage && !canReopen && !canRotateCode) {
     return (
       <Card>
         <CardHeader>
@@ -87,16 +133,53 @@ export function EventManagementPanel({
     );
   }
 
+  if (!canManage) {
+    return (
+      <div className="grid gap-4">
+        {canReopen ? (
+          <>
+            <ReopenWindowAlert deadline={reopenDeadline} />
+            <LifecycleTimeCard
+              title="Przywrócenie wydarzenia"
+              description="Wybierz nowy przyszły czas zamknięcia. Kolejka i zgłoszenia pozostaną bez zmian."
+              action={reopenFormAction}
+              state={reopenState}
+              pending={isReopening}
+              submitLabel="Przywróć wydarzenie"
+              formId="event-reopen-form"
+              confirmationTitle="Przywrócić wydarzenie?"
+              confirmationDescription="Sesja ponownie zacznie przyjmować zgłoszenia, a dotychczasowa kolejka pozostanie bez zmian."
+            />
+          </>
+        ) : null}
+        {canRotateCode ? (
+          <SessionCodeRotationCard
+            action={rotateFormAction}
+            state={rotateState}
+            pending={isRotating}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <>
       {showClosingWarning ? (
-        <Alert className={styles.eventWarning}>
+        <Alert className={"mb-4"}>
           <AlertTitle>
             Wydarzenie kończy się za mniej niż 30 minut. Wydłużyć?
           </AlertTitle>
           <AlertDescription>
-            <form className={styles.warningActions} action={extendFormAction}>
-              <ExtendButtons disabled={isExtending} />
+            <form
+              id="event-warning-extend-form"
+              className={"flex flex-wrap gap-2"}
+              action={extendFormAction}
+            >
+              <ExtendButtons
+                disabled={isExtending}
+                formId="event-warning-extend-form"
+              />
             </form>
           </AlertDescription>
         </Alert>
@@ -111,10 +194,10 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={styles.settingsForm} action={detailsFormAction}>
+          <form className={"grid gap-4 [&_button]:justify-self-start"} action={detailsFormAction}>
             <ActionMessage state={detailsState} />
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-title">Nazwa wydarzenia</label>
               <input
                 id="event-manage-title"
@@ -128,7 +211,7 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="title" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-venue">Miejsce</label>
               <input
                 id="event-manage-venue"
@@ -141,7 +224,20 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="venue" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
+              <label htmlFor="event-manage-city">Miasto</label>
+              <input
+                id="event-manage-city"
+                name="city"
+                type="text"
+                maxLength={120}
+                defaultValue={initialValues.city}
+                aria-invalid={hasIssue(detailsState, "city") || undefined}
+              />
+              <FieldIssue state={detailsState} field="city" />
+            </div>
+
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-starts-at">
                 Start wydarzenia (czas polski)
               </label>
@@ -156,7 +252,7 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="startsAt" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-auto-close-at">
                 Czas zamknięcia (czas polski)
               </label>
@@ -167,14 +263,14 @@ export function EventManagementPanel({
                 defaultValue={initialValues.autoCloseAtInputValue}
                 aria-invalid={hasIssue(detailsState, "autoCloseAt") || undefined}
               />
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Jeśli zostawisz puste, czas zamknięcia zostanie ustawiony na 6
                 godzin po starcie.
               </p>
               <FieldIssue state={detailsState} field="autoCloseAt" />
             </div>
 
-            <div className={styles.dashboardField}>
+            <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-facebook-url">Facebook URL</label>
               <input
                 id="event-manage-facebook-url"
@@ -187,9 +283,57 @@ export function EventManagementPanel({
               <FieldIssue state={detailsState} field="facebookUrl" />
             </div>
 
-            <div className={styles.formSection}>
+            <div className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"}>
+              <h2>Katalog publiczny</h2>
+              <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
+                <label htmlFor="event-manage-slug">Slug publiczny</label>
+                <input
+                  id="event-manage-slug"
+                  name="slug"
+                  type="text"
+                  inputMode="url"
+                  maxLength={80}
+                  defaultValue={initialValues.slug}
+                  aria-invalid={hasIssue(detailsState, "slug") || undefined}
+                />
+                <p className={"mt-1.5 text-sm text-muted-foreground"}>
+                  Zostaw puste, aby wygenerować slug z nazwy przy publikacji.
+                </p>
+                <FieldIssue state={detailsState} field="slug" />
+              </div>
+
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
+                <input
+                  name="visibility"
+                  type="checkbox"
+                  value="public"
+                  defaultChecked={initialValues.visibility === "public"}
+                />
+                <span>Opublikuj w katalogu wydarzeń</span>
+              </label>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
+                Publiczne wydarzenie wymaga sluga i daty publikacji. Wyłączenie
+                publikacji nie usuwa historii pierwszej publikacji.
+              </p>
+              <FieldIssue state={detailsState} field="visibility" />
+            </div>
+
+            <div className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"}>
               <h2>Widoczność i kolejka publiczna</h2>
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
+                <input
+                  name="songRequestsEnabled"
+                  type="checkbox"
+                  defaultChecked={initialValues.songRequestsEnabled}
+                />
+                <span>Publiczne zgłoszenia włączone</span>
+              </label>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
+                Decyduje, czy publiczny endpoint wydarzenia przyjmuje nowe
+                piosenki.
+              </p>
+
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="publicQueueEnabled"
                   type="checkbox"
@@ -197,12 +341,12 @@ export function EventManagementPanel({
                 />
                 <span>Publiczna kolejka włączona</span>
               </label>
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Decyduje, czy ludzie mogą korzystać z publicznego widoku kolejki
                 dla tego wydarzenia.
               </p>
 
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="publicShowSongTitles"
                   type="checkbox"
@@ -210,12 +354,12 @@ export function EventManagementPanel({
                 />
                 <span>Pokazuj tytuły piosenek publicznie</span>
               </label>
-              <p className={styles.eventMeta}>
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
                 Decyduje, czy publicznie widać tytuły zgłoszeń, czy tylko osoby
                 i statusy.
               </p>
 
-              <label className={styles.checkboxField}>
+              <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="isActivePublicEvent"
                   type="checkbox"
@@ -223,14 +367,13 @@ export function EventManagementPanel({
                 />
                 <span>Event aktywny publicznie</span>
               </label>
-              <p className={styles.eventMeta}>
-                Ten event jest używany przez publiczny widok /queue. Organizacja
-                może mieć tylko jeden aktywny publicznie event.
+              <p className={"mt-1.5 text-sm text-muted-foreground"}>
+                Udostępnia publiczną sesję i kolejkę tego wydarzenia.
               </p>
               <FieldIssue state={detailsState} field="isActivePublicEvent" />
             </div>
 
-            <div className={styles.formActions}>
+            <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
               <Button type="submit" disabled={isSavingDetails}>
                 {isSavingDetails ? "Zapisywanie..." : "Zapisz szczegóły"}
               </Button>
@@ -238,6 +381,14 @@ export function EventManagementPanel({
           </form>
         </CardContent>
       </Card>
+
+      {canRotateCode ? (
+        <SessionCodeRotationCard
+          action={rotateFormAction}
+          state={rotateState}
+          pending={isRotating}
+        />
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -248,16 +399,39 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={styles.settingsForm} action={extendFormAction}>
+          <form
+            id="event-extend-form"
+            className={"grid gap-4 [&_button]:justify-self-start"}
+            action={extendFormAction}
+          >
             <ActionMessage state={extendState} />
-            <div className={styles.lifecycleActions}>
-              <ExtendButtons disabled={isExtending} />
+            <div className={"flex flex-wrap gap-2"}>
+              <ExtendButtons disabled={isExtending} formId="event-extend-form" />
+            </div>
+            <div className="grid gap-2 sm:max-w-sm">
+              <label htmlFor="event-extend-closes-at">Własny czas zamknięcia</label>
+              <input
+                id="event-extend-closes-at"
+                name="closesAt"
+                type="datetime-local"
+                className="min-h-11 rounded-md border border-input bg-background px-3 py-2"
+                aria-invalid={hasIssue(extendState, "closesAt") || undefined}
+              />
+              <FieldIssue state={extendState} field="closesAt" />
+              <ConfirmedSubmitButton
+                formId="event-extend-form"
+                pending={isExtending}
+                triggerLabel="Ustaw własny czas"
+                pendingLabel="Zapisywanie..."
+                title="Przedłużyć wydarzenie?"
+                description="Nowy czas zamknięcia zostanie ustawiony, a sesja i kolejka pozostaną bez zmian."
+              />
             </div>
           </form>
         </CardContent>
       </Card>
 
-      <Card className={styles.dangerZoneCard}>
+      <Card className={"border-destructive/40"}>
         <CardHeader>
           <CardTitle>Zamknięcie wydarzenia</CardTitle>
           <CardDescription>
@@ -266,12 +440,22 @@ export function EventManagementPanel({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className={styles.settingsForm} action={closeFormAction}>
+          <form
+            id="event-close-form"
+            className={"grid gap-4 [&_button]:justify-self-start"}
+            action={closeFormAction}
+          >
             <ActionMessage state={closeState} />
-            <div className={styles.formActions}>
-              <Button type="submit" variant="destructive" disabled={isClosing}>
-                {isClosing ? "Zamykanie..." : "Zamknij wydarzenie teraz"}
-              </Button>
+            <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
+              <ConfirmedSubmitButton
+                formId="event-close-form"
+                pending={isClosing}
+                triggerLabel="Zamknij wydarzenie teraz"
+                pendingLabel="Zamykanie..."
+                title="Zamknąć wydarzenie?"
+                description="Nowe zgłoszenia zostaną zablokowane. Kolejka i historia zgłoszeń nie zostaną usunięte."
+                destructive
+              />
             </div>
           </form>
         </CardContent>
@@ -280,31 +464,235 @@ export function EventManagementPanel({
   );
 }
 
-function ExtendButtons({ disabled }: { disabled: boolean }) {
+function ExtendButtons({
+  disabled,
+  formId,
+}: {
+  disabled: boolean;
+  formId: string;
+}) {
   return (
     <>
       {DASHBOARD_EVENT_EXTENSION_MINUTES.map((minutes) => (
-        <Button
+        <ConfirmedSubmitButton
           key={minutes}
+          formId={formId}
+          pending={disabled}
+          triggerLabel={`+${minutes} min`}
+          pendingLabel="Zapisywanie..."
+          title="Przedłużyć wydarzenie?"
+          description={`Czas zamknięcia zostanie przedłużony o ${minutes} minut. Sesja i kolejka pozostaną bez zmian.`}
           name="minutes"
-          type="submit"
-          value={minutes}
-          variant="outline"
-          disabled={disabled}
-        >
-          +{minutes} min
-        </Button>
+          value={String(minutes)}
+        />
       ))}
     </>
   );
 }
 
+function LifecycleTimeCard({
+  title,
+  description,
+  action,
+  state,
+  pending,
+  submitLabel,
+  formId,
+  confirmationTitle,
+  confirmationDescription,
+}: {
+  title: string;
+  description: string;
+  action: (formData: FormData) => void;
+  state: EventManagementActionState;
+  pending: boolean;
+  submitLabel: string;
+  formId: string;
+  confirmationTitle: string;
+  confirmationDescription: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form id={formId} className="grid gap-4" action={action}>
+          <ActionMessage state={state} />
+          <div className="flex flex-wrap gap-2">
+            <ExtendButtons disabled={pending} formId={formId} />
+          </div>
+          <div className="grid gap-2 sm:max-w-sm">
+            <label htmlFor={`${title}-closes-at`}>Własny czas zamknięcia</label>
+            <input
+              id={`${title}-closes-at`}
+              name="closesAt"
+              type="datetime-local"
+              className="min-h-11 rounded-md border border-input bg-background px-3 py-2"
+              aria-invalid={hasIssue(state, "closesAt") || undefined}
+            />
+            <FieldIssue state={state} field="closesAt" />
+            <ConfirmedSubmitButton
+              formId={formId}
+              pending={pending}
+              triggerLabel={submitLabel}
+              pendingLabel="Zapisywanie..."
+              title={confirmationTitle}
+              description={confirmationDescription}
+            />
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SessionCodeRotationCard({
+  action,
+  state,
+  pending,
+}: {
+  action: (formData: FormData) => void;
+  state: EventManagementActionState;
+  pending: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Kod dołączenia</CardTitle>
+        <CardDescription>
+          Rotacja natychmiast wyłącza poprzedni kod. Stały link i kod QR nie
+          zmieniają się.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form id="event-session-code-rotation-form" className="grid gap-4" action={action}>
+          <ActionMessage state={state} />
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button type="button" variant="outline">Zmień kod sesji</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent data-management-theme="true">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Zmienić kod sesji?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Poprzedni kod przestanie działać od razu. Kanoniczny link i QR
+                  pozostaną bez zmian.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                <AlertDialogAction
+                  type="submit"
+                  form="event-session-code-rotation-form"
+                  disabled={pending}
+                  onClick={submitAssociatedForm}
+                >
+                  {pending ? "Zmienianie..." : "Zmień kod"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ActionMessage({ state }: { state: EventManagementActionState }) {
   return state.message ? (
-    <p className={styles.formError} role="alert">
-      {state.message}
-    </p>
+    <Alert variant="destructive" role="alert">
+      <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
+      <AlertDescription>{state.message}</AlertDescription>
+    </Alert>
   ) : null;
+}
+
+function ReopenWindowAlert({ deadline }: { deadline: string | null }) {
+  const [remaining, setRemaining] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deadline) {
+      return;
+    }
+
+    const update = () => {
+      const remainingSeconds = Math.max(
+        0,
+        Math.ceil((new Date(deadline).getTime() - Date.now()) / 1_000),
+      );
+      const minutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      setRemaining(`${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`);
+    };
+
+    update();
+    const interval = window.setInterval(update, 1_000);
+    return () => window.clearInterval(interval);
+  }, [deadline]);
+
+  return (
+    <Alert>
+      <AlertTitle>Wydarzenie zostało zakończone</AlertTitle>
+      <AlertDescription>
+        Możesz je przywrócić jeszcze przez {remaining ?? "--:--"}. Decyzja
+        zostanie ponownie sprawdzona przez serwer.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function ConfirmedSubmitButton({
+  formId,
+  pending,
+  triggerLabel,
+  pendingLabel,
+  title,
+  description,
+  name,
+  value,
+  destructive = false,
+}: {
+  formId: string;
+  pending: boolean;
+  triggerLabel: string;
+  pendingLabel: string;
+  title: string;
+  description: string;
+  name?: string;
+  value?: string;
+  destructive?: boolean;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button type="button" variant={destructive ? "destructive" : "outline"}>
+          {triggerLabel}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent data-management-theme="true">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Anuluj</AlertDialogCancel>
+          <AlertDialogAction
+            type="submit"
+            form={formId}
+            name={name}
+            value={value}
+            variant={destructive ? "destructive" : "default"}
+            disabled={pending}
+            onClick={submitAssociatedForm}
+          >
+            {pending ? pendingLabel : triggerLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 function FieldIssue({
@@ -316,9 +704,14 @@ function FieldIssue({
 }) {
   const issue = state.issues.find((item) => item.field === field);
 
-  return issue ? <p className={styles.fieldError}>{issue.message}</p> : null;
+  return issue ? <p className={"m-0 text-sm leading-snug text-destructive"}>{issue.message}</p> : null;
 }
 
 function hasIssue(state: EventManagementActionState, field: string) {
   return state.issues.some((issue) => issue.field === field);
+}
+
+function submitAssociatedForm(event: MouseEvent<HTMLButtonElement>) {
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit(event.currentTarget);
 }

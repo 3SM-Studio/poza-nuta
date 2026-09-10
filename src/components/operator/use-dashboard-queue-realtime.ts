@@ -14,7 +14,7 @@ export function useDashboardQueueRealtime(
 ) {
   return useQueueRealtime({
     audience: "dashboard",
-    eventId,
+    identity: eventId,
     onInvalidate,
   });
 }

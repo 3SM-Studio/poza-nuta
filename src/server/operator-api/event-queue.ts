@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, max, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, max, ne, sql } from "drizzle-orm";
 
 import {
   canApplyDashboardEventQueueAction,
@@ -8,7 +8,7 @@ import {
   canReorderDashboardEventQueueRequest,
   getDashboardEventQueueTargetStatus,
   type DashboardEventQueueAction,
-  type DashboardEventQueueMoveDirection,
+  type DashboardEventQueueMoveInput,
 } from "../../lib/dashboard-event-queue";
 import {
   events,
@@ -20,7 +20,13 @@ import {
   workspaces,
 } from "../../db/schema";
 import { isOrganizationPublicId } from "../../lib/organization-public-id";
+import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier";
+import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
 import { getDb } from "../db";
+import {
+  ACTIVE_PUBLIC_REQUEST_STATUSES,
+  isActivePublicRequestStatus,
+} from "../public-api/queue-policy";
 import {
   getDashboardOrganizationEventForAuthUser,
 } from "./organizations";
@@ -79,7 +85,7 @@ export type DashboardEventQueueItem = ReturnType<
 export async function getDashboardOrganizationEventQueueForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
 }) {
   const result = await getDashboardOrganizationEventForAuthUser(input);
 
@@ -106,7 +112,7 @@ export async function getDashboardOrganizationEventQueueForAuthUser(input: {
 export async function applyDashboardOrganizationEventQueueActionForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
   requestId: number;
   action: DashboardEventQueueAction;
 }) {
@@ -120,8 +126,11 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     const [queueRequest] = await transaction
       .select({
         id: songRequests.id,
+        songId: songRequests.songId,
         status: songRequests.status,
         position: songRequests.position,
+        requestedBy: songRequests.requestedBy,
+        eventParticipantId: songRequests.eventParticipantId,
         version: songRequests.version,
       })
       .from(songRequests)
@@ -152,6 +161,36 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       );
     }
 
+    const targetStatus = getDashboardEventQueueTargetStatus(input.action);
+
+    if (
+      queueRequest.requestedBy === "public" &&
+      queueRequest.eventParticipantId !== null &&
+      isActivePublicRequestStatus(targetStatus)
+    ) {
+      const [activeDuplicate] = await transaction
+        .select({ id: songRequests.id })
+        .from(songRequests)
+        .where(
+          and(
+            eq(songRequests.eventId, context.event.id),
+            eq(songRequests.eventParticipantId, queueRequest.eventParticipantId),
+            eq(songRequests.songId, queueRequest.songId),
+            inArray(songRequests.status, ACTIVE_PUBLIC_REQUEST_STATUSES),
+            ne(songRequests.id, queueRequest.id),
+          ),
+        )
+        .limit(1);
+
+      if (activeDuplicate) {
+        throw new OperatorApiError(
+          409,
+          "QUEUE_ACTIVE_DUPLICATE",
+          "This participant already has an active request for the selected song.",
+        );
+      }
+    }
+
     const changedAt = new Date();
     const completedNowRequestCount =
       input.action === "start"
@@ -161,7 +200,6 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
             changedAt,
           )
         : 0;
-    const targetStatus = getDashboardEventQueueTargetStatus(input.action);
     let targetPosition = 0;
 
     if (targetStatus === "approved") {
@@ -228,6 +266,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     );
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: context.organization.operatorId,
       eventId: context.event.id,
       action: `event_queue_${input.action}`,
@@ -255,9 +294,9 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
 export async function moveDashboardOrganizationEventQueueRequestForAuthUser(input: {
   authUserId: string;
   organizationId: string;
-  eventId: number;
+  eventId: string;
   requestId: number;
-  direction: DashboardEventQueueMoveDirection;
+  move: DashboardEventQueueMoveInput;
 }) {
   return getDb().transaction(async (transaction) => {
     const context = await requireEventQueueManagerContext(
@@ -330,7 +369,11 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
     }
 
     const targetIndex =
-      input.direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      "direction" in input.move
+        ? input.move.direction === "up"
+          ? currentIndex - 1
+          : currentIndex + 1
+        : Math.min(input.move.targetPosition, orderedRequests.length) - 1;
 
     if (targetIndex < 0 || targetIndex >= orderedRequests.length) {
       return {
@@ -345,12 +388,8 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
     }
 
     const previousPosition = currentIndex + 1;
-    const targetRequest = orderedRequests[currentIndex];
-    const neighborRequest = orderedRequests[targetIndex];
-    [orderedRequests[currentIndex], orderedRequests[targetIndex]] = [
-      neighborRequest,
-      targetRequest,
-    ];
+    const [targetRequest] = orderedRequests.splice(currentIndex, 1);
+    orderedRequests.splice(targetIndex, 0, targetRequest);
     const changedAt = new Date();
     const positionUpdates = orderedRequests
       .map((request, index) => ({
@@ -385,12 +424,15 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
     );
 
     await transaction.insert(operatorAuditLog).values({
+      actorKind: "operator",
       operatorId: context.organization.operatorId,
       eventId: context.event.id,
       action: "move_event_queue_request",
       entityId: String(input.requestId),
       payload: {
-        direction: input.direction,
+        ...("direction" in input.move
+          ? { direction: input.move.direction }
+          : { targetPosition: input.move.targetPosition }),
         previousPosition,
         nextPosition: updatedRequest.position,
       },
@@ -451,7 +493,7 @@ async function requireEventQueueManagerContext(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
-  eventId: number,
+  eventId: string,
 ) {
   if (!isOrganizationPublicId(organizationId)) {
     throw new OperatorApiError(
@@ -499,14 +541,27 @@ async function requireEventQueueManagerContext(
     );
   }
 
+  const eventIdentifier = parseDashboardEventIdentifier(eventId);
+  if (!eventIdentifier) {
+    throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+  }
+
   const [event] = await transaction
     .select({
       id: events.id,
       name: events.name,
+      status: events.status,
+      startsAt: events.startsAt,
+      autoCloseAt: events.autoCloseAt,
+      endsAt: events.endsAt,
+      closedAt: events.closedAt,
     })
     .from(events)
     .where(
-      and(eq(events.id, eventId), eq(events.workspaceId, organization.id)),
+      and(
+        eq(events.publicId, eventIdentifier.value),
+        eq(events.workspaceId, organization.id),
+      ),
     )
     .for("update")
     .limit(1);
@@ -519,10 +574,71 @@ async function requireEventQueueManagerContext(
     );
   }
 
+  const recheckedOrganization = await findEventQueueManagerOrganization(
+    transaction,
+    authUserId,
+    organizationId,
+  );
+
+  if (
+    !recheckedOrganization ||
+    recheckedOrganization.id !== organization.id ||
+    !canManageDashboardEventQueue(recheckedOrganization.role)
+  ) {
+    throw new OperatorApiError(
+      403,
+      "WORKSPACE_EVENT_QUEUE_MANAGE_FORBIDDEN",
+      "Only an owner, manager, or operator can manage the event queue.",
+    );
+  }
+
+  if (getEffectiveEventLifecycleStatus(event) !== "active") {
+    throw new OperatorApiError(
+      409,
+      "EVENT_QUEUE_CLOSED",
+      "The event queue is closed.",
+    );
+  }
+
   return {
-    organization,
+    organization: recheckedOrganization,
     event,
   };
+}
+
+async function findEventQueueManagerOrganization(
+  transaction: DatabaseTransaction,
+  authUserId: string,
+  organizationId: string,
+) {
+  const [organization] = await transaction
+    .select({
+      id: workspaces.id,
+      publicId: workspaces.publicId,
+      role: workspaceMembers.role,
+      operatorId: operatorUsers.id,
+    })
+    .from(workspaces)
+    .innerJoin(
+      workspaceMembers,
+      eq(workspaceMembers.workspaceId, workspaces.id),
+    )
+    .innerJoin(
+      operatorUsers,
+      eq(operatorUsers.id, workspaceMembers.operatorUserId),
+    )
+    .where(
+      and(
+        eq(workspaces.publicId, organizationId),
+        eq(workspaces.active, true),
+        eq(operatorUsers.authUserId, authUserId),
+        eq(operatorUsers.active, true),
+        eq(workspaceMembers.active, true),
+      ),
+    )
+    .limit(1);
+
+  return organization ?? null;
 }
 
 async function requireDashboardEventQueueItem(

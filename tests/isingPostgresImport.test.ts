@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   loadISingImportOptions,
-  runISingImport,
-  type ISingImportOptions,
 } from "../src/db/import-ising.ts";
+import {
+  runISingImportAdapter,
+  type ISingImportOptions,
+} from "../src/db/ising-import-adapter.ts";
 import { readAndValidateISingResponse } from "../src/db/ising-client.ts";
 import {
   mapISingSongToSong,
@@ -13,6 +16,21 @@ import {
 } from "../src/db/ising-mapping.ts";
 
 const checkedAt = new Date("2026-07-05T12:00:00.000Z");
+
+test("legacy iSing CLI is a dry-run-only wrapper around the shared adapter", () => {
+  const cliSource = readFileSync("src/db/import-ising.ts", "utf8");
+  const adapterSource = readFileSync(
+    "src/db/ising-import-adapter.ts",
+    "utf8",
+  );
+
+  assert.match(cliSource, /runISingImportAdapter\(options\)/);
+  assert.match(cliSource, /Direct iSing writes are disabled/);
+  assert.doesNotMatch(cliSource, /DATABASE_URL|createISingImportJob/);
+  assert.doesNotMatch(cliSource, /markISingImportJobSucceeded|markISingImportJobFailed/);
+  assert.match(adapterSource, /\.onConflictDoUpdate\(/);
+  assert.doesNotMatch(adapterSource, /\.delete\(|\btruncate\b/i);
+});
 
 test("mapISingSongToSong maps iSing metadata to songs insert payload", () => {
   const song = mapISingSongToSong(sampleSong(), checkedAt);
@@ -65,17 +83,17 @@ test("mapISingSongToSong normalizes title, artist and search text", () => {
 
 test("iSing dry-run does not persist to the database", async () => {
   let persistCalled = false;
-  const summary = await runISingImport(
+  const outcome = await runISingImportAdapter(
     {
       ...testOptions(),
-      dryRun: true,
+      mode: "dry_run",
       limit: 1,
     },
     {
       nowFn: () => checkedAt,
       delayFn: async () => {},
       fetchFn: async () => jsonResponse(pageResponse([sampleSong()])),
-      persistBatchFn: async () => {
+      persistBatch: async () => {
         persistCalled = true;
         throw new Error("dry-run must not persist");
       },
@@ -83,6 +101,8 @@ test("iSing dry-run does not persist to the database", async () => {
   );
 
   assert.equal(persistCalled, false);
+  assert.equal(outcome.status, "completed");
+  const summary = outcome.summary;
   assert.equal(summary.processed, 1);
   assert.equal(summary.inserted, 1);
   assert.equal(summary.updated, 0);
@@ -153,10 +173,17 @@ test("iSing CLI parser accepts standalone double dash", () => {
     "20",
   ]);
 
-  assert.equal(direct.dryRun, true);
+  assert.equal(direct.mode, "dry_run");
   assert.equal(direct.limit, 20);
-  assert.equal(withSeparator.dryRun, true);
+  assert.equal(withSeparator.mode, "dry_run");
   assert.equal(withSeparator.limit, 20);
+});
+
+test("iSing legacy CLI rejects direct write mode", () => {
+  assert.throws(
+    () => loadISingImportOptions(testEnv(), ["--limit", "1"]),
+    /Direct iSing writes are disabled/,
+  );
 });
 
 function sampleSong(overrides: ISingApiSong = {}): ISingApiSong {
@@ -209,7 +236,7 @@ function testOptions(): ISingImportOptions {
     tag: "",
     order: "-artist_string",
     limit: null,
-    dryRun: false,
+    mode: "write",
     batchSize: 10,
     timeoutMs: 15_000,
   };

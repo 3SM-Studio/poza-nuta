@@ -9,17 +9,14 @@ import {
   DEFAULT_WORKSPACE_NAME,
 } from "../lib/workspace.ts";
 import { generateOrganizationPublicId } from "../lib/organization-public-id.ts";
+import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 import { events, workspaces } from "./schema.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
 async function seed() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
+  const databaseUrl = requireAdminDatabaseUrl();
 
   const client = postgres(databaseUrl, {
     connect_timeout: 5,
@@ -48,6 +45,7 @@ async function seed() {
       .returning({ id: workspaces.id });
 
     const startsAt = new Date();
+    const endsAt = calculateAutoCloseAt(startsAt);
     const insertedEvents = await db
       .insert(events)
       .values({
@@ -55,9 +53,11 @@ async function seed() {
         name: "Poza Nutą",
         venue: "Domyślny lokal",
         startsAt,
-        autoCloseAt: calculateAutoCloseAt(startsAt),
+        autoCloseAt: endsAt,
+        endsAt,
         status: "active",
         isActivePublicEvent: true,
+        songRequestsEnabled: false,
         publicQueueEnabled: false,
         publicShowSongTitles: true,
       })

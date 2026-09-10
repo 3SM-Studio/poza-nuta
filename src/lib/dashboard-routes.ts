@@ -2,6 +2,12 @@ type DashboardHomeOrganization = {
   publicId: string;
 };
 
+export type DashboardOrganizationEventRouteSuffix =
+  | "detail"
+  | "queue"
+  | "share"
+  | "settings";
+
 export function getDashboardOrganizationsPath() {
   return "/dashboard/organizations";
 }
@@ -47,6 +53,39 @@ export function getDashboardOrganizationEventSharePath(
   eventId: number | string,
 ) {
   return `${getDashboardOrganizationEventPath(organizationId, eventId)}/share`;
+}
+
+export function getDashboardOrganizationEventSettingsPath(
+  organizationId: string,
+  eventId: number | string,
+) {
+  return `${getDashboardOrganizationEventPath(organizationId, eventId)}/settings`;
+}
+
+export function getDashboardOrganizationEventCompatibilityRedirectPath(
+  organizationId: string,
+  eventPublicId: string,
+  suffix: DashboardOrganizationEventRouteSuffix,
+) {
+  switch (suffix) {
+    case "queue":
+      return getDashboardOrganizationEventQueuePath(
+        organizationId,
+        eventPublicId,
+      );
+    case "share":
+      return getDashboardOrganizationEventSharePath(
+        organizationId,
+        eventPublicId,
+      );
+    case "settings":
+      return getDashboardOrganizationEventSettingsPath(
+        organizationId,
+        eventPublicId,
+      );
+    case "detail":
+      return getDashboardOrganizationEventPath(organizationId, eventPublicId);
+  }
 }
 
 export function getDashboardOrganizationSettingsPath(organizationId: string) {

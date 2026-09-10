@@ -1,19 +1,21 @@
+import {
+  getEffectiveEventLifecycleStatus,
+  type EffectiveEventLifecycleStatus,
+} from "./effective-event-lifecycle.ts";
+
 export const DASHBOARD_EVENT_CLOSING_WARNING_MINUTES = 30;
-export const DASHBOARD_EVENT_EXTENSION_MINUTES = [30, 60, 120] as const;
+export const DASHBOARD_EVENT_EXTENSION_MINUTES = [20, 30, 60] as const;
 
 export type DashboardEventExtensionMinutes =
   (typeof DASHBOARD_EVENT_EXTENSION_MINUTES)[number];
 
-export type DashboardEventLifecycleStatus =
-  | "scheduled"
-  | "active"
-  | "closed"
-  | "cancelled";
+export type DashboardEventLifecycleStatus = EffectiveEventLifecycleStatus;
 
 export type DashboardEventLifecycleInput = {
   status: string;
   startsAt: Date;
   autoCloseAt: Date | null;
+  endsAt?: Date;
   closedAt: Date | null;
 };
 
@@ -21,23 +23,13 @@ export function getDashboardEventLifecycleStatus(
   event: DashboardEventLifecycleInput,
   now = new Date(),
 ): DashboardEventLifecycleStatus {
-  if (event.status === "cancelled") {
-    return "cancelled";
-  }
-
-  if (event.closedAt || event.status === "closed") {
-    return "closed";
-  }
-
-  if (now.getTime() < event.startsAt.getTime()) {
-    return "scheduled";
-  }
-
-  if (!event.autoCloseAt || now.getTime() < event.autoCloseAt.getTime()) {
-    return "active";
-  }
-
-  return "closed";
+  return getEffectiveEventLifecycleStatus(
+    {
+      ...event,
+      endsAt: event.endsAt ?? event.autoCloseAt ?? event.startsAt,
+    },
+    now,
+  );
 }
 
 export function areDashboardEventRequestsOpen(
@@ -88,4 +80,25 @@ export function calculateDashboardEventExtendedAutoCloseAt({
   const baseTime = Math.max(now.getTime(), autoCloseAt?.getTime() ?? 0);
 
   return new Date(baseTime + minutes * 60 * 1_000);
+}
+
+export function resolveDashboardEventCloseAt({
+  autoCloseAt,
+  minutes,
+  closesAt,
+  now = new Date(),
+}: {
+  autoCloseAt: Date | null;
+  minutes: DashboardEventExtensionMinutes | null;
+  closesAt: Date | null;
+  now?: Date;
+}) {
+  if (closesAt) return closesAt;
+  if (minutes === null) throw new Error("Event close time is required.");
+
+  return calculateDashboardEventExtendedAutoCloseAt({
+    autoCloseAt,
+    minutes,
+    now,
+  });
 }

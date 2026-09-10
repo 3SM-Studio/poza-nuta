@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 import { operatorUsers, workspaceMembers, workspaces } from "./schema.ts";
 import {
@@ -13,16 +14,12 @@ import {
 config({ path: [".env.local", ".env"], quiet: true });
 
 async function linkWorkspaceMember() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = requireAdminDatabaseUrl();
   const authUserId = process.env.OPERATOR_AUTH_USER_ID?.trim();
   const options = resolveWorkspaceMemberLinkOptions({
     WORKSPACE_HANDLE: process.env.WORKSPACE_HANDLE,
     WORKSPACE_MEMBER_ROLE: process.env.WORKSPACE_MEMBER_ROLE,
   });
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
 
   if (!authUserId) {
     throw new Error("OPERATOR_AUTH_USER_ID is not configured.");

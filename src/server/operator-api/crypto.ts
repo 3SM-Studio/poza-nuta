@@ -12,8 +12,6 @@ const SCRYPT_COST = 16_384;
 const SCRYPT_BLOCK_SIZE = 8;
 const SCRYPT_PARALLELIZATION = 1;
 const SCRYPT_MAX_MEMORY = 32 * 1024 * 1024;
-const EVENT_ACCESS_CODE_BYTES = 24;
-const EVENT_ACCESS_CODE_HASH_CONTEXT = "poza-nuta:event-access-link:v1";
 
 export async function hashPin(pin: string) {
   const salt = randomBytes(16);
@@ -59,18 +57,6 @@ export function createSessionToken() {
 
 export function hashSessionToken(token: string) {
   return createHash("sha256").update(token, "utf8").digest("base64url");
-}
-
-export function generateEventAccessCode() {
-  return randomBytes(EVENT_ACCESS_CODE_BYTES).toString("base64url");
-}
-
-export function hashEventAccessCode(code: string) {
-  return createHash("sha256")
-    .update(EVENT_ACCESS_CODE_HASH_CONTEXT, "utf8")
-    .update("\0", "utf8")
-    .update(code, "utf8")
-    .digest("base64url");
 }
 
 function deriveKey(pin: string, salt: Buffer) {

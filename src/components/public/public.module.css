@@ -13,6 +13,11 @@
   margin: 0 auto;
 }
 
+.eventShell {
+  width: min(100%, 54rem);
+  margin: 0 auto;
+}
+
 .publicHeader,
 .queueHeader {
   margin-bottom: 1rem;
@@ -33,6 +38,30 @@
 .publicHeader p {
   margin: 0.5rem 0 0;
   color: var(--text-secondary);
+}
+
+.eventHeader {
+  display: grid;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.eventHeader h1 {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 3.2rem);
+  line-height: 1.08;
+}
+
+.statusPill {
+  width: fit-content;
+  margin: 0;
+  border: 1px solid var(--accent-soft-border);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--primary);
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.35rem 0.7rem;
 }
 
 .dashboardEntryLink {
@@ -104,6 +133,43 @@
   margin: 0 0 1rem;
   font-size: 1.2rem;
   line-height: 1.25;
+}
+
+.eventSummary {
+  margin-top: 1rem;
+}
+
+.eventDetails {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.eventDetails div {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--surface-1);
+  padding: 0.9rem;
+}
+
+.eventDetails dt {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.eventDetails dd {
+  margin: 0.25rem 0 0;
+  font-size: 0.98rem;
+  font-weight: 750;
+}
+
+.eventActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
 }
 
 .sectionHeading,
@@ -342,6 +408,45 @@
   margin-top: 1rem;
 }
 
+.renameForm {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.inlineForm {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.participantRequestList {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.participantRequestItem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-2);
+}
+
+.participantRequestItem h3 {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+}
+
+.participantRequestItem > div > p:not(.inlineMessage) {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
 .field {
   position: relative;
   display: grid;
@@ -508,6 +613,10 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .inlineForm {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
   .searchForm .primaryButton {
     min-width: 7rem;
   }
@@ -528,6 +637,14 @@
   }
 
   .queueHeader .secondaryButton {
+    width: 100%;
+  }
+
+  .eventDetails {
+    grid-template-columns: 1fr;
+  }
+
+  .eventActions .secondaryButton {
     width: 100%;
   }
 }

@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   dashboardApiPaths,
   formatDuration,
   getCurrentOperator,
-  getDashboardEventAccessLinkRevokePath,
-  getDashboardRequestActionPath,
 } from "../src/components/operator/api.ts";
 import {
   getDashboardQueueRealtimeTopic,
@@ -29,21 +27,37 @@ test("operator UI client uses canonical dashboard API paths", () => {
     signup: "/api/dashboard/signup",
     logout: "/api/dashboard/logout",
     me: "/api/dashboard/me",
-    queue: "/api/dashboard/queue",
-    event: "/api/dashboard/event",
-    extendEvent: "/api/dashboard/event/extend",
-    closeEvent: "/api/dashboard/event/close",
-    startEvent: "/api/dashboard/event/start",
-    accessLinks: "/api/dashboard/event/access-links",
   });
-  assert.equal(
-    getDashboardRequestActionPath(42, "approve"),
-    "/api/dashboard/requests/42/approve",
+});
+
+test("legacy global operator queue APIs are removed and pages redirect", () => {
+  const dashboardQueuePage = readFileSync(
+    new URL("../src/app/dashboard/queue/page.tsx", import.meta.url),
+    "utf8",
   );
-  assert.equal(
-    getDashboardEventAccessLinkRevokePath(42),
-    "/api/dashboard/event/access-links/42/revoke",
+  const operatorQueuePage = readFileSync(
+    new URL("../src/app/operator/queue/page.tsx", import.meta.url),
+    "utf8",
   );
+  assert.match(dashboardQueuePage, /redirect\("\/dashboard"\)/);
+  assert.match(operatorQueuePage, /redirect\("\/dashboard"\)/);
+
+  for (const path of [
+    "../src/app/api/dashboard/queue/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/approve/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/done/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/reject/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/skip/route.ts",
+    "../src/app/api/dashboard/requests/[requestId]/start/route.ts",
+    "../src/app/api/operator/queue/route.ts",
+    "../src/app/api/operator/requests/[requestId]/approve/route.ts",
+    "../src/app/api/operator/requests/[requestId]/done/route.ts",
+    "../src/app/api/operator/requests/[requestId]/reject/route.ts",
+    "../src/app/api/operator/requests/[requestId]/skip/route.ts",
+    "../src/app/api/operator/requests/[requestId]/start/route.ts",
+  ]) {
+    assert.equal(existsSync(new URL(path, import.meta.url)), false, path);
+  }
 });
 
 test("operator me request stays on a same-origin relative API path", async (t) => {
@@ -149,8 +163,11 @@ test("dashboard queue realtime helpers scope messages to an event topic", () => 
 });
 
 test("public queue realtime helpers expose invalidation only", () => {
-  assert.equal(getPublicQueueRealtimeTopic(42), "public:event:42:queue");
-  assert.throws(() => getPublicQueueRealtimeTopic(-1));
+  assert.equal(
+    getPublicQueueRealtimeTopic("AbCdEfGhIjKlMnOpQrStUv"),
+    "public:session:AbCdEfGhIjKlMnOpQrStUv:queue",
+  );
+  assert.throws(() => getPublicQueueRealtimeTopic("invalid"));
   assert.equal(
     isPublicQueueChangedPayload({
       type: "queue_changed",

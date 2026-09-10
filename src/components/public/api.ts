@@ -1,13 +1,3 @@
-export type PublicEvent = {
-  id: number;
-  name: string;
-  venue: string | null;
-  startsAt: string;
-  status: "active";
-  publicQueueEnabled: boolean;
-  publicShowSongTitles: boolean;
-};
-
 export type PublicSong = {
   id: number;
   source: "ising" | "karafun" | "manual";
@@ -18,6 +8,38 @@ export type PublicSong = {
   isExplicit: boolean;
   isPlus: boolean;
   isHit: boolean;
+};
+
+export type PublicSongBrowseItem = PublicSong & {
+  genres: string[];
+  languages: string[];
+};
+
+export type SongDiscoveryCategory = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+export type SessionSongDiscovery = {
+  genres: SongDiscoveryCategory[];
+  languages: SongDiscoveryCategory[];
+  features: {
+    duetCount: number;
+    hitCount: number;
+    plusCount: number;
+  };
+};
+
+export type SessionSongBrowseInput = {
+  cursor?: string | null;
+  limit?: number;
+  q?: string | null;
+  genre?: string | null;
+  language?: string | null;
+  duet?: boolean;
+  hit?: boolean;
+  sort?: "title" | "artist" | "newest";
 };
 
 export type PublicQueueItem = {
@@ -31,7 +53,6 @@ export type PublicQueueItem = {
 };
 
 export type PublicQueueResponse = {
-  eventId: number;
   enabled: boolean;
   showSongTitles: boolean;
   items: PublicQueueItem[];
@@ -64,35 +85,12 @@ export class PublicClientError extends Error {
   }
 }
 
-export async function getPublicEvent() {
-  const response = await requestJson<{ event: PublicEvent }>(
-    "/api/public/event",
-  );
-
-  return response.event;
-}
-
 export async function searchPublicSongs(query: string) {
   const response = await requestJson<{ items: PublicSong[] }>(
     `/api/public/songs/search?q=${encodeURIComponent(query)}`,
   );
 
   return response.items;
-}
-
-export function createPublicRequest(input: {
-  songId: number;
-  singerName: string;
-  note: string | null;
-}) {
-  return requestJson("/api/public/requests", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export function getPublicQueue(signal?: AbortSignal) {
-  return requestJson<PublicQueueResponse>("/api/public/queue", { signal });
 }
 
 export async function getDashboardEntryStatus() {

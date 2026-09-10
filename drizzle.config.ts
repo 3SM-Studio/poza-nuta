@@ -3,7 +3,7 @@ import { defineConfig } from "drizzle-kit";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DIRECT_URL;
 
 export default defineConfig({
   dialect: "postgresql",

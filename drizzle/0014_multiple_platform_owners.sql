@@ -1,0 +1,1 @@
+DROP INDEX "platform_members_one_active_owner_idx";

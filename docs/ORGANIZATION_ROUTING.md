@@ -115,7 +115,7 @@ to an active `operator_users` row, but that operator does not yet have an active
 
 Required ENV:
 
-- `DATABASE_URL`
+- `DIRECT_URL`
 - `OPERATOR_AUTH_USER_ID`
 
 Optional ENV:
@@ -133,14 +133,13 @@ Recommended bootstrap order:
 
 The script is idempotent. If the membership already exists and is active, it
 does not create a duplicate. If the membership exists but is inactive, it sets
-`active=true`. It does not print `DATABASE_URL`, `OPERATOR_AUTH_USER_ID`, or
+`active=true`. It does not print `DIRECT_URL`, `OPERATOR_AUTH_USER_ID`, or
 tokens.
 
 ## Public Queue Realtime Status
 
-The public `/queue` route does not subscribe to the private dashboard broadcast
-channel. In this stage it uses safe polling/refetch against `/api/public/queue`.
-
-True public-safe realtime should be implemented later with a separate
-Supabase Realtime broadcast policy/channel or another explicitly approved
-mechanism. Do not expose the private dashboard channel publicly.
+The global public `/queue` page has been removed, and `/api/public/queue` remains
+only as a legacy 410 endpoint. Participant queue access is session-scoped under
+`/session/[code]` and uses Realtime only as an invalidation signal before
+refetching through the session API. Do not expose the private dashboard channel
+publicly.

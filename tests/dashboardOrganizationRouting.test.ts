@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -8,8 +9,11 @@ import {
 } from "../src/lib/organization-public-id.ts";
 import { buildOwnerWorkspaceMembershipInput } from "../src/lib/organization-workspace.ts";
 import {
+  canManageDashboardOrganizationEvent,
+  canShareDashboardOrganizationEvent,
   resolveDashboardOrganizationAccess,
   type DashboardOrganizationAccessTarget,
+  type DashboardOrganizationRole,
 } from "../src/lib/dashboard-organization-access.ts";
 import {
   getDashboardOrganizationIdFromPath,
@@ -19,8 +23,10 @@ import {
 import {
   getDashboardNewOrganizationPath,
   getDashboardOrganizationsPath,
+  getDashboardOrganizationEventCompatibilityRedirectPath,
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventSettingsPath,
   getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
   getDashboardOrganizationGeneralSettingsPath,
@@ -31,10 +37,15 @@ import {
   isDashboardNavigationLinkActive,
   resolveDashboardHomeRedirect,
 } from "../src/lib/dashboard-routes.ts";
+import {
+  CanonicalSiteOriginConfigurationError,
+  parseCanonicalSiteOrigin,
+} from "../src/lib/canonical-site-origin.ts";
 import { sanitizeAuthIdentities } from "../src/server/operator-api/account.ts";
 
 const exampleOrganizationId = "kgbgnpwpbcaebdytjmbx";
 const otherOrganizationId = "aaaaaaaaaaaaaaaaaaaa";
+const exampleEventPublicId = "123e4567-e89b-42d3-a456-426614174000";
 
 test("organization public IDs use twenty lowercase alphanumeric characters", () => {
   const publicId = generateOrganizationPublicId();
@@ -61,16 +72,20 @@ test("organization route helpers encode organizationId values", () => {
     `/dashboard/org/${exampleOrganizationId}/events/new`,
   );
   assert.equal(
-    getDashboardOrganizationEventPath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42`,
+    getDashboardOrganizationEventPath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}`,
   );
   assert.equal(
-    getDashboardOrganizationEventQueuePath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42/queue`,
+    getDashboardOrganizationEventQueuePath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/queue`,
   );
   assert.equal(
-    getDashboardOrganizationEventSharePath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42/share`,
+    getDashboardOrganizationEventSharePath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/share`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventSettingsPath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/settings`,
   );
   assert.equal(
     getDashboardOrganizationSettingsPath(exampleOrganizationId),
@@ -84,6 +99,113 @@ test("organization route helpers encode organizationId values", () => {
     getDashboardOrganizationTeamPath(exampleOrganizationId),
     `/dashboard/org/${exampleOrganizationId}/team`,
   );
+});
+
+test("legacy numeric event routes preserve their suffix when redirecting to the public UUID", () => {
+  const expectedBase =
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}`;
+
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "detail",
+    ),
+    expectedBase,
+  );
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "queue",
+    ),
+    `${expectedBase}/queue`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "share",
+    ),
+    `${expectedBase}/share`,
+  );
+  assert.equal(
+    getDashboardOrganizationEventCompatibilityRedirectPath(
+      exampleOrganizationId,
+      exampleEventPublicId,
+      "settings",
+    ),
+    `${expectedBase}/settings`,
+  );
+});
+
+test("legacy numeric event compatibility is authorized at the routing edge", () => {
+  const compatibilitySource = readFileSync(
+    "src/server/operator-api/event-route-compatibility.ts",
+    "utf8",
+  );
+  const routeSources = [
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+      suffix: "detail",
+    },
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
+      suffix: "queue",
+    },
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+      suffix: "share",
+    },
+    {
+      path: "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
+      suffix: "settings",
+    },
+  ] as const;
+
+  assert.match(compatibilitySource, /import "server-only"/);
+  assert.match(compatibilitySource, /\^\[1-9\]\\d\*\$/);
+  assert.match(
+    compatibilitySource,
+    /getDashboardOrganizationForAuthUser\([\s\S]*eq\(events\.workspaceId, organization\.id\)[\s\S]*eq\(events\.id, numericEventId\)/,
+  );
+  assert.ok(
+    compatibilitySource.indexOf("getDashboardOrganizationForAuthUser(") <
+      compatibilitySource.indexOf("eq(events.id, numericEventId)"),
+  );
+  assert.equal(
+    (compatibilitySource.match(/return \{ kind: "not_found" \}/g) ?? [])
+      .length,
+    3,
+  );
+
+  for (const route of routeSources) {
+    const source = readFileSync(route.path, "utf8");
+    const auth = source.indexOf("requireOperatorSession()");
+    const resolution = source.indexOf(
+      "resolveDashboardEventRouteForAuthUser({",
+    );
+
+    assert.ok(auth >= 0 && resolution > auth, route.path);
+    assert.match(source, /routeResolution\.kind === "legacy_redirect"/);
+    assert.match(
+      source,
+      new RegExp(
+        `getDashboardOrganizationEventCompatibilityRedirectPath\\([\\s\\S]*"${route.suffix}"`,
+      ),
+    );
+    assert.match(source, /eventId: routeResolution\.eventPublicId/);
+  }
+
+  const layoutSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/layout.tsx",
+    "utf8",
+  );
+  assert.ok(
+    layoutSource.indexOf("requireOperatorSession()") <
+      layoutSource.indexOf("resolveDashboardEventRouteForAuthUser({"),
+  );
+  assert.match(layoutSource, /eventId: routeResolution\.eventPublicId/);
 });
 
 test("dashboard home redirects users without organizations to onboarding", () => {
@@ -220,19 +342,19 @@ test("organization general settings page redirects to canonical settings", () =>
 });
 
 test("dashboard organization links use settings canonical path", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
   const overviewSource = readFileSync(
-    "src/app/dashboard/org/[organizationId]/page.tsx",
+    "src/components/operator/organization-overview-view.tsx",
     "utf8",
   );
 
-  assert.match(shellSource, /getDashboardOrganizationSettingsPath/);
+  assert.match(sidebarSource, /getDashboardOrganizationSettingsPath/);
   assert.match(overviewSource, /getDashboardOrganizationSettingsPath/);
   assert.equal(
-    shellSource.includes("getDashboardOrganizationGeneralSettingsPath"),
+    sidebarSource.includes("getDashboardOrganizationGeneralSettingsPath"),
     false,
   );
   assert.equal(
@@ -337,9 +459,28 @@ test("organization overview queries are scoped to workspace public access target
 
   assert.match(source, /getOverviewStatsForWorkspace\(\{/);
   assert.match(source, /workspaceId: organization\.id/);
-  assert.match(source, /countEventStatsForWorkspace\(input\.workspaceId\)/);
+  assert.match(
+    source,
+    /countEventStatsForWorkspace\(input\.workspaceId, input\.now\)/,
+  );
   assert.match(source, /countRequestStatsForWorkspace\(\{/);
-  assert.match(source, /getRecentEventsForWorkspace\(organization\.id\)/);
+  assert.match(
+    source,
+    /getActiveEventForWorkspace\(organization\.id, now\)/,
+  );
+  assert.match(
+    source,
+    /getRecentEventsForWorkspace\(organization\.id, now\)/,
+  );
+  assert.match(
+    source,
+    /status: getEffectiveEventLifecycleStatus\(event, now\)/,
+  );
+  assert.match(source, /getEffectivelyActiveEventCondition\(now\)/);
+  assert.equal(
+    source.includes("count(*) filter (where ${events.status} = 'active')"),
+    false,
+  );
   assert.match(source, /getTopRequestedSongsForWorkspace\(organization\.id\)/);
   assert.match(source, /eq\(events\.workspaceId, workspaceId\)/);
   assert.match(source, /innerJoin\(events, eq\(events\.id, songRequests\.eventId\)\)/);
@@ -349,7 +490,7 @@ test("organization overview queries are scoped to workspace public access target
 
 test("organization overview renders empty states and no fake dashboard data", () => {
   const source = readFileSync(
-    "src/app/dashboard/org/[organizationId]/page.tsx",
+    "src/components/operator/organization-overview-view.tsx",
     "utf8",
   );
 
@@ -361,14 +502,49 @@ test("organization overview renders empty states and no fake dashboard data", ()
   assert.equal(source.includes("Global catalog songs"), false);
   assert.match(source, /overview\.recentEvents\.length > 0/);
   assert.match(source, /overview\.topRequestedSongs\.length > 0/);
-  assert.match(source, /Brak wydarzeń/);
-  assert.match(source, /Brak requestów/);
+  assert.match(source, /Brak aktywnego wydarzenia/);
+  assert.match(source, /Brak danych o popularnych utworach/);
   assert.match(source, /overview\.partialFailures\.counts/);
   assert.match(source, /overview\.partialFailures\.activeEvent/);
-  assert.match(source, /ostatnie 30 dni/);
+  assert.match(source, /ostatnich 30 dni/);
+  assert.match(source, /xl:grid-cols-12/);
+  assert.match(source, /xl:col-span-8/);
+  assert.match(source, /<CardFooter/);
+  assert.match(source, /<ItemGroup/);
+  assert.match(source, /<Empty/);
+  assert.match(source, /<SectionUnavailable/);
+  assert.match(source, /role="progressbar"/);
+  assert.match(source, /canManageEvents/);
+  assert.match(source, /overview\.partialFailures\.counts\s*\?\s*"Dane częściowe"/);
+  assert.match(source, /Liczba wydarzeń chwilowo niedostępna/);
+  assert.match(source, /Statystyki z 7 dni chwilowo niedostępne/);
+  assert.match(
+    source,
+    /overview\.partialFailures\.counts\s*\?\s*"Chwilowo niedostępne"\s*:\s*formatNumber\(overview\.stats\.pendingRequests\)/,
+  );
+  assert.match(source, /canManageOrganization/);
+  assert.match(source, /lg:grid-cols-2 xl:grid-cols-12/);
+  assert.match(source, /lg:col-span-2 xl:col-span-5/);
+  assert.match(source, /lg:flex-row lg:items-center lg:justify-between/);
+  assert.match(source, /\[overflow-wrap:anywhere\]/);
+  assert.equal(source.includes("bez dodatkowych kart KPI"), false);
+  assert.equal(source.includes("function StatCard"), false);
+  assert.equal(source.includes("recharts"), false);
   assert.equal(source.includes("Math.random"), false);
   assert.equal(source.includes("placeholder"), false);
   assert.equal(source.includes("fake"), false);
+});
+
+test("dashboard overview uses official item and empty primitives", () => {
+  const itemSource = readFileSync("src/components/ui/item.tsx", "utf8");
+  const emptySource = readFileSync("src/components/ui/empty.tsx", "utf8");
+
+  assert.match(itemSource, /data-slot="item-group"/);
+  assert.match(itemSource, /data-slot="item-content"/);
+  assert.match(itemSource, /variant:\s*\{[\s\S]*muted:/);
+  assert.match(emptySource, /data-slot="empty"/);
+  assert.match(emptySource, /data-slot="empty-content"/);
+  assert.match(emptySource, /data-slot="empty-description"/);
 });
 
 test("dashboard shell uses separate simple organization and account layouts", () => {
@@ -377,22 +553,58 @@ test("dashboard shell uses separate simple organization and account layouts", ()
     "utf8",
   );
 
-  assert.match(shellSource, /data-dashboard-layout=\{layout\}/);
-  assert.match(shellSource, /data-dashboard-topbar="true"/);
-  assert.match(shellSource, /data-dashboard-body="true"/);
+  assert.match(shellSource, /<AppShell/);
+  assert.match(shellSource, /kind="dashboard"/);
+  assert.match(shellSource, /layout=\{layout\}/);
+  assert.match(shellSource, /<OrganizerSidebar/);
   assert.match(shellSource, /organizationId\s+\?\s+"organization"/);
   assert.match(shellSource, /:\s+isAccountRoute\s+\?\s+"account"/);
   assert.match(shellSource, /:\s+"simple"/);
-  assert.match(shellSource, /pathname\.startsWith\("\/dashboard\/account"\)/);
+  assert.match(shellSource, /pathname\.startsWith\("\/account"\)/);
   assert.match(shellSource, /getSelectedOrganizationId\(pathname\)/);
 });
 
-test("dashboard theme exposes dark shadcn and sidebar tokens", () => {
+test("typeset font variables do not replace the existing application typography", () => {
   const globalsSource = readFileSync("src/app/globals.css", "utf8");
-  const operatorStyles = readFileSync(
-    "src/components/operator/operator.module.css",
+  const layoutSource = readFileSync("src/app/layout.tsx", "utf8");
+  const typesetSource = readFileSync("src/app/typeset.css", "utf8");
+
+  assert.match(
+    globalsSource,
+    /@import "tailwindcss";\s*@import "\.\/typeset\.css";/,
+  );
+  assert.match(globalsSource, /\.typeset-docs\s*\{/);
+  assert.match(globalsSource, /--typeset-font-body: var\(--font-geist\)/);
+  assert.match(globalsSource, /--typeset-font-heading: var\(--font-geist\)/);
+  assert.match(globalsSource, /--typeset-font-mono: var\(--font-geist-mono\)/);
+  assert.match(globalsSource, /--typeset-size: 15px/);
+  assert.match(globalsSource, /--typeset-leading: 1\.75/);
+  assert.match(globalsSource, /--typeset-flow: 1\.25em/);
+  assert.match(globalsSource, /--font-heading:\s*Inter/);
+  assert.match(globalsSource, /--font-sans:\s*Inter/);
+  assert.doesNotMatch(globalsSource, /--font-sans:\s*var\(--font-geist\)/);
+
+  assert.match(typesetSource, /shadcn\/typeset/);
+  assert.match(typesetSource, /\.typeset\s*\{/);
+  assert.match(typesetSource, /\.not-typeset/);
+  assert.match(typesetSource, /\[data-not-typeset\]/);
+
+  assert.match(layoutSource, /import \{ Geist, Geist_Mono \} from "next\/font\/google"/);
+  assert.match(layoutSource, /variable: "--font-geist"/);
+  assert.match(layoutSource, /variable: "--font-geist-mono"/);
+  assert.match(
+    layoutSource,
+    /className=\{`\$\{geist\.variable\} \$\{geistMono\.variable\}`\}/,
+  );
+});
+
+test("global theme exposes light and dark shadcn and sidebar tokens", () => {
+  const globalsSource = readFileSync("src/app/globals.css", "utf8");
+  const managementThemeSource = readFileSync(
+    "src/app/(platform-admin)/admin/admin-theme.css",
     "utf8",
   );
+  const sidebarSource = readFileSync("src/components/ui/sidebar.tsx", "utf8");
   const buttonSource = readFileSync("src/components/ui/button.tsx", "utf8");
   const cardSource = readFileSync("src/components/ui/card.tsx", "utf8");
 
@@ -426,88 +638,87 @@ test("dashboard theme exposes dark shadcn and sidebar tokens", () => {
   }
 
   assert.match(globalsSource, /color-scheme: dark/);
+  assert.match(globalsSource, /html\.light\s*\{/);
+  assert.match(globalsSource, /color-scheme: light/);
+  assert.match(globalsSource, /html\.dark\s*\{/);
   assert.match(globalsSource, /oklch\(/);
-  assert.match(operatorStyles, /background: var\(--sidebar\)/);
-  assert.match(operatorStyles, /background: var\(--topbar-bg\)/);
-  assert.match(operatorStyles, /box-shadow: var\(--shadow-accent/);
+  assert.match(sidebarSource, /bg-sidebar/);
+  assert.match(sidebarSource, /bg-background/);
+  assert.equal(
+    managementThemeSource.match(/--sidebar-primary: var\(--primary\)/g)
+      ?.length,
+    2,
+  );
+  assert.equal(
+    managementThemeSource.match(
+      /--sidebar-primary-foreground: var\(--primary-foreground\)/g,
+    )?.length,
+    2,
+  );
   assert.match(buttonSource, /shadow-\[var\(--shadow-accent-soft\)\]/);
   assert.match(cardSource, /shadow-\[var\(--shadow-card\)\]/);
 });
 
-test("dashboard topbar is global and renders breadcrumbs with organization switcher", () => {
+test("dashboard uses the shared header without duplicating the organization switcher", () => {
   const shellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
-  const topbarStart = shellSource.indexOf('data-dashboard-topbar="true"');
-  const topbarEnd = shellSource.indexOf('data-dashboard-body="true"');
-  const topbarSource = shellSource.slice(topbarStart, topbarEnd);
-
-  assert.match(topbarSource, /<DashboardLogo \/>/);
-  assert.match(topbarSource, /<DashboardHeaderBreadcrumbs/);
-  assert.match(topbarSource, /organizations=\{organizations\}/);
-  assert.match(topbarSource, /<DashboardUserMenu/);
-  assert.equal(topbarSource.includes("dashboardHeaderLabel"), false);
-  assert.equal(topbarSource.includes("<strong>Dashboard</strong>"), false);
+  assert.match(shellSource, /section="Panel organizatora"/);
+  assert.match(shellSource, /title=\{title\}/);
+  assert.match(shellSource, /organizations=\{organizations\}/);
+  assert.equal(shellSource.includes("headerContext="), false);
+  assert.equal(shellSource.includes("DashboardOrganizationSwitcher"), false);
+  assert.equal(shellSource.includes("DashboardUserMenu"), false);
 });
 
-test("simple dashboard routes do not render organization sidebar", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+test("simple dashboard routes keep the organizer sidebar with real destinations", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
 
-  assert.match(shellSource, /sidebar\s+\?\s+styles\.dashboardBody/);
-  assert.match(shellSource, /styles\.dashboardBodySimple/);
-  assert.match(shellSource, /getDashboardNewOrganizationPath\(\)/);
-  assert.match(shellSource, /getDashboardOrganizationsPath\(\)/);
+  assert.match(sidebarSource, /return \[panelGroup\]/);
+  assert.match(sidebarSource, /getDashboardNewOrganizationPath\(\)/);
+  assert.match(sidebarSource, /getDashboardOrganizationsPath\(\)/);
+  assert.equal(sidebarSource.includes('href: "#"'), false);
 });
 
-test("organization routes render org sidebar navigation without org switcher", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+test("organization routes use a dedicated typed organizer navigation", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
-  const sidebarStart = shellSource.indexOf("function OrganizationSidebar");
-  const sidebarEnd = shellSource.indexOf("function AccountSidebar");
-  const sidebarSource = shellSource.slice(sidebarStart, sidebarEnd);
 
-  assert.match(shellSource, /function OrganizationSidebar/);
-  assert.match(sidebarSource, /data-dashboard-org-sidebar="true"/);
+  assert.match(sidebarSource, /export function getOrganizerNavigationGroups/);
   assert.match(sidebarSource, /label: "Przegl/);
   assert.match(sidebarSource, /label: "Wydarzenia"/);
   assert.match(sidebarSource, /label: "Zesp/);
   assert.match(sidebarSource, /label: "Ustawienia"/);
-  assert.match(sidebarSource, /Wszystkie organizacje/);
-  assert.match(sidebarSource, /Utw/);
-  assert.equal(sidebarSource.includes("DashboardOrganizationSwitcher"), false);
-  assert.equal(/label: "(Overview|Events|Team|Settings)"/.test(shellSource), false);
+  assert.match(sidebarSource, /<DashboardOrganizationSwitcher/);
+  assert.match(sidebarSource, /header=\{/);
+  assert.equal(/label: "(Overview|Events|Team|Settings)"/.test(sidebarSource), false);
 });
 
-test("account routes render account sidebar without organization switcher", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+test("account routes contain only real profile and security destinations", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
-  const accountStart = shellSource.indexOf("function AccountSidebar");
-  const accountEnd = shellSource.indexOf("function DashboardLogo");
-  const accountSource = shellSource.slice(accountStart, accountEnd);
 
-  assert.match(accountSource, /data-dashboard-account-sidebar="true"/);
-  assert.match(accountSource, /Wr/);
-  assert.match(accountSource, /Profil/);
-  assert.match(accountSource, /Bezpiecze/);
-  assert.match(accountSource, /Dziennik audytu/);
-  assert.match(accountSource, /Wkr/);
-  assert.equal(/Back to dashboard|Profile|Security|Audit logs/.test(accountSource), false);
-  assert.equal(accountSource.includes("DashboardOrganizationSwitcher"), false);
-  assert.equal(accountSource.includes("data-dashboard-org-sidebar"), false);
-  assert.match(shellSource, /\/dashboard\/account\/security/);
+  assert.match(sidebarSource, /label: "Konto"/);
+  assert.match(sidebarSource, /label: "Profil"/);
+  assert.match(sidebarSource, /label: "Bezpiecze/);
+  assert.match(sidebarSource, /href: "\/account"/);
+  assert.match(sidebarSource, /href: "\/account\/security"/);
+  assert.equal(sidebarSource.includes("Dziennik audytu"), false);
+  assert.equal(sidebarSource.includes("Wkrótce"), false);
+  assert.equal(/Back to dashboard|Profile|Security|Audit logs/.test(sidebarSource), false);
 });
 
 test("account profile page renders read-only Polish profile labels", () => {
   const source = readFileSync(
-    "src/app/dashboard/account/me/page.tsx",
+    "src/app/account/page.tsx",
     "utf8",
   );
 
@@ -526,7 +737,7 @@ test("account profile page renders read-only Polish profile labels", () => {
 
 test("account security page renders login methods as read-only placeholders", () => {
   const source = readFileSync(
-    "src/app/dashboard/account/security/page.tsx",
+    "src/app/account/security/page.tsx",
     "utf8",
   );
 
@@ -545,87 +756,55 @@ test("account security page renders login methods as read-only placeholders", ()
   assert.equal(source.includes("DashboardOrganizationSwitcher"), false);
 });
 
-test("dashboard shell renders breadcrumbs in the global header", () => {
+test("dashboard shell resolves titles for the shared site header", () => {
   const shellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
+  const headerSource = readFileSync(
+    "src/components/app-shell/site-header.tsx",
+    "utf8",
+  );
 
-  assert.match(shellSource, /function DashboardHeaderBreadcrumbs/);
-  assert.match(shellSource, /data-dashboard-header-breadcrumbs="true"/);
-  assert.match(shellSource, /<Breadcrumb>/);
-  assert.match(shellSource, /getBreadcrumbItems/);
-  assert.match(shellSource, /kind: "organizationSwitcher"/);
-  assert.match(shellSource, /label: "Organizacje"/);
-  assert.match(shellSource, /label: "Ustawienia"/);
-  assert.match(shellSource, /label: "Konto"/);
-  assert.match(shellSource, /label: "Profil"/);
-  assert.match(shellSource, /label: "Bezpiecze/);
-  assert.match(shellSource, /label: "Nowa organizacja"/);
+  assert.match(shellSource, /getDashboardPageTitle/);
+  assert.match(shellSource, /return "Ustawienia"/);
+  assert.match(shellSource, /return "Konto"/);
+  assert.match(shellSource, /return "Bezpiecze/);
+  assert.match(shellSource, /return "Nowa organizacja"/);
+  assert.match(headerSource, /data-site-header="true"/);
+  assert.match(headerSource, /<Breadcrumb>/);
+  assert.match(headerSource, /<BreadcrumbSeparator/);
+  assert.match(headerSource, /<BreadcrumbPage/);
   assert.equal(shellSource.includes("DashboardContentHeader"), false);
   assert.equal(shellSource.includes("dashboardContentHeader"), false);
 });
 
-test("organization dropdown is only used for organization breadcrumbs", () => {
+test("organization switcher is rendered once in the organizer sidebar header", () => {
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
+    "utf8",
+  );
   const shellSource = readFileSync(
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
-  const organizationBranchStart = shellSource.indexOf("if (input.organizationId)");
-  const accountBranchStart = shellSource.indexOf(
-    'if (input.pathname.startsWith("/dashboard/account"))',
-  );
-  const newOrganizationBranchStart = shellSource.indexOf(
-    "if (input.pathname === getDashboardNewOrganizationPath())",
-  );
-  const organizationsBranchStart = shellSource.indexOf(
-    "if (input.pathname === getDashboardOrganizationsPath())",
-  );
-  const fallbackStart = shellSource.indexOf('label: "Panel"', organizationsBranchStart);
-  const organizationBranch = shellSource.slice(
-    organizationBranchStart,
-    accountBranchStart,
-  );
-  const accountBranch = shellSource.slice(
-    accountBranchStart,
-    newOrganizationBranchStart,
-  );
-  const newOrganizationBranch = shellSource.slice(
-    newOrganizationBranchStart,
-    organizationsBranchStart,
-  );
-  const organizationsBranch = shellSource.slice(
-    organizationsBranchStart,
-    fallbackStart,
-  );
 
-  assert.match(organizationBranch, /kind: "organizationSwitcher"/);
-  assert.equal(accountBranch.includes('kind: "organizationSwitcher"'), false);
-  assert.equal(
-    newOrganizationBranch.includes('kind: "organizationSwitcher"'),
-    false,
-  );
-  assert.equal(
-    organizationsBranch.includes('kind: "organizationSwitcher"'),
-    false,
-  );
+  assert.match(sidebarSource, /<DashboardOrganizationSwitcher/);
+  assert.match(sidebarSource, /header=\{/);
+  assert.equal(shellSource.includes("DashboardOrganizationSwitcher"), false);
 });
 
 test("dashboard breadcrumbs render separator as a BreadcrumbList sibling", () => {
-  const shellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+  const headerSource = readFileSync(
+    "src/components/app-shell/site-header.tsx",
     "utf8",
   );
-  const headerStart = shellSource.indexOf("function DashboardHeaderBreadcrumbs");
-  const headerEnd = shellSource.indexOf("function OrganizationSidebar");
-  const headerSource = shellSource.slice(headerStart, headerEnd);
   const itemBlocks = headerSource.match(
     /<BreadcrumbItem[\s\S]*?<\/BreadcrumbItem>/g,
   ) ?? [];
 
   assert.ok(itemBlocks.length > 0);
-  assert.match(headerSource, /<Fragment key=/);
-  assert.match(headerSource, /<\/BreadcrumbItem>\s+\{!isLast \? <BreadcrumbSeparator \/> : null\}/);
+  assert.match(headerSource, /<BreadcrumbSeparator/);
   assert.equal(
     itemBlocks.some((block) => block.includes("BreadcrumbSeparator")),
     false,
@@ -634,41 +813,60 @@ test("dashboard breadcrumbs render separator as a BreadcrumbList sibling", () =>
 
 test("account is in avatar menu and not a main header nav link", () => {
   const userMenuSource = readFileSync(
-    "src/components/operator/dashboard-user-menu.tsx",
+    "src/components/app-shell/app-sidebar-user.tsx",
     "utf8",
   );
 
-  assert.match(userMenuSource, /href="\/dashboard\/account\/me"/);
-  assert.match(userMenuSource, /href="\/dashboard\/account\/security"/);
-  assert.match(userMenuSource, /Moje konto/);
-  assert.match(userMenuSource, /Bezpieczeństwo/);
+  assert.match(userMenuSource, /href="\/account"/);
+  assert.match(userMenuSource, /label="Konto"/);
   assert.match(userMenuSource, /Wyloguj/);
 });
 
-test("dashboard logo links to dashboard while public logos link home", () => {
-  const dashboardShellSource = readFileSync(
-    "src/components/operator/dashboard-shell.tsx",
+test("legacy dashboard account routes redirect to the global account", () => {
+  const accountRedirect = readFileSync(
+    "src/app/dashboard/account/page.tsx",
+    "utf8",
+  );
+  const profileRedirect = readFileSync(
+    "src/app/dashboard/account/me/page.tsx",
+    "utf8",
+  );
+  const securityRedirect = readFileSync(
+    "src/app/dashboard/account/security/page.tsx",
+    "utf8",
+  );
+  const proxySource = readFileSync("src/proxy.ts", "utf8");
+
+  assert.match(accountRedirect, /redirect\("\/account"\)/);
+  assert.match(profileRedirect, /redirect\("\/account"\)/);
+  assert.match(securityRedirect, /redirect\("\/account\/security"\)/);
+  assert.match(proxySource, /"\/account\/:path\*"/);
+});
+
+test("sidebar inset owns its border and clips the sticky header to its radius", () => {
+  const sidebarSource = readFileSync("src/components/ui/sidebar.tsx", "utf8");
+
+  assert.match(sidebarSource, /md:overflow-clip/);
+  assert.match(sidebarSource, /md:border md:border-border/);
+  assert.equal(sidebarSource.includes("md:ring-1 md:ring-border"), false);
+  assert.match(sidebarSource, /data-slot="sidebar-content"[\s\S]*?overflow-y-auto/);
+});
+
+test("dashboard logo links to dashboard while the public request logo links home", () => {
+  const appSidebarSource = readFileSync(
+    "src/components/app-shell/app-sidebar.tsx",
     "utf8",
   );
   const publicRequestSource = readFileSync(
     "src/components/public/public-request-page.tsx",
     "utf8",
   );
-  const publicQueueSource = readFileSync(
-    "src/components/public/public-queue-page.tsx",
-    "utf8",
-  );
-
   assert.match(
-    dashboardShellSource,
-    /className=\{styles\.dashboardBrand\}[\s\S]*?href="\/dashboard"/,
+    appSidebarSource,
+    /homeHref[\s\S]*?<Link href=\{homeHref\}/,
   );
   assert.match(
     publicRequestSource,
-    /className=\{styles\.brand\}[\s\S]*?href="\/"/,
-  );
-  assert.match(
-    publicQueueSource,
     /className=\{styles\.brand\}[\s\S]*?href="\/"/,
   );
 });
@@ -852,6 +1050,18 @@ test("organization events support owner and manager create flow", () => {
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
     "utf8",
   );
+  const overviewSource = readFileSync(
+    "src/components/operator/event-overview.tsx",
+    "utf8",
+  );
+  const sharePageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+    "utf8",
+  );
+  const settingsPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
+    "utf8",
+  );
   const organizationsSource = readFileSync(
     "src/server/operator-api/organizations.ts",
     "utf8",
@@ -863,18 +1073,17 @@ test("organization events support owner and manager create flow", () => {
   assert.match(newPageSource, /createDashboardOrganizationEventForAuthUser/);
   assert.match(newPageSource, /getDashboardOrganizationEventPath/);
   assert.match(newPageSource, /formData\.get\("venue"\)/);
+  assert.match(newPageSource, /formData\.has\("songRequestsEnabled"\)/);
   assert.match(newPageSource, /formData\.has\("publicQueueEnabled"\)/);
   assert.match(newPageSource, /formData\.has\("publicShowSongTitles"\)/);
   assert.match(newPageSource, /formData\.has\("isActivePublicEvent"\)/);
   assert.match(newPageSource, /redirect\(/);
-  assert.match(detailPageSource, /EventSessionLinkPanel/);
-  assert.match(
-    detailPageSource,
-    /generateDashboardOrganizationEventSessionLinkForAuthUser/,
-  );
-  assert.match(detailPageSource, /result\.event\.autoCloseAt/);
+  assert.match(sharePageSource, /EventSessionAccessPanel/);
+  assert.match(sharePageSource, /result\.event\.sessionCode/);
+  assert.match(detailPageSource, /<EventOverview/);
+  assert.match(overviewSource, /publicShowSongTitles/);
+  assert.match(settingsPageSource, /result\.event\.songRequestsEnabled/);
   assert.match(detailPageSource, /result\.event\.facebookUrl/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
   assert.match(
     organizationsSource,
     /or\(eq\(workspaceMembers\.role, "owner"\), eq\(workspaceMembers\.role, "manager"\)\)/,
@@ -883,6 +1092,54 @@ test("organization events support owner and manager create flow", () => {
     organizationsSource.includes('eq(workspaceMembers.role, "viewer")'),
     false,
   );
+});
+
+test("organization event list and detail present the same effective closed status", () => {
+  const listPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/page.tsx",
+    "utf8",
+  );
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const overviewSource = readFileSync(
+    "src/components/operator/event-overview.tsx",
+    "utf8",
+  );
+  const organizationsSource = readFileSync(
+    "src/server/operator-api/organizations.ts",
+    "utf8",
+  );
+  const dashboardLifecycleSource = readFileSync(
+    "src/lib/dashboard-event-lifecycle.ts",
+    "utf8",
+  );
+
+  assert.match(
+    listPageSource,
+    /formatEventStatus\(event\.effectiveStatus\)/,
+  );
+  assert.match(
+    organizationsSource,
+    /effectiveStatus: getEffectiveEventLifecycleStatus\(event\)/,
+  );
+  assert.match(
+    detailPageSource,
+    /const lifecycleStatus = getDashboardEventLifecycleStatus\(result\.event\)/,
+  );
+  assert.match(
+    dashboardLifecycleSource,
+    /return getEffectiveEventLifecycleStatus\(/,
+  );
+  assert.match(listPageSource, /case "closed":\s+return "Zamknięte";/);
+  assert.match(overviewSource, /case "closed":/);
+  assert.match(
+    overviewSource,
+    /case "closed":[\s\S]{0,250}value: "Zamknięte"/,
+  );
+  assert.equal(listPageSource.includes('return "Zamknięty";'), false);
+  assert.equal(overviewSource.includes('return "Zamknięty";'), false);
 });
 
 test("organization event create persists scheduling and public visibility fields", () => {
@@ -897,12 +1154,18 @@ test("organization event create persists scheduling and public visibility fields
   );
 
   assert.match(schemaSource, /facebookUrl: text\("facebook_url"\)/);
-  assert.equal(schemaSource.includes("endsAt"), false);
+  assert.match(schemaSource, /endsAt: timestampColumn\("ends_at"\)\.notNull\(\)/);
+  assert.match(schemaSource, /songRequestsEnabled: boolean\("song_requests_enabled"\)/);
   assert.match(migrationSource, /ADD COLUMN "facebook_url" text/);
   assert.equal(migrationSource.includes("ends_at"), false);
   assert.match(organizationsSource, /venue: input\.event\.venue/);
   assert.match(organizationsSource, /autoCloseAt: input\.event\.autoCloseAt/);
+  assert.match(organizationsSource, /endsAt: input\.event\.autoCloseAt/);
   assert.match(organizationsSource, /facebookUrl: input\.event\.facebookUrl/);
+  assert.match(
+    organizationsSource,
+    /songRequestsEnabled: input\.event\.songRequestsEnabled/,
+  );
   assert.match(
     organizationsSource,
     /publicQueueEnabled: input\.event\.publicQueueEnabled/,
@@ -915,44 +1178,136 @@ test("organization event create persists scheduling and public visibility fields
     organizationsSource,
     /isActivePublicEvent: input\.event\.isActivePublicEvent/,
   );
-  assert.match(organizationsSource, /ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS/);
+  assert.doesNotMatch(organizationsSource, /ACTIVE_PUBLIC_EVENT_ALREADY_EXISTS/);
+  assert.match(organizationsSource, /withSessionCodeCollisionRetry/);
+  assert.match(organizationsSource, /sessionCode/);
 });
 
-test("organization event detail exposes managed event and session link panels", () => {
+test("organization event detail and settings keep one focused responsibility", () => {
   const detailPageSource = readFileSync(
     "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const settingsPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
     "utf8",
   );
   const panelSource = readFileSync(
     "src/components/operator/event-management-panel.tsx",
     "utf8",
   );
+  const overviewSource = readFileSync(
+    "src/components/operator/event-overview.tsx",
+    "utf8",
+  );
 
   assert.match(detailPageSource, /getDashboardEventLifecycleStatus/);
-  assert.match(detailPageSource, /areDashboardEventRequestsOpen/);
-  assert.match(detailPageSource, /shouldShowDashboardEventClosingWarning/);
-  assert.match(detailPageSource, /EventManagementPanel/);
-  assert.match(detailPageSource, /EventSessionLinkPanel/);
-  assert.match(detailPageSource, /detailsAction=\{updateEventDetails\.bind/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
-  assert.match(detailPageSource, /generateSessionLink\.bind/);
-  assert.match(detailPageSource, /buildSessionUrl/);
+  assert.match(detailPageSource, /getDashboardOrganizationEventForAuthUser/);
+  assert.match(detailPageSource, /<EventOverview/);
+  assert.match(overviewSource, /songRequestsEnabled/);
+  assert.match(overviewSource, /publicQueueEnabled/);
+  assert.doesNotMatch(detailPageSource, /EventManagementPanel|EventSessionAccessPanel/);
+  assert.match(settingsPageSource, /shouldShowDashboardEventClosingWarning/);
+  assert.match(settingsPageSource, /EventManagementPanel/);
+  assert.match(settingsPageSource, /detailsAction=\{updateEventDetails\.bind/);
+  assert.doesNotMatch(detailPageSource, /generateSessionLink/);
+  assert.doesNotMatch(detailPageSource, /tryBuildCanonicalSiteUrl/);
   assert.match(panelSource, /Wydarzenie kończy się za mniej niż 30 minut/);
   assert.match(panelSource, /name="title"/);
   assert.match(panelSource, /name="venue"/);
   assert.match(panelSource, /name="startsAt"/);
   assert.match(panelSource, /name="autoCloseAt"/);
   assert.match(panelSource, /name="facebookUrl"/);
+  assert.match(panelSource, /name="songRequestsEnabled"/);
   assert.match(panelSource, /name="publicQueueEnabled"/);
   assert.match(panelSource, /name="publicShowSongTitles"/);
   assert.match(panelSource, /name="isActivePublicEvent"/);
   assert.match(panelSource, /Zamknij wydarzenie teraz/);
-  assert.match(detailPageSource, /sessionPath/);
+  assert.match(settingsPageSource, /sessionCode/);
+});
+
+test("canonical site origin accepts configured HTTP origins and normalizes trailing slashes", () => {
+  assert.equal(
+    parseCanonicalSiteOrigin("https://app.example.test"),
+    "https://app.example.test",
+  );
+  assert.equal(
+    parseCanonicalSiteOrigin("http://localhost:3000"),
+    "http://localhost:3000",
+  );
+  assert.equal(
+    parseCanonicalSiteOrigin("https://app.example.test/"),
+    "https://app.example.test",
+  );
+});
+
+test("canonical site origin rejects unsafe or ambiguous configuration", () => {
+  for (const configuredValue of [
+    "ftp://app.example.test",
+    "https://user:password@app.example.test",
+    "https://app.example.test?redirect=evil",
+    "https://app.example.test#fragment",
+  ]) {
+    assert.throws(
+      () => parseCanonicalSiteOrigin(configuredValue),
+      (error) =>
+        error instanceof CanonicalSiteOriginConfigurationError &&
+        !error.message.includes(configuredValue),
+    );
+  }
+});
+
+test("canonical site origin fails safely when configuration is missing", () => {
+  assert.throws(
+    () => parseCanonicalSiteOrigin(undefined),
+    (error) =>
+      error instanceof CanonicalSiteOriginConfigurationError &&
+      error.message === "Canonical site URL is not configured correctly.",
+  );
+});
+
+test("canonical session share view uses the server-only origin helper", () => {
+  const detailPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "utf8",
+  );
+  const sharePageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+    "utf8",
+  );
+  const helperSource = readFileSync(
+    "src/server/canonical-site-origin.ts",
+    "utf8",
+  );
+  const panelSource = readFileSync(
+    "src/components/operator/event-session-access-panel.tsx",
+    "utf8",
+  );
+  const sessionAlertSource = readFileSync(
+    "src/components/public/session-state-alert.tsx",
+    "utf8",
+  );
+
+  for (const source of [detailPageSource, sharePageSource]) {
+    assert.doesNotMatch(source, /process\.env\.SITE_URL|buildSessionUrl/);
+    assert.doesNotMatch(source, /headers\(\)|x-forwarded-host|host\.startsWith/);
+  }
+  assert.doesNotMatch(detailPageSource, /tryBuildCanonicalSiteUrl/);
+  assert.match(sharePageSource, /tryBuildCanonicalSiteUrl/);
+
+  assert.match(helperSource, /import "server-only"/);
+  assert.match(helperSource, /process\.env\.SITE_URL/);
+  assert.doesNotMatch(
+    helperSource,
+    /headers\(\)|x-forwarded-host|request\.headers|host\.startsWith/,
+  );
+  assert.match(panelSource, /kind="canonical_unavailable"/);
+  assert.match(sessionAlertSource, /Adres sesji jest chwilowo niedostępny/);
 });
 
 test("organization event management is limited to owner and manager roles", () => {
-  const detailPageSource = readFileSync(
-    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+  const settingsPageSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
     "utf8",
   );
   const organizationsSource = readFileSync(
@@ -960,12 +1315,9 @@ test("organization event management is limited to owner and manager roles", () =
     "utf8",
   );
 
-  assert.match(detailPageSource, /canManageDashboardOrganizationEvent/);
+  assert.match(settingsPageSource, /canManageDashboardOrganizationEvent/);
   assert.match(organizationsSource, /canManageDashboardOrganizationEvent/);
-  assert.match(
-    organizationsSource,
-    /WORKSPACE_EVENT_MANAGE_FORBIDDEN/,
-  );
+  assert.match(organizationsSource, /WORKSPACE_EVENT_MANAGE_FORBIDDEN/);
   assert.match(
     organizationsSource,
     /or\(\s*eq\(workspaceMembers\.role, "owner"\),\s*eq\(workspaceMembers\.role, "manager"\),\s*\)/,
@@ -978,6 +1330,23 @@ test("organization event management is limited to owner and manager roles", () =
     organizationsSource.includes('eq(workspaceMembers.role, "operator")'),
     false,
   );
+
+  const expected = {
+    owner: { manage: true, share: true },
+    manager: { manage: true, share: true },
+    operator: { manage: false, share: true },
+    viewer: { manage: false, share: false },
+  } satisfies Record<
+    DashboardOrganizationRole,
+    { manage: boolean; share: boolean }
+  >;
+
+  for (const [role, capability] of Object.entries(expected) as Array<
+    [DashboardOrganizationRole, (typeof expected)[DashboardOrganizationRole]]
+  >) {
+    assert.equal(canManageDashboardOrganizationEvent(role), capability.manage);
+    assert.equal(canShareDashboardOrganizationEvent(role), capability.share);
+  }
 });
 
 test("organization event management updates auto_close_at and closes without delete", () => {
@@ -999,16 +1368,52 @@ test("organization event management updates auto_close_at and closes without del
   assert.match(manageSource, /closeDashboardOrganizationEventForAuthUser/);
   assert.match(manageSource, /startsAt: input\.event\.startsAt/);
   assert.match(manageSource, /autoCloseAt/);
+  assert.match(manageSource, /endsAt/);
+  assert.match(manageSource, /songRequestsEnabled/);
   assert.match(manageSource, /publicQueueEnabled/);
   assert.match(manageSource, /publicShowSongTitles/);
   assert.match(manageSource, /isActivePublicEvent/);
   assert.match(manageSource, /status: "closed"/);
   assert.match(manageSource, /closedAt: now/);
   assert.match(manageSource, /isActivePublicEvent: false/);
-  assert.match(manageSource, /calculateDashboardEventExtendedAutoCloseAt/);
+  assert.match(manageSource, /resolveDashboardEventCloseAt/);
   assert.equal(manageSource.includes(".delete("), false);
-  assert.equal(manageSource.includes("endsAt"), false);
   assert.equal(manageSource.includes("ends_at"), false);
+});
+
+test("event management revalidates every lifecycle-dependent view", () => {
+  const settingsPageSource = readFileSync(
+    new URL(
+      "../src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    settingsPageSource,
+    /revalidatePath\(getDashboardOrganizationEventsPath\(/,
+  );
+  assert.match(
+    settingsPageSource,
+    /revalidatePath\([\s\S]*getDashboardOrganizationEventPath\(/,
+  );
+  assert.match(
+    settingsPageSource,
+    /revalidatePath\([\s\S]*getDashboardOrganizationEventQueuePath\(/,
+  );
+  assert.match(
+    settingsPageSource,
+    /revalidatePath\([\s\S]*getDashboardOrganizationEventSharePath\(/,
+  );
+  assert.match(settingsPageSource, /revalidatePath\(`\/join\/\$\{event\.sessionCode\}`\)/);
+  assert.match(settingsPageSource, /revalidatePath\("\/s\/\[token\]", "page"\)/);
+  assert.match(settingsPageSource, /revalidatePath\(`\/events\/\$\{event\.slug\}`\)/);
+  assert.equal(
+    (settingsPageSource.match(/revalidateManagedEventPaths\(result\)/g) ?? [])
+      .length,
+    5,
+  );
 });
 
 test("organization event queue route renders the event-scoped management panel", () => {
@@ -1016,21 +1421,21 @@ test("organization event queue route renders the event-scoped management panel",
     "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
     "utf8",
   );
-  const detailPageSource = readFileSync(
-    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
     "utf8",
   );
 
   assert.match(queuePageSource, /getDashboardOrganizationEventQueueForAuthUser/);
   assert.match(queuePageSource, /EventQueuePanel/);
-  assert.match(queuePageSource, /Kolejka wydarzenia/);
-  assert.match(queuePageSource, /Powrót do wydarzenia/);
-  assert.match(queuePageSource, /getDashboardOrganizationEventPath/);
-  assert.match(detailPageSource, /Zarządzaj kolejką/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventQueuePath/);
+  assert.match(queuePageSource, /getDashboardEventLifecycleStatus/);
+  assert.match(queuePageSource, /publicQueueEnabled={result\.event\.publicQueueEnabled}/);
+  assert.doesNotMatch(queuePageSource, /Powrót do wydarzenia|Udostępnij/);
+  assert.match(sidebarSource, /getDashboardOrganizationEventQueuePath/);
+  assert.match(sidebarSource, /label: "Kolejka"/);
 });
 
-test("organization event share route renders session link and QR controls", () => {
+test("organization event share route renders canonical code and QR controls", () => {
   const sharePagePath =
     "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx";
   const sharePageSource = readFileSync(sharePagePath, "utf8");
@@ -1043,7 +1448,15 @@ test("organization event share route renders session link and QR controls", () =
     "utf8",
   );
   const sharePanelSource = readFileSync(
-    "src/components/operator/event-share-panel.tsx",
+    "src/components/operator/event-session-access-panel.tsx",
+    "utf8",
+  );
+  const generalJoinPanelSource = readFileSync(
+    "src/components/operator/general-join-access-panel.tsx",
+    "utf8",
+  );
+  const brandedQrSource = readFileSync(
+    "src/lib/branded-session-qr.ts",
     "utf8",
   );
   const organizationsSource = readFileSync(
@@ -1053,29 +1466,80 @@ test("organization event share route renders session link and QR controls", () =
 
   assert.equal(existsSync(sharePagePath), true);
   assert.equal(
-    getDashboardOrganizationEventSharePath(exampleOrganizationId, 42),
-    `/dashboard/org/${exampleOrganizationId}/events/42/share`,
+    getDashboardOrganizationEventSharePath(exampleOrganizationId, exampleEventPublicId),
+    `/dashboard/org/${exampleOrganizationId}/events/${exampleEventPublicId}/share`,
   );
   assert.match(sharePageSource, /Udostępnij wydarzenie/);
-  assert.match(sharePageSource, /getDashboardOrganizationEventSessionLinkForAuthUser/);
+  assert.match(sharePageSource, /getDashboardOrganizationEventSessionAccessForAuthUser/);
   assert.match(sharePageSource, /canShareDashboardOrganizationEvent/);
-  assert.match(sharePageSource, /generateDashboardOrganizationEventShareLinkForAuthUser/);
+  assert.doesNotMatch(sharePageSource, /generateDashboardOrganizationEventShareLinkForAuthUser/);
   assert.match(sharePageSource, /notFound\(\)/);
-  assert.match(sharePageSource, /buildSessionUrl\(result\.sessionPath\)/);
-  assert.match(detailPageSource, /getDashboardOrganizationEventSharePath/);
-  assert.match(detailPageSource, /Link i QR/);
-  assert.match(queuePageSource, /getDashboardOrganizationEventSharePath/);
-  assert.match(queuePageSource, /Udostępnij/);
-  assert.match(sharePanelSource, /QRCode\.toCanvas/);
-  assert.match(sharePanelSource, /errorCorrectionLevel: "H"/);
-  assert.match(sharePanelSource, /margin: 4/);
-  assert.match(sharePanelSource, /Pobierz QR/);
-  assert.match(sharePanelSource, /Kod QR pojawi się dopiero po wygenerowaniu linku sesji/);
+  assert.match(sharePageSource, /result\.event\.sessionCode/);
+  assert.match(sharePageSource, /`\/s\/\$\{result\.event\.publicToken\}`/);
+  assert.match(sharePageSource, /tryBuildCanonicalSiteUrl\("\/join"\)/);
+  assert.match(sharePageSource, /GeneralJoinAccessPanel/);
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
+    "utf8",
+  );
+  assert.match(sidebarSource, /getDashboardOrganizationEventSharePath/);
+  assert.match(sidebarSource, /label: "Link i QR"/);
+  assert.doesNotMatch(detailPageSource, /Link i QR/);
+  assert.doesNotMatch(queuePageSource, /Udostępnij/);
+  assert.match(sharePanelSource, /createBrandedSessionQrSvg/);
+  assert.match(sharePanelSource, /Pobierz QR \(SVG\)/);
+  assert.match(brandedQrSource, /errorCorrectionLevel: QR_ERROR_CORRECTION_LEVEL/);
+  assert.match(brandedQrSource, /const QR_ERROR_CORRECTION_LEVEL = "H"/);
+  assert.match(brandedQrSource, /const QR_MARGIN_MODULES = 4/);
+  assert.match(brandedQrSource, /QRCode\.create/);
+  assert.match(brandedQrSource, /createModulesPath/);
+  assert.match(brandedQrSource, /data-qr-brand-mark/);
+  assert.doesNotMatch(brandedQrSource, /<image\b/);
+  assert.doesNotMatch(brandedQrSource, /import .*AudioLinesIcon/);
+  assert.match(brandedQrSource, /SESSION_QR_BRAND_ASSET_PATH/);
+  assert.match(brandedQrSource, /data:image\/svg\+xml/);
+  assert.doesNotMatch(sharePanelSource, /dangerouslySetInnerHTML/);
+  assert.match(sharePanelSource, /Kopiuj kod/);
+  assert.doesNotMatch(sharePanelSource, /Wygeneruj|Regeneruj/);
+  assert.match(generalJoinPanelSource, /Ogólny kod wejścia/);
+  assert.match(generalJoinPanelSource, /Kopiuj link ogólny/);
+  assert.match(generalJoinPanelSource, /Pobierz ogólny QR \(SVG\)/);
+  assert.match(generalJoinPanelSource, /createBrandedSessionQrSvg\(joinUrl\)/);
+  assert.match(generalJoinPanelSource, /href=\{joinUrl\}/);
+  assert.doesNotMatch(generalJoinPanelSource, /pozanuta\.vercel\.app/);
   assert.match(organizationsSource, /canShareDashboardOrganizationEvent/);
-  assert.match(organizationsSource, /role === "operator"/);
+  assert.equal(canShareDashboardOrganizationEvent("operator"), true);
   assert.equal(sharePageSource.includes("codeHash"), false);
   assert.equal(sharePanelSource.includes("codeHash"), false);
 });
+
+test("dashboard and admin shells use Tailwind without CSS Modules", () => {
+  assert.equal(existsSync("src/components/operator/operator.module.css"), false);
+
+  const roots = [
+    "src/app/dashboard",
+    "src/app/account",
+    "src/components/operator",
+    "src/components/platform-admin",
+    "src/components/app-shell",
+  ];
+  const sources = roots.flatMap(listSourceFiles).map((path) => ({
+    path,
+    source: readFileSync(path, "utf8"),
+  }));
+
+  for (const { path, source } of sources) {
+    assert.doesNotMatch(source, /\.module\.css|styles\.[A-Za-z]/, path);
+  }
+});
+
+function listSourceFiles(root: string): string[] {
+  return readdirSync(root).flatMap((entry) => {
+    const path = join(root, entry);
+    if (statSync(path).isDirectory()) return listSourceFiles(path);
+    return /\.(?:ts|tsx)$/.test(path) ? [path] : [];
+  });
+}
 
 test("account identity sanitizer exposes login methods without tokens", () => {
   const identities = sanitizeAuthIdentities([
@@ -1107,11 +1571,7 @@ test("account identity sanitizer exposes login methods without tokens", () => {
   assert.equal(JSON.stringify(identities).includes("secret"), false);
 });
 
-test("public queue uses Supabase Realtime invalidation without data polling", () => {
-  const pageSource = readFileSync(
-    "src/components/public/public-queue-page.tsx",
-    "utf8",
-  );
+test("session queue uses Supabase Realtime invalidation without data polling", () => {
   const sessionPageSource = readFileSync(
     "src/components/public/session-request-page.tsx",
     "utf8",
@@ -1121,15 +1581,11 @@ test("public queue uses Supabase Realtime invalidation without data polling", ()
     "utf8",
   );
 
-  assert.match(pageSource, /usePublicQueueRealtime/);
   assert.match(sessionPageSource, /usePublicQueueRealtime/);
   assert.match(hookSource, /\.on\("broadcast"/);
   assert.match(hookSource, /supabase\.removeChannel\(channel\)/);
   assert.match(hookSource, /new AbortController\(\)/);
-  assert.equal(pageSource.includes("public-queue-polling"), false);
   assert.equal(sessionPageSource.includes("public-queue-polling"), false);
-  assert.equal(pageSource.includes("setInterval"), false);
-  assert.equal(pageSource.includes("setTimeout"), false);
   assert.equal(sessionPageSource.includes("setInterval"), false);
   assert.equal(sessionPageSource.includes("setTimeout"), false);
 });
@@ -1139,10 +1595,11 @@ test("dashboard routes expose skeleton loading fallbacks", () => {
     "src/app/dashboard/loading.tsx",
     "src/app/dashboard/organizations/loading.tsx",
     "src/app/dashboard/new/loading.tsx",
-    "src/app/dashboard/account/me/loading.tsx",
-    "src/app/dashboard/account/security/loading.tsx",
+    "src/app/account/loading.tsx",
+    "src/app/account/security/loading.tsx",
     "src/app/dashboard/org/[organizationId]/loading.tsx",
     "src/app/dashboard/org/[organizationId]/events/loading.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/loading.tsx",
     "src/app/dashboard/org/[organizationId]/team/loading.tsx",
     "src/app/dashboard/org/[organizationId]/settings/loading.tsx",
   ];
@@ -1155,6 +1612,7 @@ test("dashboard routes expose skeleton loading fallbacks", () => {
   assert.match(skeletonSource, /data-slot="skeleton"/);
   assert.match(skeletonSource, /animate-pulse/);
   assert.match(dashboardSkeletonsSource, /export function DashboardPageSkeleton/);
+  assert.match(dashboardSkeletonsSource, /export function EventPageSkeleton/);
   assert.match(dashboardSkeletonsSource, /export function PublicQueueSkeleton/);
 
   for (const route of loadingRoutes) {
@@ -1163,15 +1621,96 @@ test("dashboard routes expose skeleton loading fallbacks", () => {
   }
 });
 
-test("public queue renders skeleton first and keeps stale queue on refresh errors", () => {
-  const source = readFileSync(
-    "src/components/public/public-queue-page.tsx",
+test("event layout streams its own fallback before runtime event data resolves", () => {
+  const layoutSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/layout.tsx",
     "utf8",
   );
 
-  assert.match(source, /PublicQueueSkeleton/);
-  assert.match(source, /showInitialError = !isLoading && error && !queue/);
-  assert.match(source, /showRefreshError = !isLoading && error && queue/);
+  assert.match(layoutSource, /<Suspense fallback=\{<EventPageSkeleton \/>\}>/);
+  assert.match(layoutSource, /async function DashboardEventLayoutContent/);
+  assert.ok(
+    layoutSource.indexOf("<Suspense") <
+      layoutSource.indexOf("requireOperatorSession()"),
+  );
+});
+
+test("event workspace shell owns one safe header while event navigation stays in the sidebar", () => {
+  const layoutSource = readFileSync(
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/layout.tsx",
+    "utf8",
+  );
+  const shellSource = readFileSync(
+    "src/components/operator/event-workspace-shell.tsx",
+    "utf8",
+  );
+  const headerSource = readFileSync(
+    "src/components/operator/event-workspace-header.tsx",
+    "utf8",
+  );
+  const navPath = "src/components/operator/event-workspace-nav.tsx";
+  const sidebarSource = readFileSync(
+    "src/components/operator/organizer-sidebar.tsx",
+    "utf8",
+  );
+  const pageSources = [
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/page.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/queue/page.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/share/page.tsx",
+    "src/app/dashboard/org/[organizationId]/events/[eventId]/settings/page.tsx",
+  ].map((path) => readFileSync(path, "utf8"));
+
+  assert.match(layoutSource, /<EventWorkspaceShell/);
+  assert.doesNotMatch(layoutSource, /canShareDashboardOrganizationEvent/);
+  assert.doesNotMatch(shellSource, /canShareDashboardOrganizationEvent/);
+  assert.doesNotMatch(shellSource, /EventWorkspaceNav|<nav\b/);
+  assert.match(layoutSource, /publicId: result\.event\.publicId/);
+  assert.doesNotMatch(layoutSource, /sessionCode|publicToken/);
+  assert.doesNotMatch(shellSource, /sessionCode|publicToken/);
+  assert.equal((headerSource.match(/<h1\b/g) ?? []).length, 1);
+  assert.match(headerSource, /overflow-wrap:anywhere/);
+  assert.equal(existsSync(navPath), false);
+  assert.match(sidebarSource, /ariaLabel: "Nawigacja wydarzenia"/);
+  assert.match(sidebarSource, /canShareDashboardOrganizationEvent\(event\.role\)/);
+  assert.match(
+    sidebarSource,
+    /getDashboardOrganizationEvent(?:Queue|Share|Settings)?Path/,
+  );
+
+  for (const pageSource of pageSources) {
+    assert.doesNotMatch(pageSource, /<main\b/);
+    assert.doesNotMatch(pageSource, /<h1\b/);
+  }
+
+  assert.match(pageSources[1] ?? "", /<EventQueuePanel/);
+  assert.match(pageSources[1] ?? "", /lifecycle={getDashboardEventLifecycleStatus/);
+  assert.match(pageSources[1] ?? "", /publicQueueEnabled=/);
+  assert.match(pageSources[2] ?? "", /kanonicznej sesji wydarzenia/);
+  assert.match(pageSources[2] ?? "", /Ogólny kod wejścia/);
+  assert.match(pageSources[2] ?? "", /\/join/);
+  assert.match(pageSources[2] ?? "", /<EventSessionAccessPanel/);
+  assert.match(pageSources[3] ?? "", /Zgłoszenia/);
+  assert.match(pageSources[3] ?? "", /Publiczny event/);
+  assert.match(pageSources[3] ?? "", /Katalog wydarzeń/);
+  assert.match(pageSources[3] ?? "", /Publiczna kolejka/);
+  assert.match(pageSources[3] ?? "", /Uprawnienia/);
+  assert.match(pageSources[3] ?? "", /<EventManagementPanel/);
+});
+
+test("global public queue page is removed and session queue handles refresh errors", () => {
+  const queueRouteSource = readFileSync(
+    "src/app/api/public/queue/route.ts",
+    "utf8",
+  );
+  const source = readFileSync(
+    "src/components/public/session-request-page.tsx",
+    "utf8",
+  );
+
+  assert.equal(existsSync("src/app/queue/page.tsx"), false);
+  assert.match(queueRouteSource, /PUBLIC_QUEUE_ENDPOINT_GONE/);
+  assert.match(source, /queueMessage/);
+  assert.match(source, /setQueueMessage\(getQueueErrorMessage\(caughtError\)\)/);
   assert.equal(source.includes("!error && queue?.enabled"), false);
   assert.equal(source.includes("!error && queue && !queue.enabled"), false);
 });

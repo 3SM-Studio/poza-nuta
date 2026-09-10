@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 import { operatorUsers } from "./schema.ts";
 
@@ -14,14 +15,10 @@ const UUID_PATTERN =
 config({ path: [".env.local", ".env"], quiet: true });
 
 async function linkOperatorAuth() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = requireAdminDatabaseUrl();
   const authUserId = process.env.OPERATOR_AUTH_USER_ID?.trim();
   const name =
     process.env.OPERATOR_BOOTSTRAP_NAME?.trim() || DEFAULT_OPERATOR_NAME;
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
 
   if (!authUserId) {
     throw new Error("OPERATOR_AUTH_USER_ID is not configured.");

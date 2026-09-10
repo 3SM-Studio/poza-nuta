@@ -18,9 +18,6 @@ import {
   DEFAULT_DASHBOARD_EVENT_DURATION_HOURS,
   validateCreateDashboardEventInput,
   validateExtendDashboardEventInput,
-  validateEventSettingsInput,
-  validateExtendInput,
-  validateStartEventInput,
   validateUpdateDashboardEventDetailsInput,
   validateUpdateDashboardEventAutoCloseAtInput,
 } from "../src/server/operator-api/validation.ts";
@@ -158,6 +155,18 @@ test("dashboard managed event status is calculated at runtime", () => {
     getManagedEventLifecycleStatus(
       {
         ...baseEvent,
+        status: "active",
+        startsAt: new Date("2026-07-05T12:00:00.000Z"),
+        autoCloseAt: new Date("2026-07-05T17:59:59.999Z"),
+      },
+      now,
+    ),
+    "closed",
+  );
+  assert.equal(
+    getManagedEventLifecycleStatus(
+      {
+        ...baseEvent,
         status: "closed",
         closedAt: new Date("2026-07-05T17:30:00.000Z"),
       },
@@ -239,10 +248,10 @@ test("dashboard managed event extend uses max of now and auto_close_at", () => {
   assert.equal(
     calculateManagedEventExtendedAutoCloseAt({
       autoCloseAt: null,
-      minutes: 120,
+      minutes: 60,
       now,
     }).toISOString(),
-    "2026-07-05T20:00:00.000Z",
+    "2026-07-05T19:00:00.000Z",
   );
 });
 
@@ -304,18 +313,34 @@ test("dashboard managed event details reject auto_close_at before starts_at", ()
 test("dashboard managed event accepts only configured extension minutes", () => {
   assert.deepEqual(validateExtendDashboardEventInput({ minutes: "30" }), {
     success: true,
-    data: { minutes: 30 },
+    data: { minutes: 30, closesAt: null },
   });
   assert.deepEqual(validateExtendDashboardEventInput({ minutes: 60 }), {
     success: true,
-    data: { minutes: 60 },
+    data: { minutes: 60, closesAt: null },
   });
-  assert.deepEqual(validateExtendDashboardEventInput({ minutes: "120" }), {
+  assert.deepEqual(
+    validateExtendDashboardEventInput({
+      closesAt: "2026-07-05T20:00:00.000Z",
+    }),
+    {
     success: true,
-    data: { minutes: 120 },
-  });
+      data: {
+        minutes: null,
+        closesAt: new Date("2026-07-05T20:00:00.000Z"),
+      },
+    },
+  );
+  assert.equal(validateExtendDashboardEventInput({ minutes: "120" }).success, false);
   assert.equal(validateExtendDashboardEventInput({ minutes: "15" }).success, false);
   assert.equal(validateExtendDashboardEventInput({ minutes: 90 }).success, false);
+  assert.deepEqual(
+    validateExtendDashboardEventInput({ closesAt: "not-a-date" }),
+    {
+      success: false,
+      issues: [{ field: "closesAt", message: "closesAt must be a valid date." }],
+    },
+  );
 });
 
 test("closed and cancelled dashboard managed events block management", () => {
@@ -410,75 +435,4 @@ test("formatEventTimeRemaining reports hours, minutes and expired state", () => 
     "Zamykanie",
   );
   assert.equal(formatEventTimeRemaining(null, now), "Brak terminu");
-});
-
-test("validateExtendInput accepts only one or two hours", () => {
-  assert.deepEqual(validateExtendInput({ hours: 1 }), {
-    success: true,
-    data: { hours: 1 },
-  });
-  assert.deepEqual(validateExtendInput({ hours: 2 }), {
-    success: true,
-    data: { hours: 2 },
-  });
-  assert.equal(validateExtendInput({ hours: 0 }).success, false);
-  assert.equal(validateExtendInput({ hours: 3 }).success, false);
-  assert.equal(validateExtendInput({ hours: "1" }).success, false);
-});
-
-test("validateEventSettingsInput validates and normalizes all settings", () => {
-  assert.deepEqual(
-    validateEventSettingsInput({
-      name: "  Poza Nutą  ",
-      venue: "  Dom Kultury  ",
-      publicQueueEnabled: true,
-      publicShowSongTitles: false,
-    }),
-    {
-      success: true,
-      data: {
-        name: "Poza Nutą",
-        venue: "Dom Kultury",
-        publicQueueEnabled: true,
-        publicShowSongTitles: false,
-      },
-    },
-  );
-
-  const invalid = validateEventSettingsInput({
-    name: "",
-    venue: "x".repeat(121),
-    publicQueueEnabled: "yes",
-    publicShowSongTitles: null,
-  });
-
-  assert.equal(invalid.success, false);
-  assert.deepEqual(
-    invalid.success ? [] : invalid.issues.map((issue) => issue.field),
-    ["name", "venue", "publicQueueEnabled", "publicShowSongTitles"],
-  );
-});
-
-test("validateStartEventInput requires name and accepts an optional venue", () => {
-  assert.deepEqual(
-    validateStartEventInput({
-      name: "  Nowy event  ",
-      venue: "",
-    }),
-    {
-      success: true,
-      data: {
-        name: "Nowy event",
-        venue: null,
-      },
-    },
-  );
-  assert.equal(validateStartEventInput({ name: "" }).success, false);
-  assert.equal(
-    validateStartEventInput({
-      name: "Event",
-      venue: "x".repeat(121),
-    }).success,
-    false,
-  );
 });

@@ -1,18 +1,11 @@
-import {
-  jsonResponse,
-  publicApiErrorResponse,
-} from "../../../../server/public-api/responses";
-import { getPublicQueue } from "../../../../server/public-api/service";
+import { legacyGoneResponse } from "../../../../server/legacy-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
-  try {
-    const queue = await getPublicQueue();
-
-    return jsonResponse(queue);
-  } catch (error) {
-    return publicApiErrorResponse(error);
-  }
+  return legacyGoneResponse(
+    "PUBLIC_QUEUE_ENDPOINT_GONE",
+    "Participant queue access requires a session code. Use /api/session/[code]/queue.",
+  );
 }
