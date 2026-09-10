@@ -11,11 +11,11 @@ import styles from "@/components/public/public.module.css";
 import { canUseSessionSongRequests } from "@/lib/session-capabilities";
 import { consumeSessionRequestRateLimit } from "@/server/session-api/rate-limit";
 import { PARTICIPANT_CREDENTIAL_COOKIE } from "@/server/session-api/participant-credential";
+import { getPublicSessionPageData } from "@/server/session-api/service";
 import {
-  getPublicSessionParticipant,
-  getPublicSessionSongDiscovery,
-  resolvePublicSessionEventAccess,
-} from "@/server/session-api/service";
+  isTransientInfrastructureError,
+  traceServerStep,
+} from "@/server/runtime-diagnostics";
 
 export const metadata: Metadata = {
   title: "Katalog piosenek | Poza Nutą",
@@ -31,11 +31,37 @@ export default async function PublicSessionSongsPage({
 }) {
   const { token } = await params;
   const rateLimit = consumeSessionRequestRateLimit(await headers(), "page");
-  const access = rateLimit.allowed
-    ? await resolvePublicSessionEventAccess(token)
-    : ({ status: "rate_limited" } as const);
+  let pageData: Awaited<ReturnType<typeof getPublicSessionPageData>> | null = null;
+  let serviceUnavailable = false;
+
+  if (rateLimit.allowed) {
+    try {
+      const participantCredential = (await cookies()).get(
+        PARTICIPANT_CREDENTIAL_COOKIE,
+      )?.value;
+      pageData = await traceServerStep(
+        "session.songs.page",
+        "loadSession",
+        () =>
+          getPublicSessionPageData(
+            token,
+            participantCredential,
+            "song_requests",
+          ),
+      );
+    } catch (error) {
+      if (!isTransientInfrastructureError(error)) throw error;
+      serviceUnavailable = true;
+    }
+  }
+
+  const access = serviceUnavailable
+    ? ({ status: "service_unavailable" } as const)
+    : pageData?.access ?? ({ status: "rate_limited" } as const);
   const event =
-    access.status === "invalid" || access.status === "rate_limited"
+    access.status === "invalid" ||
+    access.status === "rate_limited" ||
+    access.status === "service_unavailable"
       ? null
       : access.event;
 
@@ -43,15 +69,8 @@ export default async function PublicSessionSongsPage({
 
   const canBrowseSongs =
     access.status === "active" && canUseSessionSongRequests(access.event);
-  const participant = canBrowseSongs
-    ? await getPublicSessionParticipant(
-        token,
-        (await cookies()).get(PARTICIPANT_CREDENTIAL_COOKIE)?.value,
-      )
-    : null;
-  const discovery = participant
-    ? await getPublicSessionSongDiscovery(token)
-    : null;
+  const participant = pageData?.participant ?? null;
+  const discovery = pageData?.discovery ?? null;
 
   return (
     <main className={styles.publicPage}>

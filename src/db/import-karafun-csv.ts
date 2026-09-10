@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { readKaraFunCsvRows } from "./karafun-csv.ts";
 import {
   mapKaraFunRowToSong,
@@ -38,11 +39,7 @@ let client: ReturnType<typeof postgres> | null = null;
 
 try {
   const options = parseOptions(process.argv.slice(2));
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
+  const databaseUrl = requireAdminDatabaseUrl();
 
   client = postgres(databaseUrl, {
     connect_timeout: 10,

@@ -2,7 +2,7 @@ export const SERVER_STEP_TIMEOUT_MS = 8_000;
 
 const CONNECTION_URL_PATTERN = /\bpostgres(?:ql)?:\/\/[^\s'"]+/gi;
 const ENV_SECRET_PATTERN =
-  /\b(DATABASE_URL|PASSWORD|TOKEN|SECRET|KEY)=\S+/gi;
+  /\b(DATABASE_URL|DIRECT_URL|IMPORT_WORKER_DATABASE_URL|PASSWORD|TOKEN|SECRET|KEY)=\S+/gi;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const AUTH_HEADER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
 
@@ -24,7 +24,16 @@ const TRANSIENT_ERROR_CODES = new Set([
   "ETIMEDOUT",
   "P1001",
   "UND_ERR_CONNECT_TIMEOUT",
+  "DATABASE_CONNECTION_MODE_INVALID",
+  "DATABASE_URL_MISSING",
+  "EMAXCONNSESSION",
 ]);
+
+const DATABASE_CONNECTION_CAPACITY_MESSAGE_PATTERNS = [
+  "emaxconnsession",
+  "maxclientsinsessionmode",
+  "max clients in session mode",
+];
 
 const INFRASTRUCTURE_TIMEOUT_MESSAGE_PATTERNS = [
   "canceling statement due to statement timeout",
@@ -155,22 +164,37 @@ export function isTransientInfrastructureError(error: unknown) {
     return true;
   }
 
-  const message = getSafeErrorMessage(error).toLowerCase();
+  if (hasDatabaseConnectionCapacityError(error)) {
+    return true;
+  }
 
-  return (
-    message.includes("connection terminated") ||
-    message.includes("connection closed") ||
-    message.includes("connection refused") ||
-    message === "fetch failed" ||
-    message.includes("network error")
+  const messages = getErrorMessages(error).map((message) =>
+    message.toLowerCase(),
+  );
+
+  return messages.some(
+    (message) =>
+      message.includes("connection terminated") ||
+      message.includes("connection closed") ||
+      message.includes("connection refused") ||
+      message === "fetch failed" ||
+      message.includes("network error"),
   );
 }
 
 export function getSafeErrorCode(error: unknown) {
+  if (hasDatabaseConnectionCapacityError(error)) {
+    return "EMAXCONNSESSION";
+  }
+
   return getErrorCode(error) ?? getErrorName(error);
 }
 
 export function getSafeErrorMessage(error: unknown) {
+  if (hasDatabaseConnectionCapacityError(error)) {
+    return "Database connection capacity exhausted.";
+  }
+
   if (error instanceof Error) {
     return sanitizeLogValue(error.message);
   }
@@ -257,18 +281,55 @@ function getErrorName(error: unknown) {
 }
 
 function getErrorCode(error: unknown): string | undefined {
-  const record = asRecord(error);
-  const code = record?.code;
+  for (const current of getErrorChain(error)) {
+    const code = current.code;
 
-  if (typeof code === "string" && code.length > 0) {
-    return code;
+    if (typeof code === "string" && code.length > 0) {
+      return code;
+    }
   }
 
-  const causeCode = asRecord(record?.cause)?.code;
+  return undefined;
+}
 
-  return typeof causeCode === "string" && causeCode.length > 0
-    ? causeCode
-    : undefined;
+function hasDatabaseConnectionCapacityError(error: unknown) {
+  for (const current of getErrorChain(error)) {
+    if (current.code === "EMAXCONNSESSION") {
+      return true;
+    }
+
+    const message = current.message;
+    if (
+      typeof message === "string" &&
+      DATABASE_CONNECTION_CAPACITY_MESSAGE_PATTERNS.some((pattern) =>
+        message.toLowerCase().includes(pattern),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getErrorMessages(error: unknown) {
+  return getErrorChain(error).flatMap((current) =>
+    typeof current.message === "string" ? [current.message] : [],
+  );
+}
+
+function getErrorChain(error: unknown) {
+  const chain: Record<string, unknown>[] = [];
+  const seen = new Set<object>();
+  let current = asRecord(error);
+
+  while (current && chain.length < 8 && !seen.has(current)) {
+    chain.push(current);
+    seen.add(current);
+    current = asRecord(current.cause);
+  }
+
+  return chain;
 }
 
 function asRecord(value: unknown) {

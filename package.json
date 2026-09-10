@@ -44,7 +44,7 @@
     "e2e": "playwright test"
   },
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

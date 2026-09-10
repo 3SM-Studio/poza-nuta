@@ -178,6 +178,8 @@ export type PublicSessionEvent = {
   closeReason: string | null;
 };
 
+type PublicSessionPageParticipantMode = "interactive" | "song_requests";
+
 export async function resolveSessionEventAccess(
   code: string,
   now = new Date(),
@@ -210,6 +212,49 @@ export async function resolvePublicSessionEventAccess(
 
   if (!row || status === "invalid") return { status: "invalid" };
   return { status, event: toPublicSessionEvent(row.event) };
+}
+
+export async function getPublicSessionPageData(
+  publicToken: string,
+  credential: string | null | undefined,
+  participantMode: PublicSessionPageParticipantMode,
+) {
+  const row = await findSessionEvent({ kind: "token", value: publicToken });
+  const status = getSessionEventAccessStatus({ event: row?.event ?? null });
+
+  if (!row || status === "invalid") {
+    return {
+      access: { status: "invalid" } as const,
+      participant: null,
+      discovery: null,
+    };
+  }
+
+  const access = {
+    status,
+    event: toPublicSessionEvent(row.event),
+  } as const;
+  const participantAllowed =
+    status === "active" &&
+    (participantMode === "song_requests"
+      ? canUseSessionSongRequests(row.event)
+      : canUseSessionSongRequests(row.event) ||
+        canUseSessionPublicQueue(row.event));
+
+  if (!participantAllowed) {
+    return { access, participant: null, discovery: null };
+  }
+
+  const participant = await getPublicSessionParticipantForSession(
+    row,
+    credential,
+  );
+  const discovery =
+    participant && canUseSessionSongRequests(row.event)
+      ? await getSongDiscovery()
+      : null;
+
+  return { access, participant, discovery };
 }
 
 export async function resolveJoinCode(code: string, now = new Date()) {
@@ -273,17 +318,19 @@ export async function getPublicSessionSongDiscovery(
 ): Promise<PublicSongDiscovery> {
   await requireSongRequestSession({ kind: "token", value: publicToken });
 
-  const [genres, languages, featureRows] = await Promise.all([
-    listSongDiscoveryCategories(songs.genres),
-    listSongDiscoveryCategories(songs.languages),
-    getDb()
-      .select({
-        duetCount: sql<number>`count(*) filter (where ${songs.isDuet})::integer`,
-        hitCount: sql<number>`count(*) filter (where ${songs.isHit})::integer`,
-        plusCount: sql<number>`count(*) filter (where ${songs.isPlus})::integer`,
-      })
-      .from(songs),
-  ]);
+  return getSongDiscovery();
+}
+
+async function getSongDiscovery(): Promise<PublicSongDiscovery> {
+  const genres = await listSongDiscoveryCategories(songs.genres);
+  const languages = await listSongDiscoveryCategories(songs.languages);
+  const featureRows = await getDb()
+    .select({
+      duetCount: sql<number>`count(*) filter (where ${songs.isDuet})::integer`,
+      hitCount: sql<number>`count(*) filter (where ${songs.isHit})::integer`,
+      plusCount: sql<number>`count(*) filter (where ${songs.isPlus})::integer`,
+    })
+    .from(songs);
   const featureCounts = featureRows[0] ?? {
     duetCount: 0,
     hitCount: 0,
@@ -539,6 +586,14 @@ export async function getPublicSessionParticipant(
     kind: "token",
     value: publicToken,
   });
+
+  return getPublicSessionParticipantForSession(session, credential);
+}
+
+async function getPublicSessionParticipantForSession(
+  session: SessionEventRow,
+  credential: string | null | undefined,
+): Promise<PublicSessionParticipant | null> {
   const tokenHash = credential ? hashParticipantCredential(credential) : null;
   if (!tokenHash) return null;
 

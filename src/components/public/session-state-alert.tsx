@@ -17,6 +17,7 @@ export type SessionStateAlertKind =
   | "closed"
   | "queue_disabled"
   | "rate_limited"
+  | "service_unavailable"
   | "duplicate_request"
   | "canonical_unavailable"
   | "qr_unavailable";
@@ -51,6 +52,12 @@ const presentations = {
     icon: ShieldAlertIcon,
     title: "Zbyt wiele prób",
     description: "Odczekaj chwilę przed kolejną próbą.",
+    variant: "destructive",
+  },
+  service_unavailable: {
+    icon: CircleAlertIcon,
+    title: "Sesja chwilowo niedostępna",
+    description: "Odśwież stronę za chwilę.",
     variant: "destructive",
   },
   duplicate_request: {

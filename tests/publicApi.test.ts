@@ -109,6 +109,37 @@ test("public API response returns JSON 503 for Postgres statement timeout", asyn
   }
 });
 
+test("public API response returns a safe JSON 503 for Session Pooler exhaustion", async () => {
+  const originalError = console.error;
+  const logs: string[] = [];
+
+  console.error = (message?: unknown) => {
+    logs.push(String(message));
+  };
+
+  try {
+    const response = publicApiErrorResponse(
+      new Error("Failed query", {
+        cause: new Error(
+          "EMAXCONNSESSION: max clients in session mode reached secret-host",
+        ),
+      }),
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "The service is temporarily unavailable.",
+      },
+    });
+    assert.match(logs.join("\n"), /error_code="EMAXCONNSESSION"/);
+    assert.doesNotMatch(logs.join("\n"), /secret-host/);
+  } finally {
+    console.error = originalError;
+  }
+});
+
 function restoreEnv(name: string, value: string | undefined) {
   if (value === undefined) {
     delete process.env[name];

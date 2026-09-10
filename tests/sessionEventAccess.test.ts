@@ -321,6 +321,38 @@ test("canonical session page and code resolver provide safe states", () => {
   assert.doesNotMatch(alert, /wygasł/);
 });
 
+test("song discovery does not burst concurrent catalog queries", () => {
+  const source = readFileSync("src/server/session-api/service.ts", "utf8");
+  const discoverySource = source.slice(
+    source.indexOf("export async function getPublicSessionSongDiscovery"),
+    source.indexOf("export async function browsePublicSessionSongs"),
+  );
+
+  assert.doesNotMatch(discoverySource, /Promise\.all\(/);
+  assert.match(discoverySource, /await listSongDiscoveryCategories\(songs\.genres\)/);
+  assert.match(
+    discoverySource,
+    /await listSongDiscoveryCategories\(songs\.languages\)/,
+  );
+  assert.match(discoverySource, /const featureRows = await getDb\(\)/);
+});
+
+test("canonical session pages reuse one resolved session lookup", () => {
+  for (const pagePath of [
+    "src/app/s/[token]/page.tsx",
+    "src/app/s/[token]/songs/page.tsx",
+  ]) {
+    const page = readFileSync(pagePath, "utf8");
+
+    assert.match(page, /getPublicSessionPageData\(/);
+    assert.match(page, /isTransientInfrastructureError\(error\)/);
+    assert.match(page, /service_unavailable/);
+    assert.doesNotMatch(page, /resolvePublicSessionEventAccess\(/);
+    assert.doesNotMatch(page, /getPublicSessionParticipant\(/);
+    assert.doesNotMatch(page, /getPublicSessionSongDiscovery\(/);
+  }
+});
+
 test("session entry form normalizes paste and preserves a leading zero", () => {
   const form = readFileSync("src/components/public/session-code-form.tsx", "utf8");
   assert.match(form, /normalizeSessionCode\(code\)/);

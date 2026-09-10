@@ -8,7 +8,7 @@ Kod aplikacji znajduje się w `src/app`, `src/components`, `src/server`,
 
 ## Uruchomienie lokalne
 
-Wymagany jest Node.js 24 lub nowszy oraz pnpm.
+Wymagany jest Node.js 24.x oraz pnpm.
 
 ```bash
 pnpm install
@@ -31,8 +31,10 @@ Najważniejsze widoki:
 Skopiuj `.env.example` do lokalnego `.env` i uzupełnij wymagane wartości.
 Nie commituj `.env` ani sekretów Supabase.
 
-Połączenie z bazą korzysta wyłącznie z serwerowego `DATABASE_URL`. Aplikacja nie
-używa `NEXT_PUBLIC_*` do połączenia z Postgres.
+Runtime aplikacji korzysta wyłącznie z serwerowego `DATABASE_URL`, wskazującego
+na Supabase Transaction Pooler. Migracje i jednorazowe narzędzia administracyjne
+korzystają z `DIRECT_URL`. Aplikacja nie używa `NEXT_PUBLIC_*` do połączenia z
+Postgres.
 
 ## Baza danych i import KaraFun
 

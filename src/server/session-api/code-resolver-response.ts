@@ -1,6 +1,7 @@
 import "server-only";
 
 import { PublicApiError } from "../public-api/errors";
+import { traceServerStep } from "../runtime-diagnostics";
 import { requireSessionApiRateLimit } from "./rate-limit";
 import { resolveJoinCode } from "./service";
 
@@ -13,7 +14,11 @@ const redirectHeaders = {
 export async function resolveJoinCodeResponse(request: Request, code: string) {
   try {
     requireSessionApiRateLimit(request);
-    const result = await resolveJoinCode(code);
+    const result = await traceServerStep(
+      "session.code",
+      "resolveJoinCode",
+      () => resolveJoinCode(code),
+    );
 
     return temporaryNoStoreRedirect(
       result.status === "resolved"

@@ -115,7 +115,7 @@ to an active `operator_users` row, but that operator does not yet have an active
 
 Required ENV:
 
-- `DATABASE_URL`
+- `DIRECT_URL`
 - `OPERATOR_AUTH_USER_ID`
 
 Optional ENV:
@@ -133,7 +133,7 @@ Recommended bootstrap order:
 
 The script is idempotent. If the membership already exists and is active, it
 does not create a duplicate. If the membership exists but is inactive, it sets
-`active=true`. It does not print `DATABASE_URL`, `OPERATOR_AUTH_USER_ID`, or
+`active=true`. It does not print `DIRECT_URL`, `OPERATOR_AUTH_USER_ID`, or
 tokens.
 
 ## Public Queue Realtime Status

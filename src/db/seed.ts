@@ -9,17 +9,14 @@ import {
   DEFAULT_WORKSPACE_NAME,
 } from "../lib/workspace.ts";
 import { generateOrganizationPublicId } from "../lib/organization-public-id.ts";
+import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 import { events, workspaces } from "./schema.ts";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
 async function seed() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
+  const databaseUrl = requireAdminDatabaseUrl();
 
   const client = postgres(databaseUrl, {
     connect_timeout: 5,

@@ -13,10 +13,14 @@ repository root.
 
 ## Required environment variables
 
-Set these in Vercel and in the local shell used for database operations:
+Set runtime variables in Vercel and administration variables only in the local
+shell used for controlled database operations:
 
-- `DATABASE_URL` - Supabase Postgres connection string. Use the transaction
-  pooler connection string for Vercel runtime and CLI jobs.
+- `DATABASE_URL` - Vercel runtime only. It must be a Supabase Transaction
+  Pooler connection string on port `6543`.
+- `DIRECT_URL` - Drizzle migrations and one-off database administration only.
+  Use a Direct connection or the Supabase Session Pooler on port `5432`; do not
+  configure this variable in the Vercel runtime.
 - `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL.
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` - Supabase publishable/anon key.
 - `SUPABASE_URL` - server-side Supabase project URL.
@@ -75,7 +79,7 @@ After migrations, seed the baseline event/workspace data:
 pnpm db:seed
 ```
 
-This requires `DATABASE_URL`.
+This requires `DIRECT_URL`.
 
 ## Seed and link the operator
 
@@ -107,6 +111,10 @@ pnpm db:import:karafun
 Imports are upsert-based. Do not truncate or delete `songs` during import, and
 do not run long imports inside a blocking browser request.
 
+The KaraFun import and the local seed/link/check commands use `DIRECT_URL`.
+The durable iSing worker keeps its separately scoped
+`IMPORT_WORKER_DATABASE_URL` contract.
+
 ## Verification
 
 Before deployment, run:
@@ -118,7 +126,14 @@ pnpm lint
 pnpm test
 pnpm build
 git diff --check
+git status --short
 ```
+
+Use the Git integration for production deployments. This repository has no
+canonical manual `vercel --prod` script, so it cannot enforce cleanliness on an
+arbitrary external CLI invocation. Do not deploy when `git status --short` has
+output; this prevents `gitDirty=1` deployments from including uncommitted
+working-tree content.
 
 The production runtime API requires `DATABASE_URL`, but `pnpm build` should not
 need a live database connection.
