@@ -39,6 +39,8 @@ import {
   type SessionEventAccessStatus,
 } from "../../lib/session-event-access";
 import { getDb } from "../db";
+import { traceDbOperation, traceDbTransaction, traceForUpdateSelect } from "../db-telemetry";
+import { setLocalDatabaseTimeouts } from "../database-transaction-timeouts";
 import { PublicApiError } from "../public-api/errors";
 import {
   ACTIVE_PUBLIC_REQUEST_STATUSES,
@@ -674,7 +676,9 @@ export async function renamePublicSessionParticipant(
   input: ParticipantRenameInput,
 ): Promise<PublicSessionParticipant> {
   try {
-    return await getDb().transaction(async (transaction) => {
+    return await traceDbTransaction("public_session.participant.rename", "participant.rename", (onStarted) => getDb().transaction(async (transaction) => {
+      onStarted();
+      await setLocalDatabaseTimeouts(transaction);
       const session = requireParticipantSessionRow(
         requireLiveSessionRow(
           await findSessionEventInTransaction(transaction, {
@@ -688,6 +692,7 @@ export async function renamePublicSessionParticipant(
         session.sessionId,
         credential,
       );
+      await requireCurrentSessionLifecycleInTransaction(transaction, session);
       const [updated] = await transaction
         .update(eventParticipants)
         .set({
@@ -700,7 +705,7 @@ export async function renamePublicSessionParticipant(
 
       if (!updated) throw new Error("Participant membership could not be updated.");
       return updated;
-    });
+    }));
   } catch (error) {
     if (isNicknameUniqueViolation(error)) {
       throw new PublicApiError(
@@ -718,7 +723,9 @@ export async function cancelPublicParticipantRequest(
   credential: string | null | undefined,
   publicRequestId: string,
 ) {
-  return getDb().transaction(async (transaction) => {
+  return traceDbTransaction("public_session.requests.cancel", "queue.request.cancel", (onStarted) => getDb().transaction(async (transaction) => {
+    onStarted();
+    await setLocalDatabaseTimeouts(transaction);
     const session = requireParticipantSessionRow(
       requireLiveSessionRow(
         await findSessionEventInTransaction(transaction, {
@@ -732,6 +739,7 @@ export async function cancelPublicParticipantRequest(
       session.sessionId,
       credential,
     );
+    await requireCurrentSessionLifecycleInTransaction(transaction, session);
     const now = new Date();
     const [cancelled] = await transaction
       .update(songRequests)
@@ -781,7 +789,7 @@ export async function cancelPublicParticipantRequest(
       "SESSION_REQUEST_CANNOT_CANCEL",
       "Only a pending request can be cancelled.",
     );
-  });
+  }));
 }
 
 export async function joinPublicSession(
@@ -793,7 +801,9 @@ export async function joinPublicSession(
     ? hashParticipantCredential(credential)
     : null;
 
-  return getDb().transaction(async (transaction) => {
+  return traceDbTransaction("public_session.join", "participant.join", (onStarted) => getDb().transaction(async (transaction) => {
+    onStarted();
+    await setLocalDatabaseTimeouts(transaction);
     const session = requireParticipantSessionRow(
       requireLiveSessionRow(
         await findSessionEventInTransaction(transaction, {
@@ -830,12 +840,7 @@ export async function joinPublicSession(
     let participantId = recognizedCredential?.participantId;
     let credentialExpiresAt = recognizedCredential?.expiresAt;
 
-    if (participantId) {
-      await transaction
-        .update(participantCredentials)
-        .set({ lastUsedAt: now })
-        .where(eq(participantCredentials.tokenHash, tokenHash));
-    } else {
+    if (!participantId) {
       const [identity] = await transaction
         .insert(participantIdentities)
         .values({ createdAt: now, updatedAt: now })
@@ -863,7 +868,10 @@ export async function joinPublicSession(
     }
 
     const [existingMembership] = await transaction
-      .select({ displayName: eventParticipants.displayName })
+      .select({
+        id: eventParticipants.id,
+        displayName: eventParticipants.displayName,
+      })
       .from(eventParticipants)
       .where(
         and(
@@ -873,9 +881,22 @@ export async function joinPublicSession(
       )
       .limit(1);
 
+    await requireCurrentSessionLifecycleInTransaction(transaction, session);
+    if (recognizedCredential) {
+      await transaction
+        .update(participantCredentials)
+        .set({ lastUsedAt: now })
+        .where(eq(participantCredentials.tokenHash, tokenHash));
+    }
+
     if (existingMembership) {
+      const currentMembership = await requireCurrentParticipantMembershipInTransaction(
+        transaction,
+        session.sessionId,
+        existingMembership.id,
+      );
       return {
-        participant: { displayName: existingMembership.displayName },
+        participant: { displayName: currentMembership.displayName },
         credential: rawCredential,
         credentialExpiresAt: credentialExpiresAt as Date,
       };
@@ -926,7 +947,7 @@ export async function joinPublicSession(
       credential: rawCredential,
       credentialExpiresAt: credentialExpiresAt as Date,
     };
-  });
+  }));
 }
 
 async function getQueueForLookup(lookup: SessionLookup) {
@@ -1006,14 +1027,16 @@ export async function createPublicSessionRequest(
     );
   }
 
-  return getDb().transaction(async (transaction) => {
+  return traceDbTransaction("public_session.requests", "queue.request.create", (onStarted) => getDb().transaction(async (transaction) => {
+    onStarted();
+    await setLocalDatabaseTimeouts(transaction);
     const session = await requireSongRequestSessionInTransaction(transaction, {
       kind: "token",
       value: publicToken,
     });
     const now = new Date();
 
-    const [membership] = await transaction
+    const [membership] = await traceDbOperation("public_session.requests", "participant.lookup", () => transaction
       .select({
         id: eventParticipants.id,
         displayName: eventParticipants.displayName,
@@ -1032,7 +1055,7 @@ export async function createPublicSessionRequest(
           eq(eventParticipants.eventSessionId, session.sessionId),
         ),
       )
-      .limit(1);
+      .limit(1));
 
     if (!membership) {
       throw new PublicApiError(
@@ -1041,11 +1064,6 @@ export async function createPublicSessionRequest(
         "Join this event before requesting a song.",
       );
     }
-
-    await transaction
-      .update(participantCredentials)
-      .set({ lastUsedAt: now })
-      .where(eq(participantCredentials.id, membership.credentialId));
 
     const [song] = await transaction
       .select({ id: songs.id })
@@ -1061,6 +1079,18 @@ export async function createPublicSessionRequest(
       );
     }
 
+    await requireCurrentSessionLifecycleInTransaction(transaction, session, "queue");
+    await transaction
+      .update(participantCredentials)
+      .set({ lastUsedAt: now })
+      .where(eq(participantCredentials.id, membership.credentialId));
+
+    const currentMembership = await requireCurrentParticipantMembershipInTransaction(
+      transaction,
+      session.sessionId,
+      membership.id,
+    );
+
     const [duplicateRequest] = await transaction
       .select({ id: songRequests.id })
       .from(songRequests)
@@ -1068,7 +1098,7 @@ export async function createPublicSessionRequest(
         and(
           eq(songRequests.eventId, session.event.id),
           eq(songRequests.songId, song.id),
-          eq(songRequests.eventParticipantId, membership.id),
+          eq(songRequests.eventParticipantId, currentMembership.id),
           inArray(songRequests.status, ACTIVE_PUBLIC_REQUEST_STATUSES),
         ),
       )
@@ -1082,30 +1112,30 @@ export async function createPublicSessionRequest(
       );
     }
 
-    const [queueState] = await transaction
+    const [queueState] = await traceDbOperation("public_session.requests", "queue.position.read", () => transaction
       .select({ maxPosition: max(songRequests.position) })
       .from(songRequests)
-      .where(eq(songRequests.eventId, session.event.id));
+      .where(eq(songRequests.eventId, session.event.id)));
 
-    const [createdRequest] = await transaction
+    const [createdRequest] = await traceDbOperation("public_session.requests", "queue.request.insert", () => transaction
       .insert(songRequests)
       .values({
         eventId: session.event.id,
         songId: song.id,
-        singerName: membership.displayName,
-        displayName: membership.displayName,
+        singerName: currentMembership.displayName,
+        displayName: currentMembership.displayName,
         note: null,
         status: "pending",
         position: (queueState?.maxPosition ?? 0) + 1,
         requestedBy: "public",
-        eventParticipantId: membership.id,
+        eventParticipantId: currentMembership.id,
         updatedAt: now,
       })
-      .returning({ id: songRequests.publicId, status: songRequests.status });
+      .returning({ id: songRequests.publicId, status: songRequests.status }));
 
     if (!createdRequest) throw new Error("Session request could not be created.");
     return createdRequest;
-  });
+  }));
 }
 
 async function requireParticipantMembership(
@@ -1164,6 +1194,29 @@ async function requireParticipantMembershipInTransaction(
     .update(participantCredentials)
     .set({ lastUsedAt: now })
     .where(eq(participantCredentials.id, membership.credentialId));
+  return membership;
+}
+
+async function requireCurrentParticipantMembershipInTransaction(
+  transaction: DatabaseTransaction,
+  sessionId: number,
+  membershipId: number,
+) {
+  const [membership] = await transaction
+    .select({
+      id: eventParticipants.id,
+      displayName: eventParticipants.displayName,
+    })
+    .from(eventParticipants)
+    .where(
+      and(
+        eq(eventParticipants.id, membershipId),
+        eq(eventParticipants.eventSessionId, sessionId),
+      ),
+    )
+    .for("share")
+    .limit(1);
+  if (!membership) throw participantRequiredError();
   return membership;
 }
 
@@ -1286,7 +1339,7 @@ async function findSessionEvent(lookup: SessionLookup, now = new Date()) {
     .from(eventSessions)
     .innerJoin(events, eq(events.id, eventSessions.eventId));
 
-  const [row] =
+  const [row] = await traceDbOperation("public_session.read", "public_session.lookup", async () =>
     lookup.kind === "token"
       ? await query.where(eq(eventSessions.publicToken, lookup.value)).limit(1)
       : await query
@@ -1305,7 +1358,7 @@ async function findSessionEvent(lookup: SessionLookup, now = new Date()) {
               ),
             ),
           )
-          .limit(1);
+          .limit(1));
 
   return row ?? null;
 }
@@ -1325,11 +1378,10 @@ async function findSessionEventInTransaction(
     .from(eventSessions)
     .innerJoin(events, eq(events.id, eventSessions.eventId));
 
-  const [row] =
+  const [row] = await traceDbOperation("public_session.mutation", "public_session.lookup", async () =>
     lookup.kind === "token"
       ? await query
           .where(eq(eventSessions.publicToken, lookup.value))
-          .for("update")
           .limit(1)
       : await query
           .innerJoin(
@@ -1347,10 +1399,42 @@ async function findSessionEventInTransaction(
               ),
             ),
           )
-          .for("update")
-          .limit(1);
+          .limit(1));
 
   return row ?? null;
+}
+
+// Queue mutation serialization starts with the event lifecycle guard and then
+// the session queue mutex. Any credential, participant, or request locks used
+// by create are acquired after that mutex. Participation-only mutations do not
+// use the queue mutex and keep their targeted lock order.
+async function requireCurrentSessionLifecycleInTransaction(
+  transaction: DatabaseTransaction,
+  session: SessionEventRow,
+  mode: "participation" | "queue" = "participation",
+) {
+  const [event] = await traceDbOperation("public_session.mutation", "public_session.lifecycle.guard", () => transaction
+        .select(sessionEventSelection)
+        .from(events)
+        .where(eq(events.id, session.event.id))
+        .for("share")
+        .limit(1));
+  const current = requireLiveSessionRow(event ? { ...session, event } : null);
+  const allowed = mode === "queue"
+    ? requireSongRequestsEnabled(current)
+    : requireParticipantSessionRow(current);
+  if (mode === "queue") {
+    const [queueMutex] = await traceForUpdateSelect("public_session.requests", "public_session.queue_mutex.lock", "event_session", () => transaction
+      .select({ id: eventSessions.id })
+      .from(eventSessions)
+      .where(and(eq(eventSessions.id, session.sessionId), eq(eventSessions.eventId, session.event.id)))
+      .for("no key update")
+      .limit(1));
+    if (!queueMutex) {
+      throw new PublicApiError(404, "SESSION_LINK_INVALID", "The session link is invalid or expired.");
+    }
+  }
+  return allowed;
 }
 
 function isValidLookup(lookup: SessionLookup) {

@@ -334,18 +334,27 @@ test("event queue reads and writes are scoped to the resolved event", () => {
   assert.doesNotMatch(serviceSource, /eq\(events\.id, identifier\.value\)/);
 });
 
-test("event queue mutations recheck the effective lifecycle while holding the event lock", () => {
+test("event queue mutations guard lifecycle and take the targeted session mutex", () => {
   const serviceSource = readFileSync(
     new URL("../src/server/operator-api/event-queue.ts", import.meta.url),
     "utf8",
   );
 
-  assert.match(serviceSource, /for\("update"\)/);
+  const contextSource = serviceSource.slice(
+    serviceSource.indexOf("async function requireEventQueueManagerContext"),
+    serviceSource.indexOf("async function findEventQueueManagerOrganization"),
+  );
+  assert.match(contextSource, /\.from\(events\)[\s\S]*\.for\("share"\)/);
+  assert.match(contextSource, /\.from\(eventSessions\)[\s\S]*\.for\("no key update"\)/);
+  assert.equal(
+    serviceSource.match(/await setLocalDatabaseTimeouts\(transaction\)/g)?.length,
+    2,
+  );
   assert.match(
     serviceSource,
     /getEffectiveEventLifecycleStatus\(event\) !== "active"/,
   );
-  assert.match(serviceSource, /"EVENT_QUEUE_CLOSED"/);
+  assert.match(contextSource, /"EVENT_QUEUE_CLOSED"/);
 });
 
 test("event queue isolation returns safe 404 before mutating a request from another event", () => {
@@ -407,7 +416,7 @@ test("event queue mutations require active workspace membership", () => {
   assert.match(contextSource, /canManageDashboardEventQueue\(organization\.role\)/);
   assert.match(contextSource, /const recheckedOrganization = await findEventQueueManagerOrganization/);
   assert.ok(
-    contextSource.indexOf('for("update")') <
+    contextSource.indexOf('for("no key update")') <
       contextSource.indexOf("const recheckedOrganization"),
   );
 });
@@ -503,6 +512,20 @@ test("public queue broadcast migration does not expose song requests to browsers
     publicPayloadSource,
     /eventId|song|artist|title|requester|singer|code|token|hash/i,
   );
+});
+
+test("event lifecycle invalidation marks capability changes on both queue topics", () => {
+  const source = readFileSync(
+    new URL("../src/server/event-session-identity-store.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(
+    source.match(/'reason', 'capabilities_changed'/g)?.length,
+    2,
+  );
+  assert.match(source, /dashboard:event:\$\{eventId\}:queue/);
+  assert.match(source, /public:session:\$\{token\}:queue/);
 });
 
 test("session queue keeps privacy paths and global public queue is removed", () => {

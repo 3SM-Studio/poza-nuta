@@ -25,6 +25,7 @@ import {
 } from "../../lib/public-event-discovery";
 import { toPublicEventContract } from "../../lib/public-event-contract";
 import { traceServerStep } from "../runtime-diagnostics";
+import { traceDbOperation } from "../db-telemetry";
 import { PublicApiError } from "./errors";
 
 export const PUBLIC_SONG_SEARCH_LIMIT = 20;
@@ -82,12 +83,12 @@ export async function listPublicEvents(
     filters.push(lt(events.startsAt, dateRange.end));
   }
 
-  const publicEvents = await runPublicApiStep(routeName, "publicEvents", () =>
+  const publicEvents = await runPublicApiStep(routeName, "publicEvents", () => traceDbOperation(routeName ?? "public_events", "public_events.list", () =>
     getDb()
       .select(publicEventSelection)
       .from(events)
       .where(and(...filters))
-      .orderBy(...getPublicEventOrderBy(normalizedQuery.sort, now)),
+      .orderBy(...getPublicEventOrderBy(normalizedQuery.sort, now))),
   );
 
   return publicEvents

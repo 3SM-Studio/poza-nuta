@@ -119,6 +119,7 @@ export async function publishEventSessionInvalidation(
       jsonb_build_object(
         'eventId', ${eventId}::integer,
         'type', 'queue_changed',
+        'reason', 'capabilities_changed',
         'operation', 'UPDATE',
         'changedAt', statement_timestamp()
       ),
@@ -133,6 +134,7 @@ export async function publishEventSessionInvalidation(
       select realtime.send(
         jsonb_build_object(
           'type', 'queue_changed',
+          'reason', 'capabilities_changed',
           'changedAt', statement_timestamp()
         ),
         'queue_changed',

@@ -11,6 +11,7 @@ import {
   type DashboardEventQueueMoveInput,
 } from "../../lib/dashboard-event-queue";
 import {
+  eventSessions,
   events,
   operatorAuditLog,
   operatorUsers,
@@ -23,6 +24,8 @@ import { isOrganizationPublicId } from "../../lib/organization-public-id";
 import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier";
 import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-lifecycle";
 import { getDb } from "../db";
+import { startForUpdateSelect, traceDbOperation, traceDbTransaction, traceForUpdateSelect } from "../db-telemetry";
+import { setLocalDatabaseTimeouts } from "../database-transaction-timeouts";
 import {
   ACTIVE_PUBLIC_REQUEST_STATUSES,
   isActivePublicRequestStatus,
@@ -116,13 +119,16 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
   requestId: number;
   action: DashboardEventQueueAction;
 }) {
-  return getDb().transaction(async (transaction) => {
+  return traceDbTransaction("operator.queue.action", "operator.queue.action", (onStarted) => getDb().transaction(async (transaction) => {
+    onStarted();
+    await setLocalDatabaseTimeouts(transaction);
     const context = await requireEventQueueManagerContext(
       transaction,
       input.authUserId,
       input.organizationId,
       input.eventId,
     );
+    const queueRequestLock = startForUpdateSelect("operator.queue.action", "operator.queue_request.lock", "song_request");
     const [queueRequest] = await transaction
       .select({
         id: songRequests.id,
@@ -141,7 +147,8 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
         ),
       )
       .for("update")
-      .limit(1);
+      .limit(1)
+      .then(queueRequestLock.complete, queueRequestLock.fail);
 
     if (!queueRequest) {
       throw new OperatorApiError(
@@ -252,11 +259,11 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       queueRequest.status === "approved" ||
       targetStatus === "approved"
     ) {
-      await renumberApprovedQueue(
+      await traceDbOperation("operator.queue.action", "operator.queue.renumber", () => renumberApprovedQueue(
         transaction,
         context.event.id,
         changedAt,
-      );
+      ));
     }
 
     const updatedRequest = await requireDashboardEventQueueItem(
@@ -288,7 +295,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       event: context.event,
       request: updatedRequest,
     };
-  });
+  }));
 }
 
 export async function moveDashboardOrganizationEventQueueRequestForAuthUser(input: {
@@ -298,14 +305,16 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
   requestId: number;
   move: DashboardEventQueueMoveInput;
 }) {
-  return getDb().transaction(async (transaction) => {
+  return traceDbTransaction("operator.queue.move", "operator.queue.move", (onStarted) => getDb().transaction(async (transaction) => {
+    onStarted();
+    await setLocalDatabaseTimeouts(transaction);
     const context = await requireEventQueueManagerContext(
       transaction,
       input.authUserId,
       input.organizationId,
       input.eventId,
     );
-    const lockedApprovedRequests = await transaction
+    const lockedApprovedRequests = await traceForUpdateSelect("operator.queue.move", "operator.queue_request.lock", "approved_song_requests", () => transaction
       .select({
         id: songRequests.id,
         status: songRequests.status,
@@ -321,7 +330,7 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
         ),
       )
       .orderBy(asc(songRequests.id))
-      .for("update");
+      .for("update"));
     const orderedRequests = [...lockedApprovedRequests].sort(
       compareApprovedQueueRows,
     );
@@ -443,7 +452,7 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
       event: context.event,
       request: updatedRequest,
     };
-  });
+  }));
 }
 
 async function completeCurrentEventQueueRequests(
@@ -451,7 +460,7 @@ async function completeCurrentEventQueueRequests(
   eventId: number,
   changedAt: Date,
 ) {
-  const currentRequests = await transaction
+  const currentRequests = await traceForUpdateSelect("operator.queue.action", "operator.queue_request.lock", "current_song_requests", () => transaction
     .select({
       id: songRequests.id,
       version: songRequests.version,
@@ -464,7 +473,7 @@ async function completeCurrentEventQueueRequests(
       ),
     )
     .orderBy(asc(songRequests.id))
-    .for("update");
+    .for("update"));
 
   for (const request of currentRequests) {
     await transaction
@@ -546,7 +555,16 @@ async function requireEventQueueManagerContext(
     throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
   }
 
-  const [event] = await transaction
+  // Legacy/directly inserted events can lack a session row. Choose the mutex
+  // before locking events: upgrading SHARE to UPDATE would allow a deadlock.
+  const [queueIdentity] = await transaction
+    .select({ id: eventSessions.id })
+    .from(eventSessions)
+    .innerJoin(events, eq(events.id, eventSessions.eventId))
+    .where(and(eq(events.publicId, eventIdentifier.value), eq(events.workspaceId, organization.id)))
+    .limit(1);
+
+  const eventQuery = transaction
     .select({
       id: events.id,
       name: events.name,
@@ -562,9 +580,14 @@ async function requireEventQueueManagerContext(
         eq(events.publicId, eventIdentifier.value),
         eq(events.workspaceId, organization.id),
       ),
-    )
-    .for("update")
-    .limit(1);
+    );
+  const [event] = queueIdentity
+    ? await traceDbOperation("operator.queue.mutation", "operator.event.lifecycle.guard", () => eventQuery
+        .for("share")
+        .limit(1))
+    : await traceForUpdateSelect("operator.queue.mutation", "operator.queue_event_fallback.lock", "event", () => eventQuery
+        .for("update")
+        .limit(1));
 
   if (!event) {
     throw new OperatorApiError(
@@ -572,6 +595,26 @@ async function requireEventQueueManagerContext(
       "EVENT_NOT_FOUND",
       "Event was not found.",
     );
+  }
+
+  if (getEffectiveEventLifecycleStatus(event) !== "active") {
+    throw new OperatorApiError(
+      409,
+      "EVENT_QUEUE_CLOSED",
+      "The event queue is closed.",
+    );
+  }
+
+  if (queueIdentity) {
+    const [queueMutex] = await traceForUpdateSelect("operator.queue.mutation", "operator.queue_mutex.lock", "event_session", () => transaction
+      .select({ id: eventSessions.id })
+      .from(eventSessions)
+      .where(and(eq(eventSessions.id, queueIdentity.id), eq(eventSessions.eventId, event.id)))
+      .for("no key update")
+      .limit(1));
+    if (!queueMutex) {
+      throw new OperatorApiError(404, "EVENT_NOT_FOUND", "Event was not found.");
+    }
   }
 
   const recheckedOrganization = await findEventQueueManagerOrganization(

@@ -5,9 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getDashboardQueueRealtimeTopic,
+  getPublicQueueRealtimeInvalidateReason,
   getPublicQueueRealtimeTopic,
   isDashboardQueueChangedPayload,
-  isPublicQueueChangedPayload,
   queueRealtimeEvent,
   type QueueRealtimeConnectionStatus,
   type QueueRealtimeInvalidateReason,
@@ -54,7 +54,7 @@ export function useQueueRealtime({
     let active = true;
     let hasSubscribed = false;
     let refreshInFlight = false;
-    let refreshQueued = false;
+    let refreshQueued: QueueRealtimeInvalidateReason | null = null;
     let refreshController: AbortController | null = null;
     let channel:
       | ReturnType<ReturnType<typeof createClient>["channel"]>
@@ -66,7 +66,7 @@ export function useQueueRealtime({
       }
 
       if (refreshInFlight) {
-        refreshQueued = true;
+        refreshQueued = mergeInvalidateReasons(refreshQueued, reason);
         return;
       }
 
@@ -82,8 +82,9 @@ export function useQueueRealtime({
           refreshController = null;
 
           if (active && refreshQueued) {
-            refreshQueued = false;
-            invalidate("broadcast");
+            const queuedReason = refreshQueued;
+            refreshQueued = null;
+            invalidate(queuedReason);
           }
         });
     };
@@ -102,16 +103,18 @@ export function useQueueRealtime({
           },
         })
         .on("broadcast", { event: queueRealtimeEvent }, (message) => {
-          const validPayload =
+          const reason =
             audience === "dashboard"
               ? isDashboardQueueChangedPayload(
                   message.payload,
                   realtimeIdentity as number,
                 )
-              : isPublicQueueChangedPayload(message.payload);
+                ? "queue"
+                : null
+              : getPublicQueueRealtimeInvalidateReason(message.payload);
 
-          if (active && validPayload) {
-            invalidate("broadcast");
+          if (active && reason) {
+            invalidate(reason);
           }
         })
         .subscribe((channelStatus) => {
@@ -153,7 +156,7 @@ export function useQueueRealtime({
 
     return () => {
       active = false;
-      refreshQueued = false;
+      refreshQueued = null;
       refreshController?.abort();
 
       if (channel) {
@@ -167,4 +170,28 @@ export function useQueueRealtime({
   }
 
   return connection.identity === identity ? connection.status : "connecting";
+}
+
+function mergeInvalidateReasons(
+  current: QueueRealtimeInvalidateReason | null,
+  incoming: QueueRealtimeInvalidateReason,
+) {
+  if (current === null || getInvalidatePriority(incoming) > getInvalidatePriority(current)) {
+    return incoming;
+  }
+
+  return current;
+}
+
+function getInvalidatePriority(reason: QueueRealtimeInvalidateReason) {
+  switch (reason) {
+    case "reconnect":
+      return 4;
+    case "capabilities":
+      return 3;
+    case "subscribe":
+      return 2;
+    case "queue":
+      return 1;
+  }
 }

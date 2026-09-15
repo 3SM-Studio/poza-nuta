@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -57,6 +57,8 @@ import { usePublicQueueRealtime } from "./use-public-queue-realtime";
 
 type SessionRequestFormErrors = Partial<Record<"songId", string>>;
 
+const mutationRealtimeGraceMs = 250;
+
 export function SessionRequestPage({
   sessionToken,
   event,
@@ -93,6 +95,8 @@ export function SessionRequestPage({
   const [queue, setQueue] = useState<PublicQueueResponse | null>(null);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [isRefreshingQueue, setIsRefreshingQueue] = useState(false);
+  const realtimeInvalidationVersionRef = useRef(0);
+  const realtimeInvalidationWaitersRef = useRef(new Set<() => void>());
   const capabilities = getSessionCapabilityState(event);
   const canSubmitSongRequests = capabilities.canSubmitSongRequests;
   const canViewPublicQueue = capabilities.canViewPublicQueue;
@@ -142,16 +146,70 @@ export function SessionRequestPage({
     },
     [canViewPublicQueue, sessionToken],
   );
+  const noteRealtimeInvalidation = useCallback(() => {
+    realtimeInvalidationVersionRef.current += 1;
+    const waiters = [...realtimeInvalidationWaitersRef.current];
+    realtimeInvalidationWaitersRef.current.clear();
+    waiters.forEach((resolve) => resolve());
+  }, []);
+  const waitForRealtimeOrRefresh = useCallback(
+    async (versionBeforeMutation: number) => {
+      if (realtimeInvalidationVersionRef.current !== versionBeforeMutation) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const controller = new AbortController();
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          controller.abort();
+          window.clearTimeout(timer);
+          realtimeInvalidationWaitersRef.current.delete(finish);
+          resolve();
+        };
+        const timer = window.setTimeout(() => {
+          void Promise.all([
+            loadParticipantRequests(controller.signal),
+            canViewPublicQueue
+              ? loadQueue(controller.signal)
+              : Promise.resolve(),
+          ]).finally(finish);
+        }, mutationRealtimeGraceMs);
+
+        realtimeInvalidationWaitersRef.current.add(finish);
+        if (realtimeInvalidationVersionRef.current !== versionBeforeMutation) {
+          finish();
+        }
+      });
+    },
+    [canViewPublicQueue, loadParticipantRequests, loadQueue],
+  );
   const liveStatus = usePublicQueueRealtime(
     canViewPublicQueue || participantDisplayName ? sessionToken : null,
-    async (_reason, signal) => {
-      const refreshed = await getSessionEvent(sessionToken);
-      const capabilitiesChanged =
-        refreshed.event.publicQueueEnabled !== event.publicQueueEnabled ||
-        refreshed.event.songRequestsEnabled !== event.songRequestsEnabled ||
-        refreshed.event.publicShowSongTitles !== event.publicShowSongTitles;
+    async (reason, signal) => {
+      noteRealtimeInvalidation();
 
-      if (refreshed.accessStatus !== "active" || capabilitiesChanged) {
+      if (reason === "queue") {
+        await Promise.all([
+          loadParticipantRequests(signal),
+          canViewPublicQueue ? loadQueue(signal) : Promise.resolve(),
+        ]);
+        return;
+      }
+
+      if (reason === "capabilities") {
+        router.refresh();
+        return;
+      }
+
+      const refreshed = await getSessionEvent(sessionToken, signal);
+
+      if (
+        refreshed.accessStatus !== "active" ||
+        hasSessionEventChanged(event, refreshed.event)
+      ) {
         router.refresh();
         return;
       }
@@ -191,6 +249,15 @@ export function SessionRequestPage({
     return () => controller.abort();
   }, [loadParticipantRequests, participantDisplayName]);
 
+  useEffect(
+    () => () => {
+      const waiters = [...realtimeInvalidationWaitersRef.current];
+      realtimeInvalidationWaitersRef.current.clear();
+      waiters.forEach((resolve) => resolve());
+    },
+    [],
+  );
+
   async function handleRename(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nickname = normalizeParticipantNickname(renameValue);
@@ -228,9 +295,10 @@ export function SessionRequestPage({
     if (cancellingRequestId !== null) return;
     setCancellingRequestId(requestId);
     let succeeded = false;
+    const invalidationVersion = realtimeInvalidationVersionRef.current;
     try {
       await cancelParticipantRequest(sessionToken, requestId);
-      await loadParticipantRequests();
+      await waitForRealtimeOrRefresh(invalidationVersion);
       succeeded = true;
       toast.success("Zgłoszenie zostało anulowane");
     } catch (caughtError) {
@@ -308,6 +376,7 @@ export function SessionRequestPage({
     setIsSubmitting(true);
 
     try {
+      const invalidationVersion = realtimeInvalidationVersionRef.current;
       await createSessionRequest(sessionToken, validation.data);
       setSelectedSong(null);
       setSearchTerm("");
@@ -315,10 +384,7 @@ export function SessionRequestPage({
       toast.success("Dodano zgłoszenie", {
         description: "Operator musi je zatwierdzić.",
       });
-      await Promise.all([
-        loadParticipantRequests(),
-        canViewPublicQueue ? loadQueue() : Promise.resolve(),
-      ]);
+      await waitForRealtimeOrRefresh(invalidationVersion);
     } catch (caughtError) {
       if (
         caughtError instanceof SessionClientError &&
@@ -802,4 +868,19 @@ function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
 
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+function hasSessionEventChanged(current: SessionEvent, next: SessionEvent) {
+  return (
+    current.name !== next.name ||
+    current.venue !== next.venue ||
+    current.startsAt !== next.startsAt ||
+    current.status !== next.status ||
+    current.publicQueueEnabled !== next.publicQueueEnabled ||
+    current.songRequestsEnabled !== next.songRequestsEnabled ||
+    current.publicShowSongTitles !== next.publicShowSongTitles ||
+    current.autoCloseAt !== next.autoCloseAt ||
+    current.endsAt !== next.endsAt ||
+    current.closedAt !== next.closedAt
+  );
 }

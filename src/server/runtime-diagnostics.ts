@@ -1,3 +1,5 @@
+import { getDbTelemetryCorrelation, runWithDbTelemetry } from "./db-telemetry.ts";
+
 export const SERVER_STEP_TIMEOUT_MS = 8_000;
 
 const CONNECTION_URL_PATTERN = /\bpostgres(?:ql)?:\/\/[^\s'"]+/gi;
@@ -7,6 +9,7 @@ const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const AUTH_HEADER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi;
 
 const INFRASTRUCTURE_TIMEOUT_CODES = new Set([
+  "55P03",
   "57014",
   "CONNECT_TIMEOUT",
   "CONNECTION_TIMEOUT",
@@ -79,18 +82,20 @@ export async function traceServerStepWithoutTimeout<T>(
   stepName: string,
   action: () => Promise<T>,
 ) {
-  const start = Date.now();
+  return runWithDbTelemetry(routeName, async () => {
+    const start = Date.now();
 
-  try {
-    const result = await Promise.resolve().then(action);
+    try {
+      const result = await Promise.resolve().then(action);
 
-    logServerStep(routeName, stepName, start, "success");
+      logServerStep(routeName, stepName, start, "success");
 
-    return result;
-  } catch (error) {
-    logServerStep(routeName, stepName, start, "failure", error);
-    throw error;
-  }
+      return result;
+    } catch (error) {
+      logServerStep(routeName, stepName, start, "failure", error);
+      throw error;
+    }
+  });
 }
 
 export async function withRuntimeDiagnostics<T>(
@@ -99,23 +104,25 @@ export async function withRuntimeDiagnostics<T>(
   action: () => Promise<T>,
   timeoutMs = SERVER_STEP_TIMEOUT_MS,
 ) {
-  const start = Date.now();
+  return runWithDbTelemetry(routeName, async () => {
+    const start = Date.now();
 
-  try {
-    const result = await withTimeout(
-      Promise.resolve().then(action),
-      routeName,
-      stepName,
-      timeoutMs,
-    );
+    try {
+      const result = await withTimeout(
+        Promise.resolve().then(action),
+        routeName,
+        stepName,
+        timeoutMs,
+      );
 
-    logServerStep(routeName, stepName, start, "success");
+      logServerStep(routeName, stepName, start, "success");
 
-    return result;
-  } catch (error) {
-    logServerStep(routeName, stepName, start, "failure", error);
-    throw error;
-  }
+      return result;
+    } catch (error) {
+      logServerStep(routeName, stepName, start, "failure", error);
+      throw error;
+    }
+  });
 }
 
 export function traceServerStepSync<T>(
@@ -147,10 +154,16 @@ export function isInfrastructureTimeout(error: unknown) {
     return true;
   }
 
-  const message = getSafeErrorMessage(error).toLowerCase();
+  // HEAD used the top-level safe message for runtime/HTTP decisions.
+  // Cause-chain messages remain available to classifyDatabaseError telemetry.
+  const message = hasDatabaseConnectionCapacityError(error)
+    ? "Database connection capacity exhausted."
+    : error instanceof Error
+      ? sanitizeLogValue(error.message)
+      : "Unknown error";
 
   return INFRASTRUCTURE_TIMEOUT_MESSAGE_PATTERNS.some((pattern) =>
-    message.includes(pattern),
+    message.toLowerCase().includes(pattern),
   );
 }
 
@@ -187,7 +200,10 @@ export function getSafeErrorCode(error: unknown) {
     return "EMAXCONNSESSION";
   }
 
-  return getErrorCode(error) ?? getErrorName(error);
+  const code = getErrorCode(error) ?? getErrorName(error);
+  return /^[A-Za-z][A-Za-z0-9_]{1,31}$|^[0-9A-Z]{5}$/.test(code)
+    ? code
+    : "UnknownError";
 }
 
 export function getSafeErrorMessage(error: unknown) {
@@ -195,11 +211,29 @@ export function getSafeErrorMessage(error: unknown) {
     return "Database connection capacity exhausted.";
   }
 
-  if (error instanceof Error) {
-    return sanitizeLogValue(error.message);
-  }
+  // Arbitrary driver errors may contain SQL, bound values, or personal data.
+  return "Operation failed.";
+}
 
-  return "Unknown error";
+export type DatabaseErrorClass =
+  | "DB_LOCK_TIMEOUT"
+  | "DB_STATEMENT_TIMEOUT"
+  | "DB_CONNECT_TIMEOUT"
+  | "DB_CONNECTION_CAPACITY"
+  | "DB_CONNECTION_CLOSED"
+  | "APP_DEADLINE_EXCEEDED"
+  | "UNKNOWN_DB_ERROR";
+
+export function classifyDatabaseError(error: unknown): DatabaseErrorClass {
+  if (error instanceof ServerStepTimeoutError) return "APP_DEADLINE_EXCEEDED";
+  if (hasDatabaseConnectionCapacityError(error)) return "DB_CONNECTION_CAPACITY";
+  const code = getErrorCode(error);
+  const messages = getErrorMessages(error).map((message) => message.toLowerCase());
+  if (["55P03", "57014"].includes(code ?? "") && messages.some((message) => message.includes("lock timeout"))) return "DB_LOCK_TIMEOUT";
+  if (code === "57014" && messages.some((message) => message.includes("statement timeout"))) return "DB_STATEMENT_TIMEOUT";
+  if (["CONNECT_TIMEOUT", "CONNECTION_TIMEOUT", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].includes(code ?? "") || messages.some((message) => message.includes("connect timeout") || message.includes("connection timed out"))) return "DB_CONNECT_TIMEOUT";
+  if (["ECONNRESET", "57P01", "57P02"].includes(code ?? "") || messages.some((message) => message.includes("connection closed") || message.includes("connection terminated"))) return "DB_CONNECTION_CLOSED";
+  return "UNKNOWN_DB_ERROR";
 }
 
 function withTimeout<T>(
@@ -242,13 +276,18 @@ function logServerStep(
   error?: unknown,
 ) {
   const durationMs = Date.now() - start;
+  const correlation = getDbTelemetryCorrelation(routeName);
   const fields = [
     "server_step",
+    `request_id=${formatLogField(correlation.request_id)}`,
+    `runtime_id=${formatLogField(correlation.runtime_id)}`,
     `route=${formatLogField(routeName)}`,
     `step=${formatLogField(stepName)}`,
     `duration_ms=${durationMs}`,
     `status=${status}`,
   ];
+  if (correlation.commit) fields.push(`commit=${formatLogField(correlation.commit)}`);
+  if (correlation.region) fields.push(`region=${formatLogField(correlation.region)}`);
 
   if (status === "success") {
     console.info(fields.join(" "));
@@ -259,6 +298,7 @@ function logServerStep(
     [
       ...fields,
       `error_code=${formatLogField(getSafeErrorCode(error))}`,
+      `error_class=${formatLogField(classifyDatabaseError(error))}`,
       `error_message=${formatLogField(getSafeErrorMessage(error))}`,
     ].join(" "),
   );

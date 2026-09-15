@@ -6,9 +6,14 @@ export type QueueRealtimeConnectionStatus =
   | "unavailable";
 
 export type QueueRealtimeInvalidateReason =
-  | "broadcast"
+  | "queue"
+  | "capabilities"
   | "subscribe"
   | "reconnect";
+
+export type PublicQueueRealtimeBroadcastReason =
+  | "queue_changed"
+  | "capabilities_changed";
 
 export type DashboardQueueRealtimeOperation =
   | "INSERT"
@@ -25,6 +30,7 @@ export type DashboardQueueChangedPayload = {
 export type PublicQueueChangedPayload = {
   type: typeof queueRealtimeEvent;
   changedAt: string;
+  reason?: PublicQueueRealtimeBroadcastReason;
 };
 
 export function getDashboardQueueRealtimeTopic(eventId: number) {
@@ -62,8 +68,21 @@ export function isPublicQueueChangedPayload(
   return (
     isRecord(payload) &&
     payload.type === queueRealtimeEvent &&
-    typeof payload.changedAt === "string"
+    typeof payload.changedAt === "string" &&
+    (payload.reason === undefined ||
+      payload.reason === "queue_changed" ||
+      payload.reason === "capabilities_changed")
   );
+}
+
+export function getPublicQueueRealtimeInvalidateReason(
+  payload: unknown,
+): Extract<QueueRealtimeInvalidateReason, "queue" | "capabilities"> | null {
+  if (!isPublicQueueChangedPayload(payload)) {
+    return null;
+  }
+
+  return payload.reason === "capabilities_changed" ? "capabilities" : "queue";
 }
 
 function assertEventId(eventId: number) {

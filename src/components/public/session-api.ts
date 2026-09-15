@@ -56,12 +56,16 @@ export class SessionClientError extends Error {
   }
 }
 
-export async function getSessionEvent(publicToken: string) {
+export async function getSessionEvent(
+  publicToken: string,
+  signal?: AbortSignal,
+) {
   return requestJson<{
     accessStatus: "scheduled" | "active" | "closed";
     event: SessionEvent;
   }>(
     `/api/s/${encodeURIComponent(publicToken)}/event`,
+    { signal },
   );
 }
 

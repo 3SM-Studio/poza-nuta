@@ -41,6 +41,7 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
       await eventDataFingerprint(sql, legacyFixture.workspaceId),
       legacyBefore,
     );
+    await applyPostgresMigration(sql, 24);
     const fixture = await seedFixture(sql);
     process.env.DATABASE_URL = makeDatabaseUrl(harness);
 

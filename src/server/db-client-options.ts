@@ -1,7 +1,9 @@
 export const DATABASE_CONNECT_TIMEOUT_SECONDS = 5;
 export const DATABASE_IDLE_TIMEOUT_SECONDS = 20;
 export const DATABASE_MAX_CONNECTIONS = 2;
-export const DATABASE_STATEMENT_TIMEOUT_MS = 9_000;
+export const DATABASE_LOCK_TIMEOUT_MS = 2_000;
+export const DATABASE_STATEMENT_TIMEOUT_MS = 6_000;
+export const DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS = 7_000;
 
 export const databaseClientOptions = {
   connect_timeout: DATABASE_CONNECT_TIMEOUT_SECONDS,
@@ -9,7 +11,7 @@ export const databaseClientOptions = {
   max: DATABASE_MAX_CONNECTIONS,
   prepare: false,
   connection: {
-    idle_in_transaction_session_timeout: DATABASE_STATEMENT_TIMEOUT_MS,
+    idle_in_transaction_session_timeout: DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS,
     statement_timeout: DATABASE_STATEMENT_TIMEOUT_MS,
   },
 } as const;

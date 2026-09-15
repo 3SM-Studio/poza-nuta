@@ -200,11 +200,15 @@ test("song browse validation keeps catalog pagination bounded and filter-bound",
   );
 });
 
-test("session resolver uses one token/code identity service and locks writes", () => {
+test("session resolver keeps token/code lookup read-only and targets mutation locks", () => {
   const source = readFileSync("src/server/session-api/service.ts", "utf8");
   const transactionLookup = source.slice(
     source.indexOf("async function findSessionEventInTransaction"),
-    source.indexOf("function toPublicSessionEvent"),
+    source.indexOf("async function requireCurrentSessionLifecycleInTransaction"),
+  );
+  const targetedLocks = source.slice(
+    source.indexOf("async function requireCurrentSessionLifecycleInTransaction"),
+    source.indexOf("function isValidLookup"),
   );
 
   assert.match(source, /eq\(eventSessions\.publicToken, lookup\.value\)/);
@@ -213,7 +217,13 @@ test("session resolver uses one token/code identity service and locks writes", (
   assert.doesNotMatch(source, /hashEventAccessCode/);
   assert.doesNotMatch(source, /from\(eventAccessLinks\)/);
   assert.match(transactionLookup, /\.from\(eventSessions\)/);
-  assert.match(transactionLookup, /\.for\("update"\)/);
+  assert.doesNotMatch(transactionLookup, /\.for\(/);
+  assert.match(targetedLocks, /\.from\(events\)[\s\S]*\.for\("share"\)/);
+  assert.match(targetedLocks, /\.from\(eventSessions\)[\s\S]*\.for\("no key update"\)/);
+  assert.equal(
+    source.match(/await setLocalDatabaseTimeouts\(transaction\)/g)?.length,
+    4,
+  );
   assert.match(source, /SESSION_EVENT_CLOSED/);
   assert.match(source, /SESSION_EVENT_NOT_STARTED/);
 });
@@ -242,7 +252,7 @@ test("public session DTOs exclude internal relational identifiers", () => {
   assert.match(requestWriter, /status:\s*songRequests\.status/);
 });
 
-test("participant request duplicate protection is serialized by the event lock", () => {
+test("participant request duplicate protection is serialized by the session queue mutex", () => {
   const source = readFileSync("src/server/session-api/service.ts", "utf8");
   const createRequest = source.slice(
     source.indexOf("export async function createPublicSessionRequest"),
@@ -256,7 +266,7 @@ test("participant request duplicate protection is serialized by the event lock",
   assert.match(createRequest, /eq\(songRequests\.songId, song\.id\)/);
   assert.match(
     createRequest,
-    /eq\(songRequests\.eventParticipantId, membership\.id\)/,
+    /eq\(songRequests\.eventParticipantId, currentMembership\.id\)/,
   );
   assert.match(
     createRequest,
@@ -264,9 +274,23 @@ test("participant request duplicate protection is serialized by the event lock",
   );
   assert.match(createRequest, /SESSION_REQUEST_DUPLICATE/);
   assert.ok(
+    createRequest.indexOf('requireCurrentSessionLifecycleInTransaction(transaction, session, "queue")') <
+      createRequest.indexOf("const currentMembership"),
+  );
+  assert.ok(
+    createRequest.indexOf("const currentMembership") <
+      createRequest.indexOf("const [duplicateRequest]"),
+  );
+  assert.ok(
     createRequest.indexOf("SESSION_REQUEST_DUPLICATE") <
       createRequest.indexOf(".insert(songRequests)"),
   );
+  assert.match(
+    source,
+    /async function requireCurrentParticipantMembershipInTransaction[\s\S]*\.from\(eventParticipants\)[\s\S]*eq\(eventParticipants\.id, membershipId\)[\s\S]*\.for\("share"\)/,
+  );
+  assert.match(createRequest, /singerName: currentMembership\.displayName/);
+  assert.match(createRequest, /displayName: currentMembership\.displayName/);
 });
 
 test("session API remains anonymous, identity-scoped and rate limited", () => {

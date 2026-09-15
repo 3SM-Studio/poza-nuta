@@ -9,6 +9,7 @@ import {
 } from "../src/components/operator/api.ts";
 import {
   getDashboardQueueRealtimeTopic,
+  getPublicQueueRealtimeInvalidateReason,
   getPublicQueueRealtimeTopic,
   isDashboardQueueChangedPayload,
   isPublicQueueChangedPayload,
@@ -174,6 +175,29 @@ test("public queue realtime helpers expose invalidation only", () => {
       changedAt: "2026-07-03T12:00:00.000Z",
     }),
     true,
+  );
+  assert.equal(
+    getPublicQueueRealtimeInvalidateReason({
+      type: "queue_changed",
+      changedAt: "2026-07-03T12:00:00.000Z",
+    }),
+    "queue",
+  );
+  assert.equal(
+    getPublicQueueRealtimeInvalidateReason({
+      type: "queue_changed",
+      reason: "capabilities_changed",
+      changedAt: "2026-07-03T12:00:00.000Z",
+    }),
+    "capabilities",
+  );
+  assert.equal(
+    getPublicQueueRealtimeInvalidateReason({
+      type: "queue_changed",
+      reason: "unknown",
+      changedAt: "2026-07-03T12:00:00.000Z",
+    }),
+    null,
   );
   assert.equal(
     isPublicQueueChangedPayload({

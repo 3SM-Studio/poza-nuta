@@ -11,6 +11,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionRequestPage } from "@/components/public/session-request-page";
+import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 
 const {
   createRequest,
@@ -34,7 +35,7 @@ const {
     realtime: {
       onInvalidate: null as
         | ((
-            reason: "broadcast" | "subscribe" | "reconnect",
+            reason: QueueRealtimeInvalidateReason,
             signal: AbortSignal,
           ) => void | Promise<void>)
         | null,
@@ -74,9 +75,13 @@ vi.mock("@/components/public/use-public-queue-realtime", () => ({
   },
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: refreshRouter }),
-}));
+vi.mock("next/navigation", () => {
+  const router = { refresh: refreshRouter };
+
+  return {
+    useRouter: () => router,
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: { success: toastSuccess, error: toastError },
@@ -175,6 +180,7 @@ describe("session request feedback", () => {
     expect(await screen.findByText("Moje zgłoszenia")).toBeVisible();
     expect(await screen.findByText("Test Song")).toBeVisible();
     expect(screen.queryByText("Twoje ostatnie zgłoszenie")).not.toBeInTheDocument();
+    expect(getParticipantRequests).toHaveBeenCalledTimes(2);
     expect(createRequest).toHaveBeenCalledWith("AbCdEfGhIjKlMnOpQrStUv", {
       songId: 11,
     });
@@ -366,26 +372,149 @@ describe("session request feedback", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(cancelParticipantRequest).toHaveBeenCalledOnce();
     expect(await screen.findByText("Pominięte")).toBeVisible();
+    expect(getParticipantRequests).toHaveBeenCalledTimes(2);
   });
 
-  it("uses the public queue broadcast to refetch owned requests without polling", async () => {
-    getEvent.mockResolvedValue({ accessStatus: "active", event });
+  it("uses a queue-only broadcast to refresh queue data without fetching event state", async () => {
     render(
       <SessionRequestPage
         sessionToken="AbCdEfGhIjKlMnOpQrStUv"
-        event={event}
+        event={{ ...event, publicQueueEnabled: true }}
         participantDisplayName="Ala"
       />,
     );
     await waitFor(() => expect(getParticipantRequests).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
     getParticipantRequests.mockClear();
-
-    await act(async () => {
-      await realtime.onInvalidate?.("broadcast", new AbortController().signal);
+    getQueue.mockClear();
+    getParticipantRequests.mockResolvedValue({
+      items: [
+        {
+          id: "c09f9509-0677-45cc-98b2-b6f3892035de",
+          title: "New request",
+          artist: "Test Artist",
+          status: "pending",
+          queuePosition: null,
+          isNext: false,
+          createdAt: "2026-07-18T18:00:00.000Z",
+        },
+      ],
+    });
+    getQueue.mockResolvedValue({
+      enabled: true,
+      showSongTitles: true,
+      items: [
+        {
+          id: 99,
+          singerName: "Zenek",
+          status: "approved",
+          position: 1,
+          createdAt: "2026-07-18T18:00:00.000Z",
+          title: "Queue song",
+          artist: "Queue artist",
+        },
+      ],
     });
 
-    expect(getParticipantRequests).toHaveBeenCalled();
-    expect(getQueue).not.toHaveBeenCalled();
+    await act(async () => {
+      await realtime.onInvalidate?.("queue", new AbortController().signal);
+    });
+
+    expect(getParticipantRequests).toHaveBeenCalledOnce();
+    expect(getQueue).toHaveBeenCalledOnce();
+    expect(getEvent).not.toHaveBeenCalled();
+    expect(await screen.findByText("New request")).toBeVisible();
+    expect(await screen.findByText("Queue song - Queue artist")).toBeVisible();
+  });
+
+  it("uses one queue refresh for an own create and its following broadcast", async () => {
+    createRequest.mockResolvedValue({ request: { id: "created", status: "pending" } });
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={{ ...event, publicQueueEnabled: true }}
+        participantDisplayName="Ala"
+      />,
+    );
+    await waitFor(() => expect(getParticipantRequests).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
+    getParticipantRequests.mockClear();
+    getQueue.mockClear();
+
+    await completeRequestForm();
+    await waitFor(() => expect(createRequest).toHaveBeenCalledOnce());
+    await act(async () => {
+      await realtime.onInvalidate?.("queue", new AbortController().signal);
+    });
+
+    expect(getParticipantRequests).toHaveBeenCalledOnce();
+    expect(getQueue).toHaveBeenCalledOnce();
+    expect(getEvent).not.toHaveBeenCalled();
+  });
+
+  it("uses one queue refresh for an own cancel and its following broadcast", async () => {
+    const item = {
+      id: "c09f9509-0677-45cc-98b2-b6f3892035de",
+      title: "Test Song",
+      artist: "Test Artist",
+      status: "pending" as const,
+      queuePosition: null,
+      isNext: false,
+      createdAt: "2026-07-18T18:00:00.000Z",
+    };
+    getParticipantRequests.mockResolvedValue({ items: [item] });
+    cancelParticipantRequest.mockResolvedValue({
+      request: { id: item.id, status: "skipped" },
+    });
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={{ ...event, publicQueueEnabled: true }}
+        participantDisplayName="Ala"
+      />,
+    );
+    await waitFor(() => expect(getParticipantRequests).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
+    getParticipantRequests.mockClear();
+    getQueue.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Anuluj" }));
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Anuluj zgłoszenie",
+      }),
+    );
+    await waitFor(() => expect(cancelParticipantRequest).toHaveBeenCalledOnce());
+    await act(async () => {
+      await realtime.onInvalidate?.("queue", new AbortController().signal);
+    });
+
+    expect(getParticipantRequests).toHaveBeenCalledOnce();
+    expect(getQueue).toHaveBeenCalledOnce();
+    expect(getEvent).not.toHaveBeenCalled();
+  });
+
+  it("performs a full authoritative refresh after reconnect", async () => {
+    getEvent.mockResolvedValue({ accessStatus: "active", event: { ...event, publicQueueEnabled: true } });
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={{ ...event, publicQueueEnabled: true }}
+        participantDisplayName="Ala"
+      />,
+    );
+    await waitFor(() => expect(getParticipantRequests).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
+    getParticipantRequests.mockClear();
+    getQueue.mockClear();
+
+    await act(async () => {
+      await realtime.onInvalidate?.("reconnect", new AbortController().signal);
+    });
+
+    expect(getEvent).toHaveBeenCalledOnce();
+    expect(getParticipantRequests).toHaveBeenCalledOnce();
+    expect(getQueue).toHaveBeenCalledOnce();
   });
 
   it("shows rate limiting as a persistent alert", async () => {
@@ -413,11 +542,7 @@ describe("session request feedback", () => {
       expect.objectContaining({ description: expect.any(String) }),
     );
   });
-  it("refreshes the page lifecycle without fetching a closed queue", async () => {
-    getEvent.mockResolvedValue({
-      accessStatus: "closed",
-      event: { ...event, status: "closed" },
-    });
+  it("refreshes the page for a capability invalidation without fetching stale queue data", async () => {
     render(
       <SessionRequestPage
         sessionToken="AbCdEfGhIjKlMnOpQrStUv"
@@ -430,12 +555,13 @@ describe("session request feedback", () => {
 
     await act(async () => {
       await realtime.onInvalidate?.(
-        "broadcast",
+        "capabilities",
         new AbortController().signal,
       );
     });
 
     expect(refreshRouter).toHaveBeenCalledOnce();
+    expect(getEvent).not.toHaveBeenCalled();
     expect(getQueue).not.toHaveBeenCalled();
   });
 });

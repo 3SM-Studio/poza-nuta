@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { runWithDbTelemetry, traceDbOperation, traceDbTransaction, traceForUpdateSelect } from "../src/server/db-telemetry.ts";
+import { publicApiErrorResponse } from "../src/server/public-api/responses.ts";
 
 import {
   databaseClientOptions,
+  DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+  DATABASE_LOCK_TIMEOUT_MS,
   DATABASE_MAX_CONNECTIONS,
   DATABASE_STATEMENT_TIMEOUT_MS,
 } from "../src/server/db-client-options.ts";
 import {
   getSafeErrorCode,
   getSafeErrorMessage,
+  classifyDatabaseError,
   isInfrastructureTimeout,
   isTransientInfrastructureError,
   SERVER_STEP_TIMEOUT_MS,
@@ -24,15 +29,65 @@ test("database client uses serverless-safe Postgres options", () => {
   assert.equal(databaseClientOptions.prepare, false);
   assert.equal(databaseClientOptions.connect_timeout, 5);
   assert.equal(databaseClientOptions.idle_timeout, 20);
-  assert.equal(SERVER_STEP_TIMEOUT_MS < DATABASE_STATEMENT_TIMEOUT_MS, true);
+  assert.equal(DATABASE_LOCK_TIMEOUT_MS < DATABASE_STATEMENT_TIMEOUT_MS, true);
+  assert.equal(DATABASE_STATEMENT_TIMEOUT_MS < DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS, true);
+  assert.equal(DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS < SERVER_STEP_TIMEOUT_MS, true);
   assert.equal(
     databaseClientOptions.connection.statement_timeout,
     DATABASE_STATEMENT_TIMEOUT_MS,
   );
   assert.equal(
     databaseClientOptions.connection.idle_in_transaction_session_timeout,
-    DATABASE_STATEMENT_TIMEOUT_MS,
+    DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS,
   );
+});
+
+test("database error classes require evidence from the driver", () => {
+  assert.equal(classifyDatabaseError(Object.assign(new Error("canceling statement due to lock timeout"), { code: "55P03" })), "DB_LOCK_TIMEOUT");
+  assert.equal(classifyDatabaseError(Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" })), "DB_STATEMENT_TIMEOUT");
+  assert.equal(classifyDatabaseError(Object.assign(new Error("connect timeout"), { code: "CONNECT_TIMEOUT" })), "DB_CONNECT_TIMEOUT");
+  assert.equal(classifyDatabaseError(Object.assign(new Error("connection closed"), { code: "ECONNRESET" })), "DB_CONNECTION_CLOSED");
+  assert.equal(classifyDatabaseError(new ServerStepTimeoutError("route", "step", 1)), "APP_DEADLINE_EXCEEDED");
+  assert.equal(classifyDatabaseError(Object.assign(new Error("query canceled"), { code: "57014" })), "UNKNOWN_DB_ERROR");
+  assert.equal(isInfrastructureTimeout(Object.assign(new Error("lock unavailable"), { code: "55P03" })), true);
+});
+
+test("database telemetry correlates phases without logging personal data or driver messages", async () => {
+  const originalInfo = console.info;
+  const logs: string[] = [];
+  console.info = (message?: unknown) => logs.push(String(message));
+  try {
+    await runWithDbTelemetry("test.route", async () => {
+      await traceDbTransaction("ignored.route", "queue.request.create", async (onStarted) => {
+        onStarted();
+        await traceForUpdateSelect("ignored.route", "public_session.lock", "event", async () => [1]);
+        await traceDbOperation("ignored.route", "queue.request.insert", async () => 1);
+      });
+      await assert.rejects(
+        traceDbOperation("ignored.route", "participant.lookup", async () => {
+          throw Object.assign(new Error("DATABASE_URL=postgres://user:secret@host/db email@example.com nickname and private search phrase"), { code: "XX000" });
+        }),
+      );
+      await assert.rejects(
+        traceDbTransaction("ignored.route", "queue.request.cancel", async (onStarted) => {
+          onStarted();
+          throw new Error("nickname and private search phrase");
+        }),
+      );
+    });
+  } finally {
+    console.info = originalInfo;
+  }
+  const entries = logs.map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert.ok(entries.some((entry) => entry.phase === "transaction_start"));
+  assert.ok(entries.some((entry) => entry.phase === "commit" && typeof entry.transaction_duration_ms === "number"));
+  assert.ok(entries.some((entry) => entry.phase === "rollback" && typeof entry.transaction_duration_ms === "number"));
+  assert.ok(entries.some((entry) => entry.phase === "lock_acquired" && typeof entry.for_update_select_ms === "number"));
+  assert.ok(entries.some((entry) => entry.phase === "failure" && entry.error_class === "UNKNOWN_DB_ERROR"));
+  assert.equal(new Set(entries.map((entry) => entry.request_id)).size, 1);
+  assert.equal(new Set(entries.map((entry) => entry.runtime_id)).size, 1);
+  assert.ok(entries.every((entry) => entry.route === "test.route"));
+  assert.doesNotMatch(logs.join("\n"), /secret|email@example|nickname|private search phrase|postgres:\/\//);
 });
 
 test("runtime diagnostics identify nested Session Pooler exhaustion safely", () => {
@@ -122,6 +177,39 @@ test("runtime diagnostics classify timeout and Postgres statement timeout errors
     false,
   );
   assert.equal(isTransientInfrastructureError(new Error("validation failed")), false);
+});
+
+test("nested message-only timeout remains HTTP 500 while telemetry classifies its cause safely", async () => {
+  const nested = Object.assign(
+    new Error("connect timeout DATABASE_URL=postgres://fake-user:fake-password@fake-host/db Bearer fake-token email@example.test"),
+    { code: "XX000" },
+  );
+  const failure = new Error("Failed query", { cause: nested });
+  assert.equal(isInfrastructureTimeout(failure), false);
+  assert.equal(isTransientInfrastructureError(failure), false);
+  assert.equal(classifyDatabaseError(failure), "DB_CONNECT_TIMEOUT");
+
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  const logs: string[] = [];
+  console.warn = (message?: unknown) => { logs.push(String(message)); };
+  console.error = (message?: unknown) => { logs.push(String(message)); };
+  try {
+    await assert.rejects(
+      withRuntimeDiagnostics("test.route", "nestedDbFailure", async () => { throw failure; }, 100),
+      failure,
+    );
+    const response = publicApiErrorResponse(failure);
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      error: { code: "INTERNAL_ERROR", message: "The request could not be completed." },
+    });
+  } finally {
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
+  assert.ok(logs.some((line) => line.includes('error_class="DB_CONNECT_TIMEOUT"')));
+  assert.doesNotMatch(logs.join("\n"), /fake-password|fake-token|email@example|postgres:\/\//);
 });
 
 test("runtime diagnostics observe late promise rejection after timeout", async () => {

@@ -1,6 +1,7 @@
 import {
   applyDashboardOrganizationEventQueueActionForAuthUser,
 } from "@/server/operator-api/event-queue";
+import { runWithDbTelemetry } from "@/server/db-telemetry";
 import {
   validateDashboardEventQueueActionInput,
 } from "@/server/operator-api/event-queue-validation";
@@ -29,6 +30,7 @@ export async function POST(
     }>;
   },
 ) {
+  return runWithDbTelemetry("operator.queue.action", async () => {
   try {
     const session = await requireOperatorSession();
     const {
@@ -74,4 +76,5 @@ export async function POST(
   } catch (error) {
     return operatorApiErrorResponse(error);
   }
+  });
 }

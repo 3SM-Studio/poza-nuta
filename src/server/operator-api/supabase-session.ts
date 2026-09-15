@@ -6,6 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { operatorAuditLog, operatorUsers } from "../../db/schema";
 import { createClient as createSupabaseServerClient } from "../../lib/supabase/server";
 import { getDb } from "../db";
+import { traceDbOperation } from "../db-telemetry";
 import {
   isTransientInfrastructureError,
   traceServerStep,
@@ -26,7 +27,6 @@ type SupabaseServerClient = Awaited<
   ReturnType<typeof createSupabaseServerClient>
 >;
 
-const SESSION_DB_STEP_TIMEOUT_MS = 4_000;
 const SUPABASE_AUTH_PASSWORD_HASH_PLACEHOLDER = "supabase-auth-managed";
 const SIGNUP_OPERATOR_NAME_PLACEHOLDER = "Nowy uzytkownik";
 
@@ -172,7 +172,6 @@ async function resolveOperatorSession(): Promise<AuthenticatedOperatorSession> {
         routeName,
         "findLinkedOperator",
         () => findLinkedOperator(authUser.id),
-        SESSION_DB_STEP_TIMEOUT_MS,
       )
     : null;
   const decision = resolveOperatorAccess(authUser?.id ?? null, operator);
@@ -274,7 +273,7 @@ export async function logoutOperator() {
 async function findLinkedOperator(
   authUserId: string,
 ): Promise<LinkedOperatorRecord | null> {
-  const [operator] = await getDb()
+  const [operator] = await traceDbOperation("operator.session", "operator.lookup", () => getDb()
     .select({
       id: operatorUsers.id,
       name: operatorUsers.name,
@@ -285,7 +284,7 @@ async function findLinkedOperator(
     })
     .from(operatorUsers)
     .where(eq(operatorUsers.authUserId, authUserId))
-    .limit(1);
+    .limit(1));
 
   return operator ?? null;
 }

@@ -510,7 +510,7 @@ describe("EventQueuePanel", () => {
     const refreshButton = screen.getByRole("button", { name: "Odśwież" });
     refreshButton.focus();
     await act(async () => {
-      await realtime.invalidate?.("broadcast", new AbortController().signal);
+      await realtime.invalidate?.("queue", new AbortController().signal);
     });
 
     expect(refreshButton).toHaveFocus();
@@ -761,7 +761,7 @@ describe("EventQueuePanel", () => {
     expect(screen.getByRole("button", { name: /Odśwież/ })).toBeEnabled();
     expect(runAction).toHaveBeenCalledOnce();
 
-    await realtime.invalidate?.("broadcast", new AbortController().signal);
+    await realtime.invalidate?.("queue", new AbortController().signal);
     expect(getQueue).not.toHaveBeenCalled();
 
     confirmAction({ request: approved });
@@ -882,7 +882,7 @@ describe("EventQueuePanel", () => {
     getQueue.mockRejectedValue(new Error("offline"));
     renderPanel([pending]);
 
-    await realtime.invalidate?.("broadcast", new AbortController().signal);
+    await realtime.invalidate?.("queue", new AbortController().signal);
 
     expect(screen.getByText("Singer 1")).toBeVisible();
     await waitFor(() =>
@@ -905,7 +905,7 @@ describe("EventQueuePanel", () => {
     renderPanel([pending]);
 
     const staleRefresh = realtime.invalidate?.(
-      "broadcast",
+      "queue",
       new AbortController().signal,
     );
     fireEvent.click(screen.getByRole("button", { name: "Odśwież" }));
@@ -938,7 +938,7 @@ describe("EventQueuePanel", () => {
     renderPanel([pending]);
 
     const staleRefresh = realtime.invalidate?.(
-      "broadcast",
+      "queue",
       new AbortController().signal,
     );
     fireEvent.click(screen.getByRole("button", { name: "Odśwież" }));
@@ -972,15 +972,15 @@ describe("EventQueuePanel", () => {
     renderPanel([pending]);
 
     const first = realtime.invalidate?.(
-      "broadcast",
+      "queue",
       new AbortController().signal,
     );
     const second = realtime.invalidate?.(
-      "broadcast",
+      "queue",
       new AbortController().signal,
     );
     const third = realtime.invalidate?.(
-      "broadcast",
+      "queue",
       new AbortController().signal,
     );
 
@@ -1135,7 +1135,7 @@ describe("EventQueuePanel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Zaakceptuj: Singer 2 — Song 2" }),
     );
-    await realtime.invalidate?.("broadcast", new AbortController().signal);
+    await realtime.invalidate?.("queue", new AbortController().signal);
 
     expect(getQueue).not.toHaveBeenCalled();
     expect(runAction).toHaveBeenCalledOnce();

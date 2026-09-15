@@ -143,8 +143,8 @@ test("operator session lookup is memoized without routeName as cache key", () =>
   assert.match(source, /const getCachedOperatorSession = cache\(/);
   assert.match(source, /getCachedOperatorSession\(\)/);
   assert.match(source, /traceServerStepWithoutTimeout\(routeName, "getSession"/);
-  assert.match(source, /SESSION_DB_STEP_TIMEOUT_MS = 4_000/);
-  assert.match(source, /"findLinkedOperator"[\s\S]*SESSION_DB_STEP_TIMEOUT_MS/);
+  assert.equal(source.includes("SESSION_DB_STEP_TIMEOUT_MS"), false);
+  assert.match(source, /"findLinkedOperator",\s*\(\) => findLinkedOperator\(authUser\.id\),\s*\)/);
   assert.equal(source.includes("getCachedOperatorSession(routeName"), false);
 });
 
