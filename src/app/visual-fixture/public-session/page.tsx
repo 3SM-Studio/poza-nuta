@@ -35,6 +35,19 @@ const fixtureStates = new Set<PublicSessionVisualFixtureState>([
   "artwork-gallery",
   "song-details-loading",
   "search-no-results",
+  "catalog-genres",
+  "catalog-genre-results",
+  "catalog-genre-loaded-more",
+  "catalog-load-more-loading",
+  "catalog-load-more-error",
+  "catalog-hits",
+  "catalog-newest",
+  "catalog-duets",
+  "catalog-empty",
+  "live-search-loading",
+  "queue-my-requests",
+  "queue-my-requests-empty",
+  "long-song-details",
 ]);
 
 export default async function PublicSessionVisualFixturePage({

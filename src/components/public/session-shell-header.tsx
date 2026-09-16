@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type SessionShellHeaderProps = {
-  isSearching: boolean;
   isSubmitting: boolean;
   searchTerm: string;
   showQueue: boolean;
@@ -19,7 +18,6 @@ type SessionShellHeaderProps = {
 };
 
 export function SessionShellHeader({
-  isSearching,
   isSubmitting,
   searchTerm,
   showQueue,
@@ -75,7 +73,7 @@ export function SessionShellHeader({
         <Input
           id="session-song-search"
           className="h-12 rounded-xl border-border bg-secondary pl-10 text-[15px] placeholder:text-muted-foreground"
-          disabled={isSearching || isSubmitting}
+          disabled={isSubmitting}
           onChange={(event) => onSearchTermChange(event.target.value)}
           placeholder="Szukaj utworu lub wykonawcy"
           type="search"

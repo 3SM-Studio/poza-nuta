@@ -3,6 +3,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import postgres from "postgres";
 
+export const LOCAL_E2E_ROCK_SONG_COUNT = 32;
+
 export type LocalSupabaseFixture = {
   email: string;
   password: string;
@@ -267,7 +269,83 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
         throw new Error("Local song fixtures were not created.");
       }
 
-      songIds = songs.map(({ id }) => id);
+      const catalogSongs = [] as { id: number }[];
+      for (const index of Array.from({ length: LOCAL_E2E_ROCK_SONG_COUNT }, (_, itemIndex) => itemIndex + 1)) {
+        const [catalogSong] = await transaction<{ id: number }[]>`
+          INSERT INTO public.songs (
+            source,
+            source_song_id,
+            title,
+            artist,
+            normalized_title,
+            normalized_artist,
+            search_text,
+            genres,
+            languages,
+            is_duet,
+            is_hit
+          )
+          VALUES (
+            'manual',
+            ${`e2e-rock-${fixtureSuffix}-${index}`},
+            ${
+              index === 1
+                ? "Dancing Queen"
+                : index === 2
+                  ? "E2E Rock Song with an intentionally long title for drawer overflow verification"
+                  : `E2E Rock Song ${String(index).padStart(2, "0")}`
+            },
+            ${"ABBA"},
+            ${index === 1 ? "dancing queen" : `e2e rock song ${String(index).padStart(2, "0")}`},
+            ${"abba"},
+            ${index === 1 ? "dancing queen abba rock english" : `e2e rock song ${String(index).padStart(2, "0")} abba rock english`},
+            ARRAY['Rock']::text[],
+            ARRAY['English']::text[],
+            ${index <= 3},
+            ${index <= 4}
+          )
+          RETURNING id
+        `;
+        if (!catalogSong) {
+          throw new Error("Local Rock catalog fixture was not created.");
+        }
+        catalogSongs.push(catalogSong);
+      }
+
+      const [specialGenreSong] = await transaction<{ id: number }[]>`
+        INSERT INTO public.songs (
+          source,
+          source_song_id,
+          title,
+          artist,
+          normalized_title,
+          normalized_artist,
+          search_text,
+          genres,
+          languages,
+          is_duet,
+          is_hit
+        )
+        VALUES (
+          'manual',
+          ${`e2e-rock-roll-${fixtureSuffix}`},
+          ${"E2E Rock and Roll"},
+          ${"ABBA"},
+          ${"e2e rock and roll"},
+          ${"abba"},
+          ${"e2e rock and roll abba"},
+          ARRAY['Rock & Roll']::text[],
+          ARRAY['English']::text[],
+          false,
+          false
+        )
+        RETURNING id
+      `;
+      if (!specialGenreSong) {
+        throw new Error("Local special-genre fixture was not created.");
+      }
+
+      songIds = [...songs, ...catalogSongs, specialGenreSong].map(({ id }) => id);
 
       await transaction`
         INSERT INTO public.song_requests (

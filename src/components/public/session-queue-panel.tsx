@@ -13,6 +13,9 @@ import {
 import type { PublicQueueItem, PublicQueueResponse } from "./api";
 import { SessionQueueList } from "./session-queue-list";
 import { SessionSongArtwork } from "./session-song-artwork";
+import { SessionParticipantRequests } from "./session-participant-requests";
+import type { ParticipantRequest } from "./session-api";
+import { useRef, useState, type KeyboardEvent } from "react";
 
 type SessionQueuePanelProps = {
   message: string | null;
@@ -22,6 +25,15 @@ type SessionQueuePanelProps = {
   open: boolean;
   queue: PublicQueueResponse | null;
   refreshing: boolean;
+  participantRequests?: ParticipantRequest[] | null;
+  participantRequestsMessage?: string | null;
+  participantDisplayName?: string;
+  cancellingRequestId?: string | null;
+  cancelDialogRequestId?: string | null;
+  onParticipantRefresh?: () => void;
+  onCancelParticipantRequest?: (requestId: string) => void;
+  onCancelDialogRequestIdChange?: (requestId: string | null) => void;
+  defaultTab?: "queue" | "mine";
 };
 
 /** One queue state, presented as a desktop panel and a mobile expanding bar. */
@@ -33,7 +45,18 @@ export function SessionQueuePanel({
   open,
   queue,
   refreshing,
+  participantRequests = null,
+  participantRequestsMessage = null,
+  participantDisplayName,
+  cancellingRequestId = null,
+  cancelDialogRequestId = null,
+  onParticipantRefresh = () => undefined,
+  onCancelParticipantRequest = () => undefined,
+  onCancelDialogRequestIdChange = () => undefined,
+  defaultTab = "queue",
 }: SessionQueuePanelProps) {
+  const [activeTab, setActiveTab] = useState<"queue" | "mine">(defaultTab);
+  const hasParticipant = Boolean(participantDisplayName);
   return (
     <>
       <aside
@@ -41,13 +64,24 @@ export function SessionQueuePanel({
         className="hidden min-h-0 w-[clamp(22.5rem,30vw,27.5rem)] shrink-0 border-l border-border bg-secondary/35 lg:flex lg:flex-col"
       >
         <div
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-7"
+          className="session-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-7"
           tabIndex={0}
         >
-          <SessionQueueList
-            className="max-w-none"
+          <QueuePanelContents
+            activeTab={activeTab}
+            cancellingRequestId={cancellingRequestId}
+            cancelDialogRequestId={cancelDialogRequestId}
+            hasParticipant={hasParticipant}
+            idPrefix="desktop"
             message={message}
+            onCancel={onCancelParticipantRequest}
+            onCancelDialogRequestIdChange={onCancelDialogRequestIdChange}
+            onParticipantRefresh={onParticipantRefresh}
             onRefresh={onRefresh}
+            onTabChange={setActiveTab}
+            ownSingerName={participantDisplayName}
+            participantRequests={participantRequests}
+            participantRequestsMessage={participantRequestsMessage}
             queue={queue}
             refreshing={refreshing}
           />
@@ -86,11 +120,22 @@ export function SessionQueuePanel({
                 </Button>
               </DrawerClose>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-              <SessionQueueList
-                className="max-w-none"
+            <div className="session-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+              <QueuePanelContents
+                activeTab={activeTab}
+                cancellingRequestId={cancellingRequestId}
+                cancelDialogRequestId={cancelDialogRequestId}
+                hasParticipant={hasParticipant}
+                idPrefix="mobile"
                 message={message}
+                onCancel={onCancelParticipantRequest}
+                onCancelDialogRequestIdChange={onCancelDialogRequestIdChange}
+                onParticipantRefresh={onParticipantRefresh}
                 onRefresh={onRefresh}
+                onTabChange={setActiveTab}
+                ownSingerName={participantDisplayName}
+                participantRequests={participantRequests}
+                participantRequestsMessage={participantRequestsMessage}
                 queue={queue}
                 refreshing={refreshing}
               />
@@ -99,6 +144,73 @@ export function SessionQueuePanel({
         </DrawerContent>
       </Drawer>
     </>
+  );
+}
+
+function QueuePanelContents({
+  activeTab,
+  cancellingRequestId,
+  cancelDialogRequestId,
+  hasParticipant,
+  idPrefix,
+  message,
+  onCancel,
+  onCancelDialogRequestIdChange,
+  onParticipantRefresh,
+  onRefresh,
+  onTabChange,
+  ownSingerName,
+  participantRequests,
+  participantRequestsMessage,
+  queue,
+  refreshing,
+}: {
+  activeTab: "queue" | "mine";
+  cancellingRequestId: string | null;
+  cancelDialogRequestId: string | null;
+  hasParticipant: boolean;
+  idPrefix: string;
+  message: string | null;
+  onCancel: (requestId: string) => void;
+  onCancelDialogRequestIdChange: (requestId: string | null) => void;
+  onParticipantRefresh: () => void;
+  onRefresh: () => void;
+  onTabChange: (tab: "queue" | "mine") => void;
+  ownSingerName?: string;
+  participantRequests: ParticipantRequest[] | null;
+  participantRequestsMessage: string | null;
+  queue: PublicQueueResponse | null;
+  refreshing: boolean;
+}) {
+  const panelId = `${idPrefix}-session-queue-panel`;
+  const queueTabId = `${idPrefix}-session-queue-tab`;
+  const mineTabId = `${idPrefix}-session-mine-tab`;
+  const tabListRef = useRef<HTMLDivElement>(null);
+
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!hasParticipant || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextTab = event.key === "ArrowLeft" || event.key === "Home" ? "queue" : "mine";
+    onTabChange(nextTab);
+    window.requestAnimationFrame(() => {
+      tabListRef.current?.querySelector<HTMLButtonElement>(`#${nextTab === "queue" ? queueTabId : mineTabId}`)?.focus();
+    });
+  }
+
+  return (
+    <div aria-labelledby={activeTab === "queue" ? queueTabId : mineTabId} id={panelId} role="tabpanel">
+      {hasParticipant ? (
+        <div aria-label="Widok kolejki" className="mb-5 grid grid-cols-2 rounded-xl bg-muted p-1" ref={tabListRef} role="tablist">
+          <button aria-controls={panelId} aria-selected={activeTab === "queue"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "queue" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={queueTabId} onClick={() => onTabChange("queue")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "queue" ? 0 : -1} type="button">Kolejka</button>
+          <button aria-controls={panelId} aria-selected={activeTab === "mine"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "mine" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={mineTabId} onClick={() => onTabChange("mine")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "mine" ? 0 : -1} type="button">Moje{participantRequests ? ` ${participantRequests.length}` : ""}</button>
+        </div>
+      ) : null}
+      {activeTab === "queue" ? (
+        <SessionQueueList className="max-w-none" message={message} onRefresh={onRefresh} ownSingerName={ownSingerName} queue={queue} refreshing={refreshing} />
+      ) : (
+        <SessionParticipantRequests cancellingRequestId={cancellingRequestId} cancelDialogRequestId={cancelDialogRequestId} message={participantRequestsMessage} onCancel={onCancel} onCancelDialogRequestIdChange={onCancelDialogRequestIdChange} onRefresh={onParticipantRefresh} requests={participantRequests} />
+      )}
+    </div>
   );
 }
 

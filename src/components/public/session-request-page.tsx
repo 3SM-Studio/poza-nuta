@@ -1,26 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import {
   SessionStateAlert,
   type SessionStateAlertKind,
 } from "@/components/public/session-state-alert";
-import { RequestStatusBadge } from "@/components/request-status-badge";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   isParticipantNicknameLengthValid,
   normalizeParticipantNickname,
@@ -29,15 +16,15 @@ import { getSessionCapabilityState } from "@/lib/session-capabilities";
 import type {
   PublicQueueResponse,
   PublicSong,
-  SongDiscoveryCategory,
   SessionSongDiscovery,
 } from "./api";
+import { CatalogSongList } from "./catalog-song-list";
 import { ParticipantProfileDrawer } from "./participant-profile-drawer";
 import { waitForMutationRealtimeOrFallback } from "./session-mutation-refresh";
 import { SessionQueuePanel } from "./session-queue-panel";
 import { SessionShellHeader } from "./session-shell-header";
 import { SessionSearchResults } from "./session-search-results";
-import { SessionGenreResults } from "./session-genre-results";
+import { SessionCatalogGenres } from "./session-catalog-genres";
 import { SongDetailsDrawer } from "./song-details-drawer";
 import { SessionDiscoveryHome } from "./session-discovery-home";
 import {
@@ -70,10 +57,10 @@ export function SessionRequestPage({
   discovery?: SessionSongDiscovery;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PublicSong[]>([]);
-  const [selectedGenre, setSelectedGenre] =
-    useState<SongDiscoveryCategory | null>(null);
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -100,9 +87,29 @@ export function SessionRequestPage({
   const [isRefreshingQueue, setIsRefreshingQueue] = useState(false);
   const realtimeInvalidationVersionRef = useRef(0);
   const realtimeInvalidationWaitersRef = useRef(new Set<() => void>());
+  const searchControllerRef = useRef<AbortController | null>(null);
+  const searchVersionRef = useRef(0);
+  const searchDebounceRef = useRef<number | null>(null);
+  const mainScrollRef = useRef<HTMLElement | null>(null);
+  const searchScrollPositionRef = useRef<{ main: number; page: number } | null>(null);
+  const lastPathnameRef = useRef(pathname);
+  const hasClientNavigationRef = useRef(false);
   const capabilities = getSessionCapabilityState(event);
   const canSubmitSongRequests = capabilities.canSubmitSongRequests;
   const canViewPublicQueue = capabilities.canViewPublicQueue;
+  const normalizedSearchTerm = normalizePublicSearchTerm(searchTerm);
+  const isSearchActive = normalizedSearchTerm.length > 0;
+  const catalogView = useMemo(
+    () => getCatalogView(pathname, searchParams, discovery),
+    [discovery, pathname, searchParams],
+  );
+
+  useEffect(() => {
+    if (pathname !== lastPathnameRef.current) {
+      hasClientNavigationRef.current = true;
+      lastPathnameRef.current = pathname;
+    }
+  }, [pathname]);
 
   const loadParticipantRequests = useCallback(
     async (signal?: AbortSignal) => {
@@ -304,35 +311,77 @@ export function SessionRequestPage({
     }
   }
 
-  async function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const query = normalizePublicSearchTerm(searchTerm);
+  const runSearch = useCallback(async (query: string) => {
+    searchControllerRef.current?.abort();
+    const controller = new AbortController();
+    searchControllerRef.current = controller;
+    const requestVersion = searchVersionRef.current + 1;
+    searchVersionRef.current = requestVersion;
 
     if (!canSearchPublicSongs(query)) {
       setSearchResults([]);
-      setSearchMessage("Wpisz co najmniej 2 znaki.");
+      setSearchMessage(query ? "Wpisz co najmniej 2 znaki." : null);
+      setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
-    setSelectedGenre(null);
     setSearchMessage(null);
     setSubmitAlert(null);
 
     try {
-      const songs = await searchSessionSongs(sessionToken, query);
+      const songs = await searchSessionSongs(sessionToken, query, controller.signal);
+      if (controller.signal.aborted || requestVersion !== searchVersionRef.current) return;
       setSearchResults(songs);
-      setSearchMessage(
-        songs.length === 0 ? "Nie znaleziono pasujących piosenek." : null,
-      );
-    } catch {
+      setSearchMessage(songs.length === 0 ? "Nie znaleziono pasujących piosenek." : null);
+    } catch (caughtError) {
+      if (controller.signal.aborted || isAbortError(caughtError) || requestVersion !== searchVersionRef.current) return;
       setSearchResults([]);
-      setSearchMessage(
-        "Nie udało się wyszukać piosenek. Spróbuj ponownie.",
-      );
+      setSearchMessage("Nie udało się wyszukać piosenek. Spróbuj ponownie.");
     } finally {
-      setIsSearching(false);
+      if (!controller.signal.aborted && requestVersion === searchVersionRef.current) setIsSearching(false);
     }
+  }, [sessionToken]);
+
+  useEffect(() => {
+    if (!canSearchPublicSongs(normalizedSearchTerm)) return;
+    searchDebounceRef.current = window.setTimeout(() => {
+      searchDebounceRef.current = null;
+      void runSearch(normalizedSearchTerm);
+    }, 250);
+    return () => {
+      if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    };
+  }, [normalizedSearchTerm, runSearch]);
+
+  useEffect(() => () => {
+    searchControllerRef.current?.abort();
+    if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+  }, []);
+
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = normalizePublicSearchTerm(searchTerm);
+    if (canSearchPublicSongs(query)) {
+      if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+      void runSearch(query);
+    }
+  }
+
+  function handleSearchTermChange(value: string) {
+    const query = normalizePublicSearchTerm(value);
+    if (query && !isSearchActive) captureCatalogScrollPosition();
+    setSearchTerm(value);
+    if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = null;
+    searchControllerRef.current?.abort();
+    searchVersionRef.current += 1;
+    setSearchResults([]);
+    setSearchMessage(query ? (canSearchPublicSongs(query) ? null : "Wpisz co najmniej 2 znaki.") : null);
+    setIsSearching(canSearchPublicSongs(query));
+    if (!query) clearSearchResults();
   }
 
   function selectSong(song: PublicSong) {
@@ -342,13 +391,35 @@ export function SessionRequestPage({
   }
 
   function clearSearchResults() {
+    searchControllerRef.current?.abort();
+    searchVersionRef.current += 1;
     setSearchTerm("");
     setSearchResults([]);
     setSearchMessage(null);
     setSelectedSong(null);
     setIsSongDetailsOpen(false);
     setSubmitAlert(null);
-    setSelectedGenre(null);
+    restoreCatalogScrollPosition();
+  }
+
+  function captureCatalogScrollPosition() {
+    if (typeof window === "undefined" || searchScrollPositionRef.current) return;
+    searchScrollPositionRef.current = {
+      main: mainScrollRef.current?.scrollTop ?? 0,
+      page: window.scrollY,
+    };
+  }
+
+  function restoreCatalogScrollPosition() {
+    const position = searchScrollPositionRef.current;
+    if (typeof window === "undefined" || !position) return;
+    searchScrollPositionRef.current = null;
+    window.requestAnimationFrame(() => {
+      if (typeof mainScrollRef.current?.scrollTo === "function") {
+        mainScrollRef.current.scrollTo({ top: position.main });
+      }
+      window.scrollTo(0, position.page);
+    });
   }
 
   async function submitSelectedSong() {
@@ -414,9 +485,8 @@ export function SessionRequestPage({
   }
 
   return (
-    <div className="flex min-h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground lg:max-h-dvh lg:overflow-hidden">
       <SessionShellHeader
-        isSearching={isSearching}
         isSubmitting={isSubmitting}
         onOpenProfile={() => {
           setRenameValue(displayName);
@@ -424,18 +494,13 @@ export function SessionRequestPage({
           setIsProfileOpen(true);
         }}
         onSearch={handleSearch}
-        onSearchTermChange={(value) => {
-          setSearchTerm(value);
-          if (normalizePublicSearchTerm(value) === "") {
-            clearSearchResults();
-          }
-        }}
+        onSearchTermChange={handleSearchTermChange}
         onOpenQueue={openQueue}
         searchTerm={searchTerm}
-        showQueue={canViewPublicQueue}
+        showQueue={canViewPublicQueue || Boolean(participantDisplayName)}
       />
       <div className="flex min-h-0 flex-1">
-      <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-0">
+      <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0" ref={mainScrollRef}>
       <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
       {capabilities.allSessionFeaturesDisabled ? (
         <section className="mb-7">
@@ -445,143 +510,54 @@ export function SessionRequestPage({
       ) : null}
 
       {canSubmitSongRequests ? (
-        <>
-      <section aria-label="Wyszukiwanie piosenek" className="mb-7">
-        {discovery ? (
-          <div
-            className={cn(
-              (selectedGenre !== null ||
-                searchResults.length > 0 ||
-                searchMessage !== null ||
-                isSearching ||
-                normalizePublicSearchTerm(searchTerm) !== "") && "hidden",
-            )}
-          >
-            <SessionDiscoveryHome
-              discovery={discovery}
-              onGenreSelect={setSelectedGenre}
+        <section aria-label="Wyszukiwanie piosenek" className="mb-7">
+          <div hidden={isSearchActive}>
+            {catalogView.kind === "discovery" && discovery ? (
+              <SessionDiscoveryHome discovery={discovery} onSongSelect={selectSong} sessionToken={sessionToken} />
+            ) : null}
+            {catalogView.kind === "genres" && discovery ? (
+              <SessionCatalogGenres genres={discovery.genres} onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, hasClientNavigationRef.current)} sessionToken={sessionToken} />
+            ) : null}
+            {catalogView.kind === "catalog" ? (
+              <CatalogSongList
+                backLabel={catalogView.backLabel}
+                heading={catalogView.heading}
+                input={catalogView.input}
+                onBack={() => navigateBack(router, catalogView.fallbackHref, hasClientNavigationRef.current)}
+                onSongSelect={selectSong}
+                sessionToken={sessionToken}
+              />
+            ) : null}
+          </div>
+          {isSearchActive ? (
+            <SessionSearchResults
+              isLoading={isSearching}
+              message={searchMessage}
+              onBack={clearSearchResults}
               onSongSelect={selectSong}
-              sessionToken={sessionToken}
+              query={normalizedSearchTerm}
+              songs={searchResults}
             />
-          </div>
-        ) : null}
-        {selectedGenre ? (
-          <SessionGenreResults
-            genre={selectedGenre}
-            onBack={() => setSelectedGenre(null)}
-            onSongSelect={selectSong}
-            sessionToken={sessionToken}
-          />
-        ) : searchResults.length > 0 || searchMessage !== null || isSearching || normalizePublicSearchTerm(searchTerm) !== "" || !discovery ? (
-          <SessionSearchResults
-            isLoading={isSearching}
-            message={searchMessage}
-            onBack={clearSearchResults}
-            onSongSelect={selectSong}
-            query={normalizePublicSearchTerm(searchTerm)}
-            songs={searchResults}
-          />
-        ) : null}
-      </section>
-        </>
-      ) : null}
-
-      {participantDisplayName ? (
-        <section className="mb-7" aria-labelledby="participant-requests-heading">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 className="text-xl font-bold tracking-[-0.035em]" id="participant-requests-heading">Moje zgłoszenia</h2>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => void loadParticipantRequests()}
-            >
-              Odśwież
-            </Button>
-          </div>
-          {participantRequestsMessage ? (
-            <p className="mt-3 text-sm text-destructive" role="alert">{participantRequestsMessage}</p>
-          ) : participantRequests === null ? (
-            <p className="mt-3 text-sm text-muted-foreground" role="status">Wczytywanie zgłoszeń…</p>
-          ) : participantRequests.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">Nie masz jeszcze zgłoszeń w tej sesji.</p>
-          ) : (
-            <div className="mt-3">
-              {participantRequests.map((request) => (
-                <article
-                  className="flex items-start justify-between gap-4 border-b border-border px-0.5 py-4"
-                  key={request.id}
-                  data-participant-request-id={request.id}
-                >
-                  <div className="min-w-0">
-                    <RequestStatusBadge status={request.status} />
-                    <h3 className="mt-2 text-base font-extrabold tracking-[-0.02em]">{request.title}</h3>
-                    <p className="mt-0.5 text-sm text-muted-foreground">{request.artist}</p>
-                    {request.queuePosition !== null ? (
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        Pozycja zgłoszenia w kolejce: #{request.queuePosition}
-                        {request.isNext ? " · Następne zaakceptowane zgłoszenie" : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                  {request.status === "pending" ? (
-                    <AlertDialog
-                      open={cancelDialogRequestId === request.id}
-                      onOpenChange={(open) => {
-                        if (cancellingRequestId !== null) return;
-                        setCancelDialogRequestId(open ? request.id : null);
-                      }}
-                    >
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={cancellingRequestId !== null}
-                        >
-                          {cancellingRequestId === request.id
-                            ? "Anuluję…"
-                            : "Anuluj"}
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Anulować zgłoszenie?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {request.title} — {request.artist}. Tej operacji nie można cofnąć po stronie uczestnika.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel disabled={cancellingRequestId !== null}>
-                            Wróć
-                          </AlertDialogCancel>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={cancellingRequestId !== null}
-                            onClick={() => void handleCancel(request.id)}
-                          >
-                            {cancellingRequestId === request.id ? "Anuluję…" : "Anuluj zgłoszenie"}
-                          </Button>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          )}
+          ) : null}
         </section>
       ) : null}
 
       </div>
       </main>
-      {canViewPublicQueue ? (
+      {canViewPublicQueue || participantDisplayName ? (
         <SessionQueuePanel
           message={queueMessage}
           onOpen={openQueue}
           onOpenChange={handleQueueOpenChange}
           onRefresh={() => void refreshQueue()}
+          cancellingRequestId={cancellingRequestId}
+          cancelDialogRequestId={cancelDialogRequestId}
+          onCancelDialogRequestIdChange={setCancelDialogRequestId}
+          onCancelParticipantRequest={(requestId) => void handleCancel(requestId)}
+          onParticipantRefresh={() => void loadParticipantRequests()}
+          participantDisplayName={displayName || undefined}
+          participantRequests={participantRequests}
+          participantRequestsMessage={participantRequestsMessage}
           open={isQueueOpen}
           queue={queue}
           refreshing={isRefreshingQueue}
@@ -726,4 +702,63 @@ function hasSessionEventChanged(current: SessionEvent, next: SessionEvent) {
     current.endsAt !== next.endsAt ||
     current.closedAt !== next.closedAt
   );
+}
+
+type CatalogView =
+  | { kind: "discovery" }
+  | { kind: "genres" }
+  | {
+      kind: "catalog";
+      heading: string;
+      backLabel: string;
+      fallbackHref: string;
+      input: { genre?: string; hit?: boolean; duet?: boolean; sort?: "newest" };
+    };
+
+function getCatalogView(
+  pathname: string,
+  searchParams: ReturnType<typeof useSearchParams>,
+  discovery?: SessionSongDiscovery,
+): CatalogView {
+  const tokenMatch = pathname.match(/^\/s\/([^/]+)/);
+  const token = tokenMatch?.[1] ?? "";
+  const sessionHref = `/s/${token}`;
+  if (pathname.endsWith("/catalog/genres")) return { kind: "genres" };
+  if (!pathname.endsWith("/catalog")) return { kind: "discovery" };
+
+  const genre = searchParams.get("genre");
+  if (genre) {
+    const knownGenre = discovery?.genres.find((item) => item.value === genre);
+    return {
+      kind: "catalog",
+      heading: knownGenre?.label ?? genre,
+      backLabel: "Wróć do gatunków",
+      fallbackHref: `${sessionHref}/catalog/genres`,
+      input: { genre },
+    };
+  }
+
+  if (searchParams.get("filter") === "hits") {
+    return { kind: "catalog", heading: "Hity", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: { hit: true } };
+  }
+  if (searchParams.get("filter") === "duets") {
+    return { kind: "catalog", heading: "Duety", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: { duet: true } };
+  }
+  if (searchParams.get("sort") === "newest") {
+    return { kind: "catalog", heading: "Najnowsze", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: { sort: "newest" } };
+  }
+
+  return { kind: "catalog", heading: "Katalog", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: {} };
+}
+
+function navigateBack(
+  router: ReturnType<typeof useRouter>,
+  fallbackHref: string,
+  hasClientNavigation: boolean,
+) {
+  if (hasClientNavigation) {
+    router.back();
+    return;
+  }
+  router.push(fallbackHref);
 }

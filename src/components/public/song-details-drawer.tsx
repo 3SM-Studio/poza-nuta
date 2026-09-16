@@ -34,7 +34,7 @@ export function SongDetailsDrawer({
 
   return (
     <Drawer onOpenChange={onOpenChange} open={isOpen}>
-      <DrawerContent className="max-h-[82dvh] overflow-y-auto border-border bg-popover text-foreground sm:mx-auto sm:max-w-2xl">
+      <DrawerContent className="max-h-[82dvh] border-border bg-popover text-foreground sm:mx-auto sm:max-w-2xl">
         <DrawerHeader className="relative flex-row items-start gap-4 px-6 pt-5 pb-4 text-left">
           <SessionSongArtwork className="size-16" song={song} />
           <div className="min-w-0 pt-0.5">
@@ -69,7 +69,7 @@ export function SongDetailsDrawer({
           </div>
         </div>
 
-        <div className="px-6 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <div className="session-scrollbar max-h-[calc(82dvh-9rem)] overflow-y-auto px-6 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
           {alert ? <SessionStateAlert kind={alert} /> : null}
           <Button
             className="h-12 w-full rounded-full font-extrabold"

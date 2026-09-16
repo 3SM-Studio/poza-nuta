@@ -69,9 +69,14 @@ export async function getSessionEvent(
   );
 }
 
-export async function searchSessionSongs(publicToken: string, query: string) {
+export async function searchSessionSongs(
+  publicToken: string,
+  query: string,
+  signal?: AbortSignal,
+) {
   const response = await requestJson<{ items: PublicSong[] }>(
     `/api/s/${encodeURIComponent(publicToken)}/songs/search?q=${encodeURIComponent(query)}`,
+    { signal },
   );
 
   return response.items;

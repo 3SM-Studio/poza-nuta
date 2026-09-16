@@ -8,7 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionRequestPage } from "@/components/public/session-request-page";
 import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
@@ -22,6 +22,9 @@ const {
   getQueue,
   realtime,
   refreshRouter,
+  routerBack,
+  routerPush,
+  navigationState,
   searchSongs,
   browseSongs,
   toastSuccess,
@@ -42,6 +45,12 @@ const {
         | null,
     },
     refreshRouter: vi.fn(),
+    routerBack: vi.fn(),
+    routerPush: vi.fn(),
+    navigationState: {
+      pathname: "/s/AbCdEfGhIjKlMnOpQrStUv",
+      searchParams: new URLSearchParams(),
+    },
     searchSongs: vi.fn(),
     browseSongs: vi.fn(),
     toastSuccess: vi.fn(),
@@ -79,10 +88,12 @@ vi.mock("@/components/public/use-public-queue-realtime", () => ({
 }));
 
 vi.mock("next/navigation", () => {
-  const router = { refresh: refreshRouter };
+  const router = { back: routerBack, push: routerPush, refresh: refreshRouter };
 
   return {
     useRouter: () => router,
+    usePathname: () => navigationState.pathname,
+    useSearchParams: () => navigationState.searchParams,
   };
 });
 
@@ -117,6 +128,7 @@ const song = {
 
 describe("session request feedback", () => {
   beforeEach(() => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     createRequest.mockReset();
     getParticipantRequests.mockReset();
     cancelParticipantRequest.mockReset();
@@ -125,6 +137,10 @@ describe("session request feedback", () => {
     getQueue.mockReset();
     realtime.onInvalidate = null;
     refreshRouter.mockReset();
+    routerBack.mockReset();
+    routerPush.mockReset();
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv";
+    navigationState.searchParams = new URLSearchParams();
     searchSongs.mockReset();
     browseSongs.mockReset();
     toastSuccess.mockReset();
@@ -137,6 +153,11 @@ describe("session request feedback", () => {
     searchSongs.mockResolvedValue([song]);
     browseSongs.mockResolvedValue({ items: [song], nextCursor: null });
     getParticipantRequests.mockResolvedValue({ items: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("requires selecting a result before exposing the add-to-queue action", () => {
@@ -247,34 +268,6 @@ describe("session request feedback", () => {
     expect(getQueue).not.toHaveBeenCalled();
   });
 
-  it("preserves genre results and avoids a genre refetch while the queue opens", async () => {
-    render(
-      <SessionRequestPage
-        discovery={{
-          genres: [{ value: "pop", label: "Pop", count: 120 }],
-          languages: [],
-          features: { duetCount: 1, hitCount: 1, plusCount: 0 },
-        }}
-        event={{ ...event, publicQueueEnabled: true }}
-        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
-      />,
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: "Pop — 120 piosenek" }));
-    expect(await screen.findByRole("heading", { name: "Pop" })).toBeVisible();
-    await waitFor(() => expect(browseSongs).toHaveBeenCalledTimes(4));
-    browseSongs.mockClear();
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Otwórz kolejkę" })[0]!);
-    fireEvent.click(await screen.findByRole("button", { name: "Zwiń kolejkę" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "Kolejka" })).not.toBeInTheDocument(),
-    );
-
-    expect(screen.getByRole("heading", { name: "Pop" })).toBeVisible();
-    expect(browseSongs).not.toHaveBeenCalled();
-  });
-
   it("does not refetch Discovery after submitting a song selected from it", async () => {
     createRequest.mockResolvedValue({});
     render(
@@ -304,43 +297,6 @@ describe("session request feedback", () => {
 
     await waitFor(() => expect(createRequest).toHaveBeenCalledOnce());
     expect(browseSongs).not.toHaveBeenCalled();
-  });
-
-  it("keeps category results in the public shell and returns to Discovery", async () => {
-    render(
-      <SessionRequestPage
-        discovery={{
-          genres: [{ value: "pop", label: "Pop", count: 120 }],
-          languages: [],
-          features: { duetCount: 0, hitCount: 0, plusCount: 0 },
-        }}
-        event={event}
-        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
-      />,
-    );
-
-    const genreCard = await screen.findByRole("button", {
-      name: "Pop — 120 piosenek",
-    });
-    fireEvent.click(genreCard);
-    await waitFor(() =>
-      expect(browseSongs).toHaveBeenCalledWith(
-        "AbCdEfGhIjKlMnOpQrStUv",
-        { genre: "pop", limit: 24 },
-        expect.any(AbortSignal),
-      ),
-    );
-    expect(await screen.findByRole("heading", { name: "Pop" })).toBeVisible();
-    expect(
-      screen
-        .getAllByRole("button", { name: /Test Song/ })
-        .some((button) => button.classList.contains("border-b")),
-    ).toBe(true);
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Wróć do odkrywania" }),
-    );
-    expect(await screen.findByRole("heading", { name: "Gatunki" })).toBeVisible();
   });
 
   it("opens song details from a result and renders only available metadata", async () => {
@@ -381,6 +337,160 @@ describe("session request feedback", () => {
     expect(await screen.findByLabelText("Wczytywanie wyników")).toBeVisible();
     search.resolve([song]);
     expect(await screen.findByRole("button", { name: /Test Song/ })).toBeVisible();
+  });
+
+  it("waits 250 ms before searching and never queries a one-character term", async () => {
+    vi.useFakeTimers();
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "A" } });
+    expect(screen.getByText("Wpisz co najmniej 2 znaki.")).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(searchSongs).not.toHaveBeenCalled();
+
+    fireEvent.change(searchbox, { target: { value: "AB" } });
+    expect(searchbox).not.toBeDisabled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(249);
+    });
+    expect(searchSongs).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(searchSongs).toHaveBeenCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv",
+      "AB",
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("submits a valid live-search term immediately on Enter without leaving the debounce queued", async () => {
+    vi.useFakeTimers();
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "AB" } });
+    fireEvent.submit(searchbox.closest("form")!);
+
+    await act(async () => {});
+    expect(searchSongs).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(searchSongs).toHaveBeenCalledOnce();
+  });
+
+  it("restores the catalog scroll position after clearing live search", async () => {
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 184,
+    });
+    render(
+      <SessionRequestPage
+        discovery={{
+          genres: [{ value: "rock", label: "Rock", count: 120 }],
+          languages: [],
+          features: { duetCount: 0, hitCount: 0, plusCount: 0 },
+        }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+    const main = screen.getByRole("main") as HTMLElement;
+    const mainScrollTo = vi.fn();
+    main.scrollTop = 96;
+    Object.assign(main, { scrollTo: mainScrollTo });
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "Test" } });
+    fireEvent.change(searchbox, { target: { value: "" } });
+
+    await waitFor(() => expect(mainScrollTo).toHaveBeenCalledWith({ top: 96 }));
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 184);
+  });
+
+  it("uses the genre fallback when the catalog route was opened directly", async () => {
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/catalog";
+    navigationState.searchParams = new URLSearchParams("genre=rock");
+    render(
+      <SessionRequestPage
+        discovery={{
+          genres: [{ value: "rock", label: "Rock", count: 120 }],
+          languages: [],
+          features: { duetCount: 0, hitCount: 0, plusCount: 0 },
+        }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Wróć do gatunków" }));
+    expect(routerPush).toHaveBeenCalledWith("/s/AbCdEfGhIjKlMnOpQrStUv/catalog/genres");
+    expect(routerBack).not.toHaveBeenCalled();
+  });
+
+  it("uses browser Back after an in-session catalog navigation", async () => {
+    const { rerender } = render(
+      <SessionRequestPage
+        discovery={{
+          genres: [{ value: "rock", label: "Rock", count: 120 }],
+          languages: [],
+          features: { duetCount: 0, hitCount: 0, plusCount: 0 },
+        }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/catalog/genres";
+    rerender(
+      <SessionRequestPage
+        discovery={{
+          genres: [{ value: "rock", label: "Rock", count: 120 }],
+          languages: [],
+          features: { duetCount: 0, hitCount: 0, plusCount: 0 },
+        }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+    await screen.findByRole("heading", { name: "Gatunki" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Wróć do odkrywania" }));
+    expect(routerBack).toHaveBeenCalledOnce();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("aborts an obsolete live search and ignores its late response", async () => {
+    vi.useFakeTimers();
+    const first = deferred<Array<typeof song>>();
+    const second = deferred<Array<typeof song>>();
+    searchSongs
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "AB" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    const firstSignal = searchSongs.mock.calls[0]?.[2] as AbortSignal;
+
+    fireEvent.change(searchbox, { target: { value: "ABC" } });
+    expect(firstSignal.aborted).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    await act(async () => {
+      first.resolve([{ ...song, title: "Obsolete Song" }]);
+      second.resolve([{ ...song, title: "Newest Song" }]);
+      await Promise.all([first.promise, second.promise]);
+    });
+    expect(screen.getByText("Newest Song")).toBeVisible();
+    expect(screen.queryByText("Obsolete Song")).not.toBeInTheDocument();
   });
 
   it("renders a calm no-results state", async () => {
@@ -500,6 +610,7 @@ describe("session request feedback", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Dodano zgłoszenie", {
       description: "Operator musi je zatwierdzić.",
     });
+    fireEvent.click(await screen.findByRole("tab", { name: "Moje 1" }));
     expect(await screen.findByText("Moje zgłoszenia")).toBeVisible();
     expect(await screen.findByText("Test Song")).toBeVisible();
     expect(screen.queryByText("Twoje ostatnie zgłoszenie")).not.toBeInTheDocument();
@@ -568,6 +679,7 @@ describe("session request feedback", () => {
       expect(screen.queryByRole("dialog", { name: "Zmień swój nick" })).toBeNull(),
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "Moje 1" }));
     fireEvent.click(await screen.findByRole("button", { name: "Anuluj" }));
     getParticipantRequests.mockResolvedValue({
       items: [{ ...item, status: "skipped" }],
@@ -663,6 +775,7 @@ describe("session request feedback", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByRole("tab", { name: "Moje 2" }));
     const firstRequest = await screen.findByText("First Song");
     const firstArticle = firstRequest.closest("article")!;
     const secondRequest = await screen.findByText("Second Song");
@@ -752,7 +865,9 @@ describe("session request feedback", () => {
     expect(getParticipantRequests).toHaveBeenCalledOnce();
     expect(getQueue).toHaveBeenCalledOnce();
     expect(getEvent).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: "Moje 1" }));
     expect(await screen.findByText("New request")).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Kolejka" }));
     expect(await screen.findByText("Queue song")).toBeVisible();
     expect(screen.getByText("Queue artist")).toBeVisible();
   });
@@ -808,6 +923,7 @@ describe("session request feedback", () => {
     getParticipantRequests.mockClear();
     getQueue.mockClear();
 
+    fireEvent.click(screen.getByRole("tab", { name: "Moje 1" }));
     fireEvent.click(await screen.findByRole("button", { name: "Anuluj" }));
     fireEvent.click(
       within(await screen.findByRole("alertdialog")).getByRole("button", {

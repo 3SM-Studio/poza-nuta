@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   createLocalSupabaseFixture,
+  LOCAL_E2E_ROCK_SONG_COUNT,
   type LocalSupabaseFixture,
 } from "./local-supabase-fixture";
 
@@ -261,9 +262,8 @@ test.describe("public event and session identity with local Supabase Auth", () =
         },
       );
       await participantPage
-        .getByRole("button", { name: "Dołącz do wydarzenia" })
+        .getByRole("button", { name: "Dołącz" })
         .click();
-      await expect(participantPage.getByText("Połączenie live", { exact: true })).toBeVisible();
       await participantRealtimeConnection;
       await participantPage.waitForTimeout(500);
 
@@ -344,35 +344,34 @@ test.describe("public event and session identity with local Supabase Auth", () =
         .getByLabel("Imię lub ksywka")
         .fill("E2E Discovery User");
       await participantPage
-        .getByRole("button", { name: "Dołącz do wydarzenia" })
+        .getByRole("button", { name: "Dołącz" })
         .click();
-      await expect(
-        participantPage.getByText("Dołączono jako", { exact: false }),
-      ).toBeVisible();
+      await expectParticipantProfileControl(participantPage);
       await expect(
         participantPage.getByRole("link", {
-          name: "Przeglądaj wszystkie piosenki",
+          name: "Zobacz wszystkie gatunki",
         }),
       ).toBeVisible();
 
       await participantPage
-        .getByRole("link", { name: "Przeglądaj wszystkie piosenki" })
+        .getByRole("link", { name: "Zobacz wszystkie gatunki" })
         .click();
       await expect(
-        participantPage.getByRole("heading", { name: "Znajdź piosenkę" }),
+        participantPage.getByRole("heading", { name: "Gatunki" }),
       ).toBeVisible();
-      await expect(participantPage.getByText("E2E Discovery Hit")).toBeVisible();
-
-      await participantPage.getByRole("button", { name: "Tylko hity" }).click();
       await expect(participantPage).toHaveURL(
-        new RegExp(`/s/${escapeRegExp(fixture.publicToken)}/songs\\?hit=true$`),
+        new RegExp(`/s/${escapeRegExp(fixture.publicToken)}/catalog/genres$`),
       );
+      await participantPage.goBack();
+
+      const searchbox = participantPage.getByRole("searchbox");
+      await searchbox.fill("E2E Discovery Hit");
       await expect(
-        participantPage.getByRole("heading", { name: "E2E Song", exact: true }),
-      ).toHaveCount(0);
-      const discoveredSong = participantPage
-        .locator("[data-song-id]")
-        .filter({ hasText: "E2E Discovery Hit" });
+        participantPage.getByRole("heading", { name: "„E2E Discovery Hit”" }),
+      ).toBeVisible();
+      const discoveredSong = participantPage.getByRole("button", {
+        name: /E2E Discovery Hit/,
+      });
       await expect(discoveredSong).toBeVisible();
 
       const dashboardRealtimeRefetch = dashboardPage.waitForResponse(
@@ -381,7 +380,10 @@ test.describe("public event and session identity with local Supabase Auth", () =
           response.request().method() === "GET" &&
           response.status() === 200,
       );
-      await discoveredSong.getByRole("button", { name: "Zgłoś" }).click();
+      await discoveredSong.click();
+      await participantPage
+        .getByRole("button", { name: "Dodaj do kolejki" })
+        .click();
       await dashboardRealtimeRefetch;
 
       await expect(
@@ -391,11 +393,9 @@ test.describe("public event and session identity with local Supabase Auth", () =
           .filter({ hasText: "E2E Discovery Hit" }),
       ).toBeVisible();
 
-      await participantPage
-        .getByRole("link", { name: "Wróć do wydarzenia" })
-        .click();
+      await participantPage.getByRole("tab", { name: /Moje/ }).click();
       await expect(
-        participantRequestsSection(participantPage)
+        participantPage
           .locator("[data-participant-request-id]")
           .filter({ hasText: "E2E Discovery Hit" }),
       ).toBeVisible();
@@ -405,6 +405,161 @@ test.describe("public event and session identity with local Supabase Auth", () =
         participantContext.close(),
         dashboardContext.close(),
       ]);
+    }
+  });
+
+  test("keeps the real session catalog route-driven, paginated, and stateful", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const browserErrors: string[] = [];
+    const browseRequests: URL[] = [];
+    const searchRequests: URL[] = [];
+    let realtimeConnections = 0;
+
+    observeBrowserErrors(page, browserErrors);
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname === `/api/s/${fixture.publicToken}/songs/browse`) {
+        browseRequests.push(url);
+      }
+      if (url.pathname === `/api/s/${fixture.publicToken}/songs/search`) {
+        searchRequests.push(url);
+      }
+    });
+    page.on("websocket", (socket) => {
+      if (new URL(socket.url()).pathname === "/realtime/v1/websocket") {
+        realtimeConnections += 1;
+      }
+    });
+
+    const sessionPath = `/s/${fixture.publicToken}`;
+    const rockPath = `${sessionPath}/catalog?genre=Rock`;
+
+    try {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(sessionPath);
+      await page.getByLabel("Imię lub ksywka").fill("E2E UI5 Participant");
+      await page.getByRole("button", { name: "Dołącz" }).click();
+      await expectParticipantProfileControl(page);
+      await submitParticipantSong(page, "E2E Song");
+      await expect(page.locator("aside[aria-label=\"Kolejka sesji\"]")).toBeVisible();
+
+      await expectDiscoveryRoute(page, sessionPath, "198.18.0.1");
+      const catalogRoutes = [
+        [`${sessionPath}/catalog/genres`, "Gatunki"],
+        [rockPath, "Rock"],
+        [`${sessionPath}/catalog?filter=hits`, "Hity"],
+        [`${sessionPath}/catalog?sort=newest`, "Najnowsze"],
+        [`${sessionPath}/catalog?filter=duets`, "Duety"],
+        [`${sessionPath}/catalog?genre=Rock%20%26%20Roll`, "Rock & Roll"],
+      ] as const;
+      for (const [index, [path, heading]] of catalogRoutes.entries()) {
+        await expectCatalogRoute(page, path, heading, `198.18.0.${index + 2}`);
+      }
+
+      await page.setExtraHTTPHeaders({ "x-forwarded-for": "198.18.1.1" });
+
+      await page.goto(sessionPath);
+      await page.getByRole("link", { name: "Zobacz wszystkie gatunki" }).click();
+      await expect(page).toHaveURL(`${sessionPath}/catalog/genres`);
+      await page.getByRole("link", { name: `Rock, ${LOCAL_E2E_ROCK_SONG_COUNT} piosenek` }).click();
+      await expect(page).toHaveURL(`${sessionPath}/catalog?genre=rock`);
+      await page.goBack();
+      await expect(page).toHaveURL(`${sessionPath}/catalog/genres`);
+      await expect(page.getByRole("heading", { name: "Gatunki" })).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(sessionPath);
+      await expect(page.getByRole("link", { name: "Zobacz wszystkie gatunki" })).toBeVisible();
+
+      await page.setExtraHTTPHeaders({ "x-forwarded-for": "198.18.1.2" });
+      await page.goto(rockPath);
+      await page.getByRole("button", { name: "Wróć do gatunków" }).click();
+      await expect(page).toHaveURL(`${sessionPath}/catalog/genres`);
+
+      browseRequests.length = 0;
+      await page.setExtraHTTPHeaders({ "x-forwarded-for": "198.18.1.3" });
+      await page.goto(rockPath);
+      const catalogRows = page.locator('section[aria-labelledby="catalog-song-list-heading"] li');
+      await expect(catalogRows).toHaveCount(24);
+      await expect.poll(() => browseRequests.length).toBe(1);
+      const loadMore = page.getByRole("button", { name: "Załaduj więcej" });
+      await loadMore.scrollIntoViewIfNeeded();
+      const main = page.getByRole("main");
+      const scrollBeforeLoadMore = await main.evaluate((node) => node.scrollTop);
+      await loadMore.click();
+      await expect(catalogRows).toHaveCount(LOCAL_E2E_ROCK_SONG_COUNT);
+      expect(new Set(await catalogRows.allTextContents()).size).toBe(LOCAL_E2E_ROCK_SONG_COUNT);
+      expect(browseRequests).toHaveLength(2);
+      expect(browseRequests.filter((url) => url.searchParams.has("cursor"))).toHaveLength(1);
+      expect(await main.evaluate((node) => node.scrollTop)).toBeGreaterThanOrEqual(scrollBeforeLoadMore - 1);
+      await expect(loadMore).toHaveCount(0);
+
+      const catalogScrollPosition = await main.evaluate((node) => {
+        node.scrollTo({ top: 680 });
+        return node.scrollTop;
+      });
+      searchRequests.length = 0;
+      const searchbox = page.getByRole("searchbox");
+      await searchbox.fill("a");
+      await page.waitForTimeout(300);
+      expect(searchRequests).toHaveLength(0);
+      await searchbox.fill("");
+      await searchbox.pressSequentially("dancing queen", { delay: 10 });
+      await expect(page.getByRole("heading", { name: "„dancing queen”" })).toBeVisible();
+      await expect.poll(() => searchRequests.length).toBe(1);
+      expect(searchRequests[0]?.searchParams.get("q")).toBe("dancing queen");
+
+      await searchbox.fill("abba");
+      await searchbox.press("Enter");
+      await expect(page.getByRole("heading", { name: "„abba”" })).toBeVisible();
+      await expect.poll(() => searchRequests.length).toBe(2);
+      expect(searchRequests[1]?.searchParams.get("q")).toBe("abba");
+      await page.getByRole("button", { name: "Wróć do wyszukiwania" }).click();
+      await expect(page.getByRole("heading", { name: "Rock", exact: true })).toBeVisible();
+      await expect(catalogRows).toHaveCount(LOCAL_E2E_ROCK_SONG_COUNT);
+      expect(await main.evaluate((node) => node.scrollTop)).toBeGreaterThanOrEqual(catalogScrollPosition - 1);
+      expect(browseRequests).toHaveLength(2);
+
+      const browserRequestCountBeforeTabs = browseRequests.length;
+      const searchRequestCountBeforeTabs = searchRequests.length;
+      const realtimeConnectionsBeforeTabs = realtimeConnections;
+      await page.getByRole("tab", { name: /^Kolejka/ }).click();
+      await expect(page.locator("aside").getByText("Twoje", { exact: true })).toBeVisible();
+      await page.getByRole("tab", { name: /^Moje/ }).click();
+      await expect(participantRequestsSection(page).locator("[data-participant-request-id]")).toHaveCount(1);
+      await page.getByRole("tab", { name: /^Kolejka/ }).click();
+      expect(browseRequests).toHaveLength(browserRequestCountBeforeTabs);
+      expect(searchRequests).toHaveLength(searchRequestCountBeforeTabs);
+      expect(realtimeConnections).toBe(realtimeConnectionsBeforeTabs);
+
+      await page.getByRole("button", { name: /E2E Rock Song with an intentionally long title/ }).click();
+      await expect(page.getByText("E2E Rock Song with an intentionally long title for drawer overflow verification")).toBeVisible();
+      await page.getByRole("button", { name: "Zamknij szczegóły utworu" }).click();
+      await expect(catalogRows).toHaveCount(LOCAL_E2E_ROCK_SONG_COUNT);
+
+      const desktopScroll = await page.evaluate(() => ({
+        bodyScrollHeight: document.scrollingElement?.scrollHeight ?? 0,
+        viewportHeight: window.innerHeight,
+        leftOverflow: getComputedStyle(document.querySelector("main")!).overflowY,
+        rightOverflow: getComputedStyle(document.querySelector("aside .session-scrollbar")!).overflowY,
+      }));
+      expect(desktopScroll.bodyScrollHeight).toBeLessThanOrEqual(desktopScroll.viewportHeight + 1);
+      expect(desktopScroll.leftOverflow).toBe("auto");
+      expect(desktopScroll.rightOverflow).toBe("auto");
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.getByRole("button", { name: "Otwórz kolejkę" })).toBeVisible();
+      await page.getByRole("button", { name: "Otwórz kolejkę" }).click();
+      await expect(page.getByRole("tab", { name: /^Moje/ })).toBeVisible();
+      await page.getByRole("tab", { name: /^Moje/ }).click();
+      await expect(participantRequestsSection(page).locator("[data-participant-request-id]")).toHaveCount(1);
+      await page.getByRole("button", { name: "Zwiń kolejkę" }).click();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      expect(browserErrors).toEqual([]);
+    } finally {
+      await context.close();
     }
   });
 
@@ -449,12 +604,10 @@ test.describe("public event and session identity with local Supabase Auth", () =
       const participantName = "E2E Participant";
       await anonymousPage.getByLabel("Imię lub ksywka").fill(participantName);
       await anonymousPage
-        .getByRole("button", { name: "Dołącz do wydarzenia" })
+        .getByRole("button", { name: "Dołącz" })
         .click();
       await expect(anonymousPage.getByRole("searchbox")).toBeVisible();
-      await expect(
-        anonymousPage.getByText(`Dołączono jako ${participantName}`),
-      ).toBeVisible();
+      await expectParticipantProfileControl(anonymousPage);
 
       await submitParticipantSong(anonymousPage, "E2E Song");
       await expect
@@ -468,10 +621,9 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await expect(
         anonymousPage.getByRole("heading", { name: "Dołącz do sesji" }),
       ).toHaveCount(0);
-      await expect(
-        anonymousPage.getByText(`Dołączono jako ${participantName}`),
-      ).toBeVisible();
+      await expectParticipantProfileControl(anonymousPage);
 
+      await openMyRequests(anonymousPage);
       const myRequests = participantRequestsSection(anonymousPage);
       await expect(
         myRequests.locator("[data-participant-request-id]").filter({ hasText: "E2E Song" }),
@@ -497,13 +649,12 @@ test.describe("public event and session identity with local Supabase Auth", () =
       ).toBeVisible();
 
       const renamedParticipant = "E2E Renamed";
+      await openParticipantProfile(anonymousPage);
       await anonymousPage
-        .getByLabel("Zmień nazwę w tym wydarzeniu")
+        .getByLabel("Twój nick")
         .fill(renamedParticipant);
       await anonymousPage.getByRole("button", { name: "Zapisz" }).click();
-      await expect(
-        anonymousPage.getByText(`Dołączono jako ${renamedParticipant}`),
-      ).toBeVisible();
+      await expectParticipantProfileControl(anonymousPage);
 
       await submitParticipantSong(anonymousPage, "E2E Second Song");
       await expect
@@ -693,9 +844,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await expect(
         anonymousPage.getByRole("heading", { name: "Dołącz do sesji" }),
       ).toHaveCount(0);
-      await expect(
-        anonymousPage.getByText(`Dołączono jako ${renamedParticipant}`),
-      ).toBeVisible();
+      await expectParticipantProfileControl(anonymousPage);
 
       await page.goto(queuePath);
       await expect(
@@ -734,20 +883,67 @@ function observeBrowserErrors(
   });
 }
 
+async function expectCatalogRoute(
+  page: import("@playwright/test").Page,
+  path: string,
+  heading: string,
+  clientIp: string,
+) {
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": clientIp });
+  const response = await page.goto(path);
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  await expect(page.locator('aside[aria-label="Kolejka sesji"]')).toBeVisible();
+  const refreshResponse = await page.reload();
+  expect(refreshResponse?.status()).toBe(200);
+  await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  await expect(page.locator('aside[aria-label="Kolejka sesji"]')).toBeVisible();
+}
+
+async function expectDiscoveryRoute(
+  page: import("@playwright/test").Page,
+  path: string,
+  clientIp: string,
+) {
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": clientIp });
+  const response = await page.goto(path);
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole("link", { name: "Zobacz wszystkie gatunki" })).toBeVisible();
+  await expect(page.locator('aside[aria-label="Kolejka sesji"]')).toBeVisible();
+  const refreshResponse = await page.reload();
+  expect(refreshResponse?.status()).toBe(200);
+  await expect(page.getByRole("link", { name: "Zobacz wszystkie gatunki" })).toBeVisible();
+  await expect(page.locator('aside[aria-label="Kolejka sesji"]')).toBeVisible();
+}
+
 async function submitParticipantSong(
   page: import("@playwright/test").Page,
   title: string,
 ) {
   const search = page.getByRole("searchbox");
   await search.fill(title);
-  await page.getByRole("button", { name: "Szukaj" }).click();
+  await expect(page.getByRole("heading", { name: `„${title}”` })).toBeVisible();
   await page.getByRole("button", { name: new RegExp(title) }).click();
   await page.getByRole("button", { name: "Dodaj do kolejki" }).click();
+  await openMyRequests(page);
   await expect(
     participantRequestsSection(page)
       .locator("[data-participant-request-id]")
       .filter({ hasText: title }),
   ).toBeVisible();
+}
+
+async function openMyRequests(page: import("@playwright/test").Page) {
+  await page.getByRole("tab", { name: /^Moje/ }).click();
+}
+
+async function expectParticipantProfileControl(page: import("@playwright/test").Page) {
+  await expect(page.getByRole("button", { name: "Zmień swój nick" })).toBeVisible();
+}
+
+async function openParticipantProfile(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "Zmień swój nick" }).click();
+  await expect(page.getByLabel("Twój nick")).toBeVisible();
 }
 
 function participantRequestsSection(page: import("@playwright/test").Page) {

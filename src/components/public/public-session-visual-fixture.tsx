@@ -8,7 +8,8 @@ import { ParticipantProfileDrawer } from "./participant-profile-drawer";
 import { SessionQueuePanel } from "./session-queue-panel";
 import { SessionSearchResults } from "./session-search-results";
 import { SessionDiscoveryHome } from "./session-discovery-home";
-import { SessionGenreResults } from "./session-genre-results";
+import { SessionCatalogGenres } from "./session-catalog-genres";
+import { CatalogSongList } from "./catalog-song-list";
 import { SessionShellHeader } from "./session-shell-header";
 import { SongDetailsDrawer } from "./song-details-drawer";
 import { SessionSongArtwork } from "./session-song-artwork";
@@ -39,6 +40,19 @@ export type PublicSessionVisualFixtureState =
   | "song-details-submitting"
   | "song-details-error"
   | "artwork-gallery"
+  | "catalog-genres"
+  | "catalog-genre-results"
+  | "catalog-genre-loaded-more"
+  | "catalog-load-more-loading"
+  | "catalog-load-more-error"
+  | "catalog-hits"
+  | "catalog-newest"
+  | "catalog-duets"
+  | "catalog-empty"
+  | "live-search-loading"
+  | "queue-my-requests"
+  | "queue-my-requests-empty"
+  | "long-song-details"
   // Legacy aliases retained for existing visual-fixture links.
   | "song-details-loading"
   | "search-no-results";
@@ -90,6 +104,18 @@ const fixtureQueueEmpty = {
   showSongTitles: true,
   items: [],
 };
+
+const fixtureParticipantRequests = [
+  {
+    id: "fixture-request",
+    title: "Dancing Queen",
+    artist: "ABBA",
+    status: "pending" as const,
+    queuePosition: null,
+    isNext: false,
+    createdAt: "2026-09-15T18:00:00.000Z",
+  },
+];
 
 const fixtureSongs: PublicSong[] = [
   {
@@ -225,6 +251,12 @@ const fixtureMinimalDiscovery = {
   features: { duetCount: 0, hitCount: 0, plusCount: 0 },
 };
 
+const fixtureBrowseSongs = fixtureSongs.map((song) => ({
+  ...song,
+  genres: ["Rock"],
+  languages: ["Polski"],
+}));
+
 export function PublicSessionVisualFixture({
   state,
 }: {
@@ -281,13 +313,9 @@ function ParticipantSessionFixture({
   initialState: Exclude<PublicSessionVisualFixtureState, "pre-join">;
 }) {
   const [isQueueOpen, setIsQueueOpen] = useState(
-    ["queue", "queue-current", "queue-mobile-expanded", "queue-mobile-long", "queue-mobile-empty"].includes(initialState),
+    ["queue", "queue-current", "queue-mobile-expanded", "queue-mobile-long", "queue-mobile-empty", "queue-my-requests", "queue-my-requests-empty"].includes(initialState),
   );
   const [isProfileOpen, setIsProfileOpen] = useState(initialState === "profile");
-  const [isCategoryView, setIsCategoryView] = useState(
-    initialState === "category-genre-results",
-  );
-  const [selectedGenre, setSelectedGenre] = useState(fixtureDiscovery.genres[0]!);
   const [nickname, setNickname] = useState("Ola");
   const isDiscoveryFixture = [
     "main",
@@ -309,13 +337,10 @@ function ParticipantSessionFixture({
     "search-results",
     "search-loading",
     "search-empty",
-    "song-details",
-    "song-details-submitting",
-    "song-details-error",
-    "song-details-loading",
+    "live-search-loading",
     "search-no-results",
   ].includes(initialState);
-  const isSearchLoading = initialState === "search-loading";
+  const isSearchLoading = initialState === "search-loading" || initialState === "live-search-loading";
   const isSearchEmpty =
     initialState === "search-empty" || initialState === "search-no-results";
   const isSongDetailsFixture = [
@@ -323,13 +348,18 @@ function ParticipantSessionFixture({
     "song-details-submitting",
     "song-details-error",
     "song-details-loading",
+    "long-song-details",
   ].includes(initialState);
   const isSongDetailsSubmitting =
     initialState === "song-details-submitting" ||
     initialState === "song-details-loading";
   const [searchTerm, setSearchTerm] = useState(isSearchFixture ? "Abba" : "");
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(
-    isSongDetailsFixture ? fixtureSongs[0] : null,
+    isSongDetailsFixture
+      ? initialState === "long-song-details"
+        ? fixtureSongs[7]
+        : fixtureSongs[0]
+      : null,
   );
   const [isSongDetailsOpen, setIsSongDetailsOpen] =
     useState(isSongDetailsFixture);
@@ -355,9 +385,8 @@ function ParticipantSessionFixture({
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <div className="flex min-h-dvh max-h-dvh flex-col overflow-hidden">
+      <div className="flex min-h-dvh flex-col lg:max-h-dvh lg:overflow-hidden">
         <SessionShellHeader
-          isSearching={isSearchLoading}
           isSubmitting={isAddingSong}
           onOpenProfile={() => setIsProfileOpen(true)}
           onSearch={handleSearch}
@@ -371,18 +400,31 @@ function ParticipantSessionFixture({
         />
 
         <div className="flex min-h-0 flex-1">
-        <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0">
         <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
-          {isCategoryView ? (
-            <SessionGenreResults
-              genre={selectedGenre}
-              initialSongs={fixtureSongs}
-              onBack={() => setIsCategoryView(false)}
-              onSongSelect={(song) => {
-                setSelectedSong(song);
-                setIsQueueOpen(false);
-                setIsSongDetailsOpen(true);
-              }}
+          {initialState === "catalog-genres" ? (
+            <SessionCatalogGenres genres={fixtureDiscovery.genres} onBack={() => undefined} sessionToken="visual-fixture-session-token" />
+          ) : initialState.startsWith("catalog-") ? (
+            <CatalogSongList
+              backLabel="Wróć"
+              forceLoadMoreLoading={initialState === "catalog-load-more-loading"}
+              heading={initialState === "catalog-hits" ? "Hity" : initialState === "catalog-newest" ? "Najnowsze" : initialState === "catalog-duets" ? "Duety" : "Rock"}
+              initialItems={initialState === "catalog-empty" ? [] : fixtureBrowseSongs}
+              initialLoadMoreError={initialState === "catalog-load-more-error" ? "Nie udało się wczytać kolejnych utworów." : null}
+              initialNextCursor={initialState === "catalog-genre-results" || initialState === "catalog-empty" ? null : "fixture-cursor"}
+              input={{ genre: "Rock" }}
+              onBack={() => undefined}
+              onSongSelect={(song) => { setSelectedSong(song); setIsSongDetailsOpen(true); }}
+              sessionToken="visual-fixture-session-token"
+            />
+          ) : initialState === "category-genre-results" ? (
+            <CatalogSongList
+              backLabel="Wróć do gatunków"
+              heading="Pop"
+              initialItems={fixtureBrowseSongs}
+              input={{ genre: "pop" }}
+              onBack={() => undefined}
+              onSongSelect={(song) => { setSelectedSong(song); setIsSongDetailsOpen(true); }}
               sessionToken="visual-fixture-session-token"
             />
           ) : isDiscoveryFixture ? (
@@ -408,10 +450,6 @@ function ParticipantSessionFixture({
                 setSelectedSong(song);
                 setIsQueueOpen(false);
                 setIsSongDetailsOpen(true);
-              }}
-              onGenreSelect={(genre) => {
-                setSelectedGenre(genre);
-                setIsCategoryView(true);
               }}
               sessionToken="visual-fixture-session-token"
             />
@@ -444,6 +482,10 @@ function ParticipantSessionFixture({
           open={isQueueOpen}
           queue={fixtureQueueState}
           refreshing={false}
+          defaultTab={initialState === "queue-my-requests" || initialState === "queue-my-requests-empty" ? "mine" : "queue"}
+          participantDisplayName="Ola"
+          participantRequests={initialState === "queue-my-requests-empty" ? [] : fixtureParticipantRequests}
+          participantRequestsMessage={null}
         />
         </div>
 

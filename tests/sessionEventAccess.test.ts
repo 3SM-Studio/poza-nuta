@@ -323,8 +323,8 @@ test("session API remains anonymous, identity-scoped and rate limited", () => {
   assert.doesNotMatch(legacyMutation, /request\.json|createSessionRequest/);
 });
 
-test("canonical session page and code resolver provide safe states", () => {
-  const page = readFileSync("src/app/s/[token]/page.tsx", "utf8");
+test("canonical session layout and code resolver provide safe states", () => {
+  const page = readFileSync("src/app/s/[token]/layout.tsx", "utf8");
   const resolver = readFileSync(
     "src/server/session-api/code-resolver-response.ts",
     "utf8",
@@ -361,10 +361,9 @@ test("song discovery does not burst concurrent catalog queries", () => {
   assert.match(discoverySource, /const featureRows = await getDb\(\)/);
 });
 
-test("canonical session pages reuse one resolved session lookup", () => {
+test("canonical session layout reuses one resolved session lookup for every catalog route", () => {
   for (const pagePath of [
-    "src/app/s/[token]/page.tsx",
-    "src/app/s/[token]/songs/page.tsx",
+    "src/app/s/[token]/layout.tsx",
   ]) {
     const page = readFileSync(pagePath, "utf8");
 

@@ -7,7 +7,7 @@ wyklucza podstawowy flow karaoke: „nie wiem jeszcze, co zaśpiewać”.
 
 ## Goals
 
-- udostępnić pełny, stronicowany katalog pod `/s/[token]/songs`;
+- udostępnić pełny, stronicowany katalog pod `/s/[token]/catalog`;
 - pozwolić przeglądać katalog bez zapytania tekstowego;
 - zachować wyszukiwanie po tytule lub wykonawcy;
 - udostępnić filtry wyłącznie dla istniejących, użytecznych danych;
@@ -24,8 +24,9 @@ wyklucza podstawowy flow karaoke: „nie wiem jeszcze, co zaśpiewać”.
 
 ## Routes
 
-- `GET /s/[token]` — mały teaser „Odkrywaj” oraz wejście do katalogu;
-- `GET /s/[token]/songs` — mobilny katalog, filtry i bezpośrednie zgłoszenie;
+- `GET /s/[token]` — discovery i globalne wyszukiwanie sesji;
+- `GET /s/[token]/catalog/genres` — pełny wybór rzeczywistych gatunków;
+- `GET /s/[token]/catalog` — wspólna lista katalogu filtrowana parametrami `genre`, `filter` lub `sort`;
 - `GET /api/s/[token]/songs/browse` — bounded, keyset-paginated catalog API;
 - `GET /api/s/[token]/songs/discovery` — lekkie metadane kategorii i cech.
 
@@ -82,10 +83,10 @@ nie jest używane do dekad ani filtrów roku.
 ## Lifecycle and request integration
 
 Browse i discovery wymagają tego samego live event + `songRequestsEnabled`
-kontraktu co aktualne wyszukiwanie. Strona `/songs` zachowuje istniejący join
-gate; wysłanie zgłoszenia zawsze wymaga HttpOnly participant credential.
+kontraktu co aktualne wyszukiwanie. Session-scoped katalog zachowuje istniejący
+join gate; wysłanie zgłoszenia zawsze wymaga HttpOnly participant credential.
 
-CTA „Zgłoś” wywołuje wyłącznie `POST /api/s/[token]/requests`. Wykorzystuje
+CTA „Dodaj do kolejki” w szczegółach utworu wywołuje wyłącznie `POST /api/s/[token]/requests`. Wykorzystuje
 istniejące ownership, duplicate protection, safe errors oraz broadcast
 `queue_changed`. Nie ma drugiego systemu requestów ani nowego topicu Realtime.
 

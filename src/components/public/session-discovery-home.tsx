@@ -12,7 +12,7 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { PublicSong, SessionSongDiscovery, SongDiscoveryCategory } from "./api";
+import type { PublicSong, SessionSongDiscovery } from "./api";
 import { browseSessionSongs } from "./session-api";
 import { SessionSongArtwork } from "./session-song-artwork";
 
@@ -32,7 +32,6 @@ type SessionDiscoveryHomeProps = {
   sessionToken: string;
   discovery: SessionSongDiscovery;
   onSongSelect: (song: PublicSong) => void;
-  onGenreSelect?: (genre: SongDiscoveryCategory) => void;
   initialSongSections?: Partial<Record<SongSectionKey, PublicSong[]>>;
   forceLoading?: boolean;
   forceMinimal?: boolean;
@@ -52,7 +51,6 @@ export function SessionDiscoveryHome({
   sessionToken,
   discovery,
   onSongSelect,
-  onGenreSelect,
   initialSongSections,
   forceLoading = false,
   forceMinimal = false,
@@ -115,12 +113,11 @@ export function SessionDiscoveryHome({
       {hasGenres ? (
         <DiscoverySection
           title="Gatunki"
-          moreHref={buildBrowseHref(sessionToken)}
+          moreHref={buildCatalogHref(sessionToken, "genres")}
           moreLabel="Zobacz wszystkie gatunki"
         >
           <GenreCarousel
             genres={discovery.genres}
-            onGenreSelect={onGenreSelect}
             sessionToken={sessionToken}
           />
         </DiscoverySection>
@@ -132,7 +129,7 @@ export function SessionDiscoveryHome({
           <DiscoverySection
             key={section.key}
             title={section.title}
-            moreHref={buildBrowseHref(sessionToken, section.input)}
+            moreHref={buildCatalogHref(sessionToken, "catalog", section.input)}
             moreLabel={`Zobacz więcej: ${section.title}`}
           >
             {forceLoading || state?.status === "loading" || !state ? (
@@ -180,6 +177,7 @@ function DiscoverySection({
             aria-label={moreLabel}
             className="shrink-0 text-sm font-bold text-primary transition-colors hover:text-primary-hover focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             href={moreHref}
+            prefetch={false}
           >
             Więcej
           </Link>
@@ -193,11 +191,9 @@ function DiscoverySection({
 function GenreCarousel({
   genres,
   sessionToken,
-  onGenreSelect,
 }: {
-  genres: SongDiscoveryCategory[];
+  genres: SessionSongDiscovery["genres"];
   sessionToken: string;
-  onGenreSelect?: (genre: SongDiscoveryCategory) => void;
 }) {
   return (
     <Carousel aria-label="Karuzela gatunków" opts={{ dragFree: true }}>
@@ -209,15 +205,10 @@ function GenreCarousel({
           >
             <GenreDiscoveryCard
               href={
-                onGenreSelect
-                  ? undefined
-                  : buildBrowseHref(sessionToken, { genre: genre.value })
+                buildCatalogHref(sessionToken, "catalog", { genre: genre.value })
               }
               icon={index % 2 === 0 ? Disc3 : Sparkles}
               index={index}
-              onClick={
-                onGenreSelect ? () => onGenreSelect(genre) : undefined
-              }
               subtitle={`${genre.count} piosenek`}
               title={genre.label}
             />
@@ -266,14 +257,12 @@ function GenreDiscoveryCard({
   index,
   icon: Icon,
   href,
-  onClick,
 }: {
   title: string;
   subtitle: string;
   index: number;
   icon: LucideIcon;
-  href?: string;
-  onClick?: () => void;
+  href: string;
 }) {
   const className = `group relative flex aspect-square w-full overflow-hidden rounded-xl bg-gradient-to-br ${CARD_GRADIENTS[index % CARD_GRADIENTS.length]} p-3 text-left text-primary-foreground shadow-[0_12px_28px_oklch(0_0_0_/_28%)] transition-transform duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/60`;
   const content = (
@@ -291,18 +280,15 @@ function GenreDiscoveryCard({
     </>
   );
 
-  if (href) {
-    return (
-      <Link aria-label={`${title}, ${subtitle}`} className={className} href={href}>
-        {content}
-      </Link>
-    );
-  }
-
   return (
-    <button aria-label={`${title} — ${subtitle}`} className={className} onClick={onClick} type="button">
+    <Link
+      aria-label={`${title}, ${subtitle}`}
+      className={className}
+      href={href}
+      prefetch={false}
+    >
       {content}
-    </button>
+    </Link>
   );
 }
 
@@ -359,7 +345,8 @@ function DiscoveryMinimalState({ sessionToken }: { sessionToken: string }) {
       </p>
       <Link
         className="mt-4 inline-flex text-sm font-bold text-primary underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        href={buildBrowseHref(sessionToken)}
+        href={buildCatalogHref(sessionToken, "genres")}
+        prefetch={false}
       >
         Przeglądaj piosenki
       </Link>
@@ -394,17 +381,21 @@ function getEnabledSongSections(discovery: SessionSongDiscovery) {
   return sections;
 }
 
-function buildBrowseHref(
+function buildCatalogHref(
   sessionToken: string,
+  destination: "genres" | "catalog",
   input: { genre?: string; hit?: boolean; duet?: boolean; sort?: "newest"; limit?: number } = {},
 ) {
+  if (destination === "genres") {
+    return `/s/${encodeURIComponent(sessionToken)}/catalog/genres`;
+  }
   const searchParams = new URLSearchParams();
   if (input.genre) searchParams.set("genre", input.genre);
-  if (input.hit) searchParams.set("hit", "true");
-  if (input.duet) searchParams.set("duet", "true");
+  if (input.hit) searchParams.set("filter", "hits");
+  if (input.duet) searchParams.set("filter", "duets");
   if (input.sort) searchParams.set("sort", input.sort);
   const query = searchParams.toString();
-  return `/s/${encodeURIComponent(sessionToken)}/songs${query ? `?${query}` : ""}`;
+  return `/s/${encodeURIComponent(sessionToken)}/catalog${query ? `?${query}` : ""}`;
 }
 
 function slugify(value: string) {

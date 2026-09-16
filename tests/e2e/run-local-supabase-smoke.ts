@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -13,6 +13,10 @@ const SHADOW_DB_PORT = 55430;
 const ANALYTICS_PORT = 55437;
 const NEXT_DIST_DIRECTORY = ".next-p3-e2e";
 const PLAYWRIGHT_OUTPUT_DIRECTORY = ".playwright-p3-e2e";
+const PLAYWRIGHT_FAILURES_DIRECTORY = join(
+  "test-results",
+  "local-e2e-failures",
+);
 const LOCAL_ORIGIN = `http://localhost:${APP_PORT}`;
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
 
@@ -64,6 +68,7 @@ try {
   const localEnvironment = {
     ...process.env,
     DATABASE_URL: databaseUrl,
+    DIRECT_URL: databaseUrl,
     E2E_BASE_URL: LOCAL_ORIGIN,
     LOCAL_E2E_APP_PORT: String(APP_PORT),
     LOCAL_E2E_DATABASE_URL: databaseUrl,
@@ -78,15 +83,7 @@ try {
   await runVisible("pnpm.cmd", ["db:migrate"], localEnvironment);
 
   console.log("[local-e2e] Running authenticated and public Playwright smoke.");
-  await runVisible(
-    "node_modules\\.bin\\playwright.cmd",
-    [
-      "test",
-      "--config=playwright.local-supabase.config.ts",
-      "--workers=1",
-    ],
-    localEnvironment,
-  );
+  await runPlaywright(localEnvironment);
 } finally {
   console.log("[local-e2e] Removing isolated Supabase containers and data.");
   await runSupabaseHidden(
@@ -102,6 +99,51 @@ try {
     force: true,
   });
   await rm(projectRoot, { recursive: true, force: true });
+}
+
+async function runPlaywright(environment: NodeJS.ProcessEnv) {
+  const grep = process.env.LOCAL_E2E_PLAYWRIGHT_GREP?.trim();
+  const result = await runCaptured(
+    "node_modules\\.bin\\playwright.cmd",
+    [
+      "test",
+      "--config=playwright.local-supabase.config.ts",
+      "--workers=1",
+      ...(grep ? ["--grep", grep] : []),
+    ],
+    environment,
+  );
+
+  if (result.exitCode === 0) {
+    process.stdout.write(result.stdout);
+    process.stderr.write(result.stderr);
+    return;
+  }
+
+  const diagnosticsPath = await retainPlaywrightFailureArtifacts();
+  console.error(
+    `[local-e2e] Playwright failed. Diagnostics retained at ${diagnosticsPath}`,
+  );
+  const diagnostic = sanitizeCommandFailure(`${result.stderr}\n${result.stdout}`);
+  throw new Error(
+    `Playwright failed with exit code ${result.exitCode}. Diagnostics: ${diagnosticsPath}.${diagnostic ? ` ${diagnostic}` : ""}`,
+  );
+}
+
+async function retainPlaywrightFailureArtifacts() {
+  const timestamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
+  const destination = join(
+    repoRoot,
+    PLAYWRIGHT_FAILURES_DIRECTORY,
+    timestamp,
+  );
+  await mkdir(destination, { recursive: true });
+  await cp(
+    join(repoRoot, PLAYWRIGHT_OUTPUT_DIRECTORY),
+    join(destination, PLAYWRIGHT_OUTPUT_DIRECTORY),
+    { recursive: true, force: true },
+  );
+  return destination;
 }
 
 function createLocalSupabaseConfig() {

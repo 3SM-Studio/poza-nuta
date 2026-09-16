@@ -1587,7 +1587,6 @@ test("session queue uses Supabase Realtime invalidation without data polling", (
   assert.match(hookSource, /new AbortController\(\)/);
   assert.equal(sessionPageSource.includes("public-queue-polling"), false);
   assert.equal(sessionPageSource.includes("setInterval"), false);
-  assert.equal(sessionPageSource.includes("setTimeout"), false);
 });
 
 test("dashboard routes expose skeleton loading fallbacks", () => {

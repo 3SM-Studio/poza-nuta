@@ -160,6 +160,22 @@ body {
   margin: 0;
 }
 
+.session-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 48%, transparent) transparent;
+}
+
+.session-scrollbar::-webkit-scrollbar {
+  width: 7px;
+}
+
+.session-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 42%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
 ::selection {
   background: var(--selection-bg);
   color: var(--primary-foreground);

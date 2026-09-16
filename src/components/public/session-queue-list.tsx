@@ -13,6 +13,7 @@ type SessionQueueListProps = {
   queue: PublicQueueResponse | null;
   refreshing: boolean;
   onRefresh: () => void;
+  ownSingerName?: string;
 };
 
 export function SessionQueueList({
@@ -21,6 +22,7 @@ export function SessionQueueList({
   queue,
   refreshing,
   onRefresh,
+  ownSingerName,
 }: SessionQueueListProps) {
   const headingId = useId();
   const itemCount = queue?.items.length ?? 0;
@@ -70,7 +72,12 @@ export function SessionQueueList({
                 song={{ id: item.id, title: item.title, artist: item.artist }}
               />
               <div className="min-w-0">
-                <p className="mb-1 text-[0.68rem] font-extrabold tracking-[0.08em] text-primary uppercase">#{item.position}</p>
+                <div className="mb-1 flex items-center gap-2">
+                  <p className="text-[0.68rem] font-extrabold tracking-[0.08em] text-primary uppercase">#{item.position}</p>
+                  {ownSingerName && item.singerName === ownSingerName ? (
+                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.62rem] font-extrabold tracking-[0.07em] text-primary uppercase">Twoje</span>
+                  ) : null}
+                </div>
                 {queue.showSongTitles && item.title ? (
                   <>
                     <h2 className="truncate text-base font-bold tracking-[-0.02em]">{item.title}</h2>

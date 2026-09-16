@@ -58,11 +58,11 @@ describe("session discovery home", () => {
     expect(screen.queryByText("Popularne")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pop, 120 piosenek" })).toHaveAttribute(
       "href",
-      "/s/AbCdEfGhIjKlMnOpQrStUv/songs?genre=pop",
+      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog?genre=pop",
     );
     expect(screen.getByRole("link", { name: "Zobacz więcej: Najnowsze" })).toHaveAttribute(
       "href",
-      "/s/AbCdEfGhIjKlMnOpQrStUv/songs?sort=newest",
+      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog?sort=newest",
     );
   });
 
@@ -83,24 +83,6 @@ describe("session discovery home", () => {
     fireEvent.click(card!);
     expect(onSongSelect).toHaveBeenCalledWith(songs[0]);
     expect(screen.getAllByRole("button", { name: "Następne elementy" }).length).toBeGreaterThan(0);
-  });
-
-  it("uses the in-session genre action when one is provided", () => {
-    const onGenreSelect = vi.fn();
-    render(
-      <SessionDiscoveryHome
-        discovery={discovery}
-        initialSongSections={{ hits: songs, newest: songs, duets: songs }}
-        onGenreSelect={onGenreSelect}
-        onSongSelect={vi.fn()}
-        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
-      />,
-    );
-
-    const pop = screen.getByRole("button", { name: "Pop — 120 piosenek" });
-    expect(pop).not.toHaveAttribute("href");
-    fireEvent.click(pop);
-    expect(onGenreSelect).toHaveBeenCalledWith(discovery.genres[0]);
   });
 
   it("uses loading geometry and a real minimal state when optional metadata is absent", () => {
@@ -132,7 +114,7 @@ describe("session discovery home", () => {
     expect(screen.getByRole("heading", { name: "Odkrywaj katalog" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Przeglądaj piosenki" })).toHaveAttribute(
       "href",
-      "/s/AbCdEfGhIjKlMnOpQrStUv/songs",
+      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog/genres",
     );
   });
 });
