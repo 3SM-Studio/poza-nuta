@@ -1,6 +1,12 @@
+import type { ISingApiSong } from "./ising-client.ts";
 import { normalizeSongSearchText } from "./karafun-mapping.ts";
 
-export type ISingApiSong = Record<string, unknown>;
+export type { ISingApiSong } from "./ising-client.ts";
+
+export type ISingMetadataEnrichment = {
+  languagesBySourceSongId: ReadonlyMap<string, ReadonlySet<string>>;
+  duetSourceSongIds: ReadonlySet<string>;
+};
 
 export type ISingSongPayload = {
   source: "ising";
@@ -25,10 +31,14 @@ export type ISingSongPayload = {
 };
 
 export function mapISingSongToSong(
-  song: ISingApiSong,
+  rawSong: unknown,
   checkedAt = new Date(),
+  enrichment?: ISingMetadataEnrichment,
 ): ISingSongPayload | null {
-  const sourceSongId = getStableId(song);
+  const song = asISingApiSong(rawSong);
+  if (!song) return null;
+
+  const sourceSongId = getISingSourceSongId(song);
   const title = getTrimmedString(song.title);
   const artist = getTrimmedString(song.artist);
 
@@ -37,11 +47,10 @@ export function mapISingSongToSong(
   }
 
   const subtitle = getTrimmedString(song.subtitle);
-  const genres = getStringList(song.genre ?? song.genres);
-  const languages = getStringList(song.language ?? song.languages);
+  const genres = getStringList(song.genre);
+  const languages = getEnrichedLanguages(enrichment, sourceSongId);
   const durationSeconds = getPositiveInteger(song.duration);
-  const isDuet = getBoolean(song.duet ?? song.is_duet);
-  const isExplicit = getBoolean(song.explicit ?? song.is_explicit);
+  const isDuet = enrichment?.duetSourceSongIds.has(sourceSongId) ?? false;
   const isPlus = getBoolean(song.plus);
   const isHit = getBoolean(song.hit);
   const sourceUrl = getSourceUrl(song);
@@ -53,7 +62,6 @@ export function mapISingSongToSong(
       ...genres,
       ...languages,
       isDuet ? "duet duo" : null,
-      isExplicit ? "explicit" : null,
       isPlus ? "plus" : null,
       isHit ? "hit" : null,
     ]
@@ -73,7 +81,8 @@ export function mapISingSongToSong(
     genres,
     languages,
     isDuet,
-    isExplicit,
+    // The verified /v2/search payload has no explicit-content field.
+    isExplicit: false,
     isPlus,
     isHit,
     sourceUrl,
@@ -84,7 +93,10 @@ export function mapISingSongToSong(
   };
 }
 
-function getStableId(song: ISingApiSong) {
+export function getISingSourceSongId(rawSong: unknown) {
+  const song = asISingApiSong(rawSong);
+  if (!song) return null;
+
   const id = song.id ?? song.song_id ?? song.songId;
 
   if (typeof id === "number" && Number.isFinite(id)) {
@@ -92,6 +104,24 @@ function getStableId(song: ISingApiSong) {
   }
 
   return getTrimmedString(id);
+}
+
+function asISingApiSong(value: unknown): ISingApiSong | null {
+  return typeof value === "object" && value !== null
+    ? (value as ISingApiSong)
+    : null;
+}
+
+function getEnrichedLanguages(
+  enrichment: ISingMetadataEnrichment | undefined,
+  sourceSongId: string,
+) {
+  const values = enrichment?.languagesBySourceSongId.get(sourceSongId);
+  if (!values) return [];
+
+  return Array.from(values)
+    .filter((value) => value.trim().length > 0)
+    .sort((left, right) => left.localeCompare(right, "en-US"));
 }
 
 function getTrimmedString(value: unknown) {
@@ -145,10 +175,9 @@ function getSourceUrl(song: ISingApiSong) {
     return null;
   }
 
-  const linkRecord = links as Record<string, unknown>;
   return (
-    getTrimmedString(linkRecord.permalink) ??
-    getTrimmedString(linkRecord.selflink) ??
+    getTrimmedString(links.permalink) ??
+    getTrimmedString(links.selflink) ??
     null
   );
 }

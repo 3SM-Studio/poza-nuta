@@ -4,6 +4,7 @@ import {
   loadISingAdapterOptions,
   maximumISingBatchSize,
   runISingImportAdapter,
+  type ISingImportDiagnostics,
   type ISingImportOptions,
   type ISingImportSummary,
 } from "./ising-import-adapter.ts";
@@ -33,13 +34,16 @@ export function loadISingImportOptions(
 async function main() {
   const options = loadISingImportOptions(process.env, process.argv.slice(2));
   const outcome = await runISingImportAdapter(options);
-  printSummary(outcome.summary);
+  printSummary(outcome.summary, outcome.diagnostics);
   if (outcome.status !== "completed") {
     throw new Error("The iSing dry-run stopped before completion.");
   }
 }
 
-function printSummary(summary: ISingImportSummary) {
+function printSummary(
+  summary: ISingImportSummary,
+  diagnostics: ISingImportDiagnostics | undefined,
+) {
   console.log("iSing import summary");
   console.log(`mode=${summary.mode}`);
   console.log(`pages=${summary.pages}`);
@@ -48,6 +52,55 @@ function printSummary(summary: ISingImportSummary) {
   console.log(`updated=${summary.updated}`);
   console.log(`skipped=${summary.skipped}`);
   console.log(`errors=${summary.errors}`);
+  if (!diagnostics) return;
+
+  console.log(`enrichment_status=${diagnostics.enrichmentStatus}`);
+  console.log(`requests=${diagnostics.requestCount}`);
+  console.log(`base_found=${diagnostics.baseCatalog.found}`);
+  console.log(`base_source_song_ids=${diagnostics.baseCatalog.sourceSongIds}`);
+  console.log(
+    `base_complete=${diagnostics.baseCatalog.complete ? "true" : "false"}`,
+  );
+  for (const language of diagnostics.languageFilters) {
+    console.log(
+      `language_filter=${language.code} found=${language.found} source_song_ids=${language.sourceSongIds} canonical=${language.canonicalLanguage ?? "unmapped"}`,
+    );
+  }
+  console.log(`duet_source_song_ids=${diagnostics.duetMembership.sourceSongIds}`);
+  console.log(
+    `canonical_language_source_song_ids=${diagnostics.coverage.canonicalLanguageSourceSongIds}`,
+  );
+  console.log(
+    `unmatched_canonical_language_source_song_ids=${diagnostics.coverage.unmatchedCanonicalLanguageSourceSongIds}`,
+  );
+  console.log(
+    `multi_language_source_song_ids=${diagnostics.coverage.multiLanguageSourceSongIds}`,
+  );
+  console.log(
+    `all_language_filter_source_song_ids=${diagnostics.coverage.allLanguageFilterSourceSongIds}`,
+  );
+  console.log(
+    `source_song_ids_outside_language_filters=${diagnostics.coverage.sourceSongIdsOutsideLanguageFilters}`,
+  );
+  console.log(
+    `overlapping_language_filter_source_song_ids=${diagnostics.coverage.overlappingLanguageFilterSourceSongIds}`,
+  );
+  console.log(`mapped_songs=${diagnostics.mappedMetadata.validMappedSongs}`);
+  console.log(
+    `songs_with_languages=${diagnostics.mappedMetadata.songsWithLanguages}`,
+  );
+  console.log(
+    `songs_with_multiple_languages=${diagnostics.mappedMetadata.songsWithMultipleLanguages}`,
+  );
+  console.log(`duets=${diagnostics.mappedMetadata.duetSongs}`);
+  console.log(`hits=${diagnostics.mappedMetadata.hitSongs}`);
+  console.log(`plus=${diagnostics.mappedMetadata.plusSongs}`);
+  console.log(
+    `duration_populated=${diagnostics.mappedMetadata.durationPopulatedSongs}`,
+  );
+  console.log(
+    `genres_populated=${diagnostics.mappedMetadata.genresPopulatedSongs}`,
+  );
 }
 
 function parseCliOptions(args: string[]) {
