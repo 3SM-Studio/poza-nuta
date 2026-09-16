@@ -13,6 +13,11 @@ test("the public session visual fixture is dynamic and production-gated", () => 
   assert.match(source, /process\.env\.POZA_NUTA_VISUAL_FIXTURE !== "1"/);
   assert.match(source, /notFound\(\)/);
   assert.match(source, /"pre-join"/);
+  assert.match(source, /"discovery"/);
+  assert.match(source, /"discovery-loading"/);
+  assert.match(source, /"discovery-minimal"/);
+  assert.match(source, /"discovery-network"/);
+  assert.match(source, /"category-genre-results"/);
   assert.match(source, /"profile"/);
   assert.match(source, /"queue"/);
   assert.match(source, /"queue-current"/);

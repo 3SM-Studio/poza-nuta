@@ -11,6 +11,11 @@ export const revalidate = 0;
 const fixtureStates = new Set<PublicSessionVisualFixtureState>([
   "pre-join",
   "main",
+  "discovery",
+  "discovery-loading",
+  "discovery-network",
+  "discovery-minimal",
+  "category-genre-results",
   "profile",
   "queue",
   "queue-current",

@@ -2,18 +2,24 @@
 
 import { useState, type FormEvent } from "react";
 
-import { Button } from "@/components/ui/button";
 import type { PublicSong } from "./api";
 import { ParticipantJoinGate } from "./participant-join-gate";
 import { ParticipantProfileDrawer } from "./participant-profile-drawer";
 import { SessionQueueList } from "./session-queue-list";
 import { SessionSearchResults } from "./session-search-results";
+import { SessionDiscoveryHome } from "./session-discovery-home";
+import { SessionGenreResults } from "./session-genre-results";
 import { SessionShellHeader } from "./session-shell-header";
 import { SongDetailsDrawer } from "./song-details-drawer";
 
 export type PublicSessionVisualFixtureState =
   | "pre-join"
   | "main"
+  | "discovery"
+  | "discovery-loading"
+  | "discovery-network"
+  | "discovery-minimal"
+  | "category-genre-results"
   | "profile"
   | "queue"
   | "queue-current"
@@ -160,6 +166,25 @@ const fixtureSongs: PublicSong[] = [
   },
 ];
 
+const fixtureDiscovery = {
+  genres: [
+    { value: "pop", label: "Pop", count: 214 },
+    { value: "rock", label: "Rock", count: 168 },
+    { value: "dance", label: "Dance", count: 140 },
+    { value: "soundtrack", label: "Filmowe", count: 96 },
+    { value: "disco", label: "Disco", count: 84 },
+    { value: "soul", label: "Soul", count: 68 },
+  ],
+  languages: [],
+  features: { duetCount: 26, hitCount: 48, plusCount: 0 },
+};
+
+const fixtureMinimalDiscovery = {
+  genres: [],
+  languages: [],
+  features: { duetCount: 0, hitCount: 0, plusCount: 0 },
+};
+
 export function PublicSessionVisualFixture({
   state,
 }: {
@@ -188,7 +213,18 @@ function ParticipantSessionFixture({
     initialState === "queue" || initialState === "queue-current",
   );
   const [isProfileOpen, setIsProfileOpen] = useState(initialState === "profile");
+  const [isCategoryView, setIsCategoryView] = useState(
+    initialState === "category-genre-results",
+  );
+  const [selectedGenre, setSelectedGenre] = useState(fixtureDiscovery.genres[0]!);
   const [nickname, setNickname] = useState("Ola");
+  const isDiscoveryFixture = [
+    "main",
+    "discovery",
+    "discovery-loading",
+    "discovery-network",
+    "discovery-minimal",
+  ].includes(initialState);
   const isSearchFixture = [
     "search-results",
     "search-loading",
@@ -254,8 +290,48 @@ function ParticipantSessionFixture({
           />
         </div>
 
-        <div className={isQueueView ? "hidden" : "mx-auto w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8"}>
-          {isSearchFixture ? (
+        <div className={isQueueView ? "hidden" : "mx-auto w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8 lg:max-w-6xl"}>
+          {isCategoryView ? (
+            <SessionGenreResults
+              genre={selectedGenre}
+              initialSongs={fixtureSongs}
+              onBack={() => setIsCategoryView(false)}
+              onSongSelect={(song) => {
+                setSelectedSong(song);
+                setIsSongDetailsOpen(true);
+              }}
+              sessionToken="visual-fixture-session-token"
+            />
+          ) : isDiscoveryFixture ? (
+            <SessionDiscoveryHome
+              discovery={
+                initialState === "discovery-minimal"
+                  ? fixtureMinimalDiscovery
+                  : fixtureDiscovery
+              }
+              forceLoading={initialState === "discovery-loading"}
+              forceMinimal={initialState === "discovery-minimal"}
+              initialSongSections={
+                initialState === "discovery-loading" ||
+                initialState === "discovery-network"
+                  ? undefined
+                  : {
+                      hits: fixtureSongs.slice(0, 6),
+                      newest: fixtureSongs.slice(2, 8),
+                      duets: fixtureSongs.slice(1, 7),
+                    }
+              }
+              onSongSelect={(song) => {
+                setSelectedSong(song);
+                setIsSongDetailsOpen(true);
+              }}
+              onGenreSelect={(genre) => {
+                setSelectedGenre(genre);
+                setIsCategoryView(true);
+              }}
+              sessionToken="visual-fixture-session-token"
+            />
+          ) : isSearchFixture ? (
             <SessionSearchResults
               isLoading={isSearchLoading}
               message={
@@ -269,21 +345,7 @@ function ParticipantSessionFixture({
               query={searchTerm}
               songs={isSearchEmpty || isSearchLoading ? [] : fixtureSongs}
             />
-          ) : (
-            <>
-              <h1 className="mb-1 text-xs font-extrabold tracking-[0.05em] text-muted-foreground uppercase">Wyniki</h1>
-              <section aria-label="Przykładowe wyniki" className="border-t border-border">
-                {fixtureSongs.slice(0, 3).map((song) => (
-                  <button className="grid w-full gap-0.5 border-b border-border px-0.5 py-4 text-left transition-colors hover:bg-primary/10 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" key={song.id} type="button">
-                    <span className="text-base font-extrabold leading-snug tracking-[-0.02em]">{song.title}</span>
-                    <span className="text-sm text-muted-foreground">{song.artist}</span>
-                    <span className="mt-1 text-xs leading-relaxed text-muted-foreground">{song.source}</span>
-                  </button>
-                ))}
-              </section>
-              <Button className="mt-5 h-12 w-full rounded-full font-extrabold" type="button">Dodaj do kolejki</Button>
-            </>
-          )}
+          ) : null}
         </div>
 
         <SongDetailsDrawer

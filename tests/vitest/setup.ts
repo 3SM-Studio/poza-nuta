@@ -16,6 +16,32 @@ if (!("ResizeObserver" in globalThis)) {
   });
 }
 
+class TestIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = "0px";
+  readonly scrollMargin = "0px";
+  readonly thresholds = [0];
+
+  constructor(private readonly callback: IntersectionObserverCallback) {}
+
+  disconnect() {}
+  observe(target: Element) {
+    this.callback([], this);
+    void target;
+  }
+  takeRecords() {
+    return [];
+  }
+  unobserve() {}
+}
+
+if (!("IntersectionObserver" in globalThis)) {
+  Object.defineProperty(globalThis, "IntersectionObserver", {
+    configurable: true,
+    value: TestIntersectionObserver,
+  });
+}
+
 if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

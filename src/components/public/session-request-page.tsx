@@ -29,6 +29,7 @@ import { getSessionCapabilityState } from "@/lib/session-capabilities";
 import type {
   PublicQueueResponse,
   PublicSong,
+  SongDiscoveryCategory,
   SessionSongDiscovery,
 } from "./api";
 import { ParticipantProfileDrawer } from "./participant-profile-drawer";
@@ -36,8 +37,9 @@ import { waitForMutationRealtimeOrFallback } from "./session-mutation-refresh";
 import { SessionQueueList } from "./session-queue-list";
 import { SessionShellHeader } from "./session-shell-header";
 import { SessionSearchResults } from "./session-search-results";
+import { SessionGenreResults } from "./session-genre-results";
 import { SongDetailsDrawer } from "./song-details-drawer";
-import { SongDiscoveryTeaser } from "./song-discovery-page";
+import { SessionDiscoveryHome } from "./session-discovery-home";
 import {
   cancelParticipantRequest,
   createSessionRequest,
@@ -70,6 +72,8 @@ export function SessionRequestPage({
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PublicSong[]>([]);
+  const [selectedGenre, setSelectedGenre] =
+    useState<SongDiscoveryCategory | null>(null);
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -311,6 +315,7 @@ export function SessionRequestPage({
     }
 
     setIsSearching(true);
+    setSelectedGenre(null);
     setSearchMessage(null);
     setSubmitAlert(null);
 
@@ -337,11 +342,13 @@ export function SessionRequestPage({
   }
 
   function clearSearchResults() {
+    setSearchTerm("");
     setSearchResults([]);
     setSearchMessage(null);
     setSelectedSong(null);
     setIsSongDetailsOpen(false);
     setSubmitAlert(null);
+    setSelectedGenre(null);
   }
 
   async function submitSelectedSong() {
@@ -404,7 +411,12 @@ export function SessionRequestPage({
           setIsProfileOpen(true);
         }}
         onSearch={handleSearch}
-        onSearchTermChange={setSearchTerm}
+        onSearchTermChange={(value) => {
+          setSearchTerm(value);
+          if (normalizePublicSearchTerm(value) === "") {
+            clearSearchResults();
+          }
+        }}
         onToggleQueue={() => setIsQueueView((current) => !current)}
         searchTerm={searchTerm}
         showQueue={canViewPublicQueue}
@@ -419,7 +431,7 @@ export function SessionRequestPage({
           />
         </div>
       ) : null}
-      <div className={cn("mx-auto w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8", isQueueView && "hidden")}>
+      <div className={cn("mx-auto w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8 lg:max-w-6xl", isQueueView && "hidden")}>
       {capabilities.allSessionFeaturesDisabled ? (
         <section className="mb-7">
           <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">Sesja wydarzenia</h2>
@@ -430,22 +442,41 @@ export function SessionRequestPage({
       {canSubmitSongRequests ? (
         <>
       <section aria-label="Wyszukiwanie piosenek" className="mb-7">
-
-        {searchResults.length === 0 && searchMessage === null && !isSearching && discovery ? (
-          <SongDiscoveryTeaser
+        {discovery ? (
+          <div
+            className={cn(
+              (selectedGenre !== null ||
+                searchResults.length > 0 ||
+                searchMessage !== null ||
+                isSearching ||
+                normalizePublicSearchTerm(searchTerm) !== "") && "hidden",
+            )}
+          >
+            <SessionDiscoveryHome
+              discovery={discovery}
+              onGenreSelect={setSelectedGenre}
+              onSongSelect={selectSong}
+              sessionToken={sessionToken}
+            />
+          </div>
+        ) : null}
+        {selectedGenre ? (
+          <SessionGenreResults
+            genre={selectedGenre}
+            onBack={() => setSelectedGenre(null)}
+            onSongSelect={selectSong}
             sessionToken={sessionToken}
-            discovery={discovery}
+          />
+        ) : searchResults.length > 0 || searchMessage !== null || isSearching || normalizePublicSearchTerm(searchTerm) !== "" || !discovery ? (
+          <SessionSearchResults
+            isLoading={isSearching}
+            message={searchMessage}
+            onBack={clearSearchResults}
+            onSongSelect={selectSong}
+            query={normalizePublicSearchTerm(searchTerm)}
+            songs={searchResults}
           />
         ) : null}
-
-        <SessionSearchResults
-          isLoading={isSearching}
-          message={searchMessage}
-          onBack={clearSearchResults}
-          onSongSelect={selectSong}
-          query={normalizePublicSearchTerm(searchTerm)}
-          songs={searchResults}
-        />
       </section>
         </>
       ) : null}

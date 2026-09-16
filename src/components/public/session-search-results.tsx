@@ -13,6 +13,9 @@ type SessionSearchResultsProps = {
   songs: PublicSong[];
   onBack: () => void;
   onSongSelect: (song: PublicSong) => void;
+  heading?: string;
+  backLabel?: string;
+  emptyMessage?: string;
 };
 
 export function SessionSearchResults({
@@ -22,18 +25,21 @@ export function SessionSearchResults({
   songs,
   onBack,
   onSongSelect,
+  heading = `„${query}”`,
+  backLabel = "Wróć do wyszukiwania",
+  emptyMessage = "Nie znaleziono pasujących piosenek.",
 }: SessionSearchResultsProps) {
   const hasSearchState = isLoading || message !== null || songs.length > 0;
   if (!hasSearchState) return null;
 
-  const isEmpty = message === "Nie znaleziono pasujących piosenek.";
+  const isEmpty = message === emptyMessage;
   const isError = message !== null && !isEmpty;
 
   return (
     <section aria-labelledby="session-search-results-heading" className="mb-7">
       <div className="mb-3 flex items-center gap-2">
         <Button
-          aria-label="Wróć do wyszukiwania"
+          aria-label={backLabel}
           className="size-11 rounded-full"
           onClick={onBack}
           size="icon"
@@ -46,7 +52,7 @@ export function SessionSearchResults({
           className="min-w-0 truncate text-2xl font-extrabold tracking-[-0.04em]"
           id="session-search-results-heading"
         >
-          „{query}”
+          {heading}
         </h1>
       </div>
 
