@@ -584,23 +584,24 @@ export function SessionRequestPage({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground lg:max-h-dvh lg:overflow-hidden">
-      <SessionShellHeader
-        isSubmitting={isSubmitting}
-        onOpenProfile={() => {
-          setRenameValue(displayName);
-          setRenameMessage(null);
-          setIsProfileOpen(true);
-        }}
-        onSearch={handleSearch}
-        onSearchTermChange={handleSearchTermChange}
-        onOpenQueue={openQueue}
-        searchTerm={searchInputValue}
-        showQueue={canViewPublicQueue || Boolean(participantDisplayName)}
-      />
+    <div className="flex min-h-dvh flex-col bg-background text-foreground lg:h-dvh lg:min-h-0 lg:overflow-hidden">
       <div className="flex min-h-0 flex-1">
-      <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0" ref={mainScrollRef}>
-      <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <SessionShellHeader
+            isSubmitting={isSubmitting}
+            onOpenProfile={() => {
+              setRenameValue(displayName);
+              setRenameMessage(null);
+              setIsProfileOpen(true);
+            }}
+            onSearch={handleSearch}
+            onSearchTermChange={handleSearchTermChange}
+            onOpenQueue={openQueue}
+            searchTerm={searchInputValue}
+            showQueue={canViewPublicQueue || Boolean(participantDisplayName)}
+          />
+          <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0" ref={mainScrollRef}>
+            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
       {capabilities.allSessionFeaturesDisabled ? (
         <section className="mb-7">
           <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">Sesja wydarzenia</h2>
@@ -641,8 +642,9 @@ export function SessionRequestPage({
         </section>
       ) : null}
 
-      </div>
-      </main>
+            </div>
+          </main>
+        </div>
       {canViewPublicQueue || participantDisplayName ? (
         <SessionQueuePanel
           message={queueMessage}

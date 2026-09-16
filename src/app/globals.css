@@ -162,7 +162,7 @@ body {
 
 .session-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 48%, transparent) transparent;
+  scrollbar-color: color-mix(in oklch, var(--sidebar-foreground) 20%, transparent) transparent;
 }
 
 .session-scrollbar::-webkit-scrollbar {
@@ -170,10 +170,14 @@ body {
 }
 
 .session-scrollbar::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--muted-foreground) 42%, transparent);
+  background: color-mix(in oklch, var(--sidebar-foreground) 20%, transparent);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
+}
+
+.session-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--sidebar-foreground) 30%, transparent);
 }
 
 ::selection {

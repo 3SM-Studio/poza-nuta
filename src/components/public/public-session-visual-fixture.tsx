@@ -385,23 +385,24 @@ function ParticipantSessionFixture({
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <div className="flex min-h-dvh flex-col lg:max-h-dvh lg:overflow-hidden">
-        <SessionShellHeader
-          isSubmitting={isAddingSong}
-          onOpenProfile={() => setIsProfileOpen(true)}
-          onSearch={handleSearch}
-          onSearchTermChange={setSearchTerm}
-          onOpenQueue={() => {
-            setIsSongDetailsOpen(false);
-            setIsQueueOpen(true);
-          }}
-          searchTerm={searchTerm}
-          showQueue
-        />
-
+      <div className="flex min-h-dvh flex-col lg:h-dvh lg:min-h-0 lg:overflow-hidden">
         <div className="flex min-h-0 flex-1">
-        <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0">
-        <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <SessionShellHeader
+              isSubmitting={isAddingSong}
+              onOpenProfile={() => setIsProfileOpen(true)}
+              onSearch={handleSearch}
+              onSearchTermChange={setSearchTerm}
+              onOpenQueue={() => {
+                setIsSongDetailsOpen(false);
+                setIsQueueOpen(true);
+              }}
+              searchTerm={searchTerm}
+              showQueue
+            />
+
+            <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0">
+              <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
           {initialState === "catalog-genres" ? (
             <SessionCatalogGenres genres={fixtureDiscovery.genres} onBack={() => undefined} sessionToken="visual-fixture-session-token" />
           ) : initialState.startsWith("catalog-") ? (
@@ -469,8 +470,9 @@ function ParticipantSessionFixture({
               songs={isSearchEmpty || isSearchLoading ? [] : fixtureSongs}
             />
           ) : null}
-        </div>
-        </main>
+              </div>
+            </main>
+          </div>
         <SessionQueuePanel
           message={null}
           onOpen={() => {

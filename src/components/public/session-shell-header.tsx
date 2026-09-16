@@ -27,7 +27,10 @@ export function SessionShellHeader({
   onOpenQueue,
 }: SessionShellHeaderProps) {
   return (
-    <header className="shrink-0 border-b border-border bg-background/95 px-4 pt-[max(0.6rem,env(safe-area-inset-top))] pb-3 sm:px-8">
+    <header
+      className="sticky top-0 z-30 shrink-0 border-b border-border bg-background/95 px-4 pt-[max(0.6rem,env(safe-area-inset-top))] pb-3 backdrop-blur sm:px-8"
+      data-slot="session-shell-header"
+    >
       <div className="flex h-11 items-center justify-between gap-4">
         <div className="leading-none">
           <Image
