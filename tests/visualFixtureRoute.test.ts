@@ -27,5 +27,6 @@ test("the public session visual fixture is dynamic and production-gated", () => 
   assert.match(source, /"song-details"/);
   assert.match(source, /"song-details-submitting"/);
   assert.match(source, /"song-details-error"/);
+  assert.match(source, /"artwork-gallery"/);
   assert.match(source, /"song-details-loading"/);
 });

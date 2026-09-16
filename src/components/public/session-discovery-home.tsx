@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Disc3, Heart, MicVocal, Music2, Sparkles, type LucideIcon } from "lucide-react";
+import { Disc3, Heart, Sparkles, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -14,6 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PublicSong, SessionSongDiscovery, SongDiscoveryCategory } from "./api";
 import { browseSessionSongs } from "./session-api";
+import { SessionSongArtwork } from "./session-song-artwork";
 
 type SongSectionKey = "hits" | "newest" | "duets";
 type SongSectionState = {
@@ -206,7 +207,7 @@ function GenreCarousel({
             className="basis-[42%] sm:basis-[30%] md:basis-1/4 xl:basis-1/5"
             key={genre.value}
           >
-            <DiscoveryCard
+            <GenreDiscoveryCard
               href={
                 onGenreSelect
                   ? undefined
@@ -241,17 +242,14 @@ function SongCarousel({
   return (
     <Carousel aria-label={`Karuzela: ${title}`} opts={{ dragFree: true }}>
       <CarouselContent>
-        {items.map((song, index) => (
+        {items.map((song) => (
           <CarouselItem
             className="basis-[42%] sm:basis-[30%] md:basis-1/4 xl:basis-1/5"
             key={song.id}
           >
-            <DiscoveryCard
-              icon={song.isDuet ? MicVocal : Music2}
-              index={index + song.id}
+            <SongDiscoveryCard
+              song={song}
               onClick={() => onSongSelect(song)}
-              subtitle={song.artist}
-              title={song.title}
             />
           </CarouselItem>
         ))}
@@ -262,7 +260,7 @@ function SongCarousel({
   );
 }
 
-function DiscoveryCard({
+function GenreDiscoveryCard({
   title,
   subtitle,
   index,
@@ -304,6 +302,34 @@ function DiscoveryCard({
   return (
     <button aria-label={`${title} — ${subtitle}`} className={className} onClick={onClick} type="button">
       {content}
+    </button>
+  );
+}
+
+function SongDiscoveryCard({
+  song,
+  onClick,
+}: {
+  song: PublicSong;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label={`${song.title} — ${song.artist}`}
+      className="group relative flex aspect-square w-full overflow-hidden rounded-xl p-3 text-left text-primary-foreground shadow-[0_12px_28px_oklch(0_0_0_/_28%)] transition-transform duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/60"
+      onClick={onClick}
+      type="button"
+    >
+      <SessionSongArtwork className="absolute inset-0 size-full rounded-none" priority song={song} />
+      <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-3/5 bg-[linear-gradient(to_top,rgba(9,5,30,.92),rgba(9,5,30,.08))]" />
+      <span className="relative mt-auto min-w-0">
+        <span className="block line-clamp-2 text-sm font-extrabold leading-tight tracking-[-0.02em]">
+          {song.title}
+        </span>
+        <span className="mt-1 block truncate text-xs font-medium text-white/90">
+          {song.artist}
+        </span>
+      </span>
     </button>
   );
 }

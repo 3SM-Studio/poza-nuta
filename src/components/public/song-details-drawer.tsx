@@ -9,7 +9,6 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import { cn } from "@/lib/utils";
 import type { PublicSong } from "./api";
 import { SessionSongArtwork } from "./session-song-artwork";
 import { formatSongSource } from "./validation";
@@ -21,7 +20,6 @@ type SongDetailsDrawerProps = {
   song: PublicSong | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
-  artworkClassName?: string;
 };
 
 export function SongDetailsDrawer({
@@ -31,7 +29,6 @@ export function SongDetailsDrawer({
   song,
   onOpenChange,
   onSubmit,
-  artworkClassName,
 }: SongDetailsDrawerProps) {
   if (!song) return null;
 
@@ -39,7 +36,7 @@ export function SongDetailsDrawer({
     <Drawer onOpenChange={onOpenChange} open={isOpen}>
       <DrawerContent className="max-h-[82dvh] overflow-y-auto border-border bg-popover text-foreground sm:mx-auto sm:max-w-2xl">
         <DrawerHeader className="relative flex-row items-start gap-4 px-6 pt-5 pb-4 text-left">
-          <SessionSongArtwork className={cn("size-16", artworkClassName)} />
+          <SessionSongArtwork className="size-16" song={song} />
           <div className="min-w-0 pt-0.5">
             <DrawerTitle className="truncate pr-10 text-xl font-extrabold tracking-[-0.035em]">
               {song.title}

@@ -25,6 +25,7 @@ const fixtureStates = new Set<PublicSessionVisualFixtureState>([
   "song-details",
   "song-details-submitting",
   "song-details-error",
+  "artwork-gallery",
   "song-details-loading",
   "search-no-results",
 ]);

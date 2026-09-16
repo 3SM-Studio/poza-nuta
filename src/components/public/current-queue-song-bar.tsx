@@ -1,7 +1,6 @@
-import { Music } from "lucide-react";
-
 import type { PublicQueueItem, PublicQueueResponse } from "./api";
 import styles from "./public.module.css";
+import { SessionSongArtwork } from "./session-song-artwork";
 
 type CurrentQueueSongBarProps = {
   item: PublicQueueItem;
@@ -20,12 +19,10 @@ export function CurrentQueueSongBar({
       aria-label="Aktualnie wykonywany utwór"
       className={`${styles.currentQueueSongSurface} mb-6 flex items-center gap-3 rounded-xl border border-primary/45 px-3 py-3 text-primary-foreground shadow-[var(--shadow-accent-soft)]`}
     >
-      <div
-        aria-hidden="true"
-        className="grid size-12 shrink-0 place-items-center rounded-lg bg-black/15 text-primary-foreground"
-      >
-        <Music className="size-5" />
-      </div>
+      <SessionSongArtwork
+        className="size-12 rounded-lg"
+        song={{ id: item.id, title: item.title, artist: item.artist }}
+      />
       <div className="min-w-0">
         <p className="mb-1 text-[0.68rem] font-extrabold tracking-[0.08em] text-primary-foreground/80 uppercase">
           Teraz gramy

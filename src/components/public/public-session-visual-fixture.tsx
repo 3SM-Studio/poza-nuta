@@ -11,6 +11,8 @@ import { SessionDiscoveryHome } from "./session-discovery-home";
 import { SessionGenreResults } from "./session-genre-results";
 import { SessionShellHeader } from "./session-shell-header";
 import { SongDetailsDrawer } from "./song-details-drawer";
+import { SessionSongArtwork } from "./session-song-artwork";
+import { formatSongSource } from "./validation";
 
 export type PublicSessionVisualFixtureState =
   | "pre-join"
@@ -29,6 +31,7 @@ export type PublicSessionVisualFixtureState =
   | "song-details"
   | "song-details-submitting"
   | "song-details-error"
+  | "artwork-gallery"
   // Legacy aliases retained for existing visual-fixture links.
   | "song-details-loading"
   | "search-no-results";
@@ -164,6 +167,14 @@ const fixtureSongs: PublicSong[] = [
     isPlus: false,
     isHit: false,
   },
+  { id: 209, title: "Jesteś szalona", artist: "Boys", source: "manual", durationSeconds: 201, isDuet: false, isExplicit: false, isPlus: false, isHit: true },
+  { id: 210, title: "Nie pytaj o Polskę", artist: "Obywatel G.C.", source: "karafun", durationSeconds: 258, isDuet: false, isExplicit: false, isPlus: false, isHit: false },
+  { id: 211, title: "Przez Twe Oczy Zielone", artist: "Akcent", source: "ising", durationSeconds: 222, isDuet: false, isExplicit: false, isPlus: false, isHit: true },
+  { id: 212, title: "Bądź moim natchnieniem", artist: "Andrzej Zaucha", source: "manual", durationSeconds: 239, isDuet: false, isExplicit: false, isPlus: false, isHit: false },
+  { id: 213, title: "Shallow", artist: "Lady Gaga & Bradley Cooper", source: "karafun", durationSeconds: 217, isDuet: true, isExplicit: false, isPlus: false, isHit: true },
+  { id: 214, title: "Tyle słońca w całym mieście", artist: "Anna Jantar", source: "ising", durationSeconds: 188, isDuet: false, isExplicit: false, isPlus: false, isHit: false },
+  { id: 215, title: "Kocham Cię, kochanie moje", artist: "Maanam", source: "manual", durationSeconds: 247, isDuet: false, isExplicit: false, isPlus: false, isHit: false },
+  { id: 216, title: "Blinding Lights", artist: "The Weeknd", source: "karafun", durationSeconds: 200, isDuet: false, isExplicit: false, isPlus: false, isHit: true },
 ];
 
 const fixtureDiscovery = {
@@ -201,7 +212,38 @@ export function PublicSessionVisualFixture({
     );
   }
 
+  if (state === "artwork-gallery") {
+    return <ArtworkGallery />;
+  }
+
   return <ParticipantSessionFixture initialState={state} />;
+}
+
+function ArtworkGallery() {
+  return (
+    <main className="min-h-dvh bg-background px-4 py-8 text-foreground sm:px-8">
+      <section aria-labelledby="artwork-gallery-title" className="mx-auto max-w-6xl">
+        <h1 className="text-3xl font-extrabold tracking-[-0.045em]" id="artwork-gallery-title">
+          Artworki utworów
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Deterministyczne artworki Poza Nutą do wizualnej kontroli jakości.
+        </p>
+        <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          {fixtureSongs.slice(0, 16).map((song) => (
+            <article className="min-w-0" key={song.id}>
+              <SessionSongArtwork className="aspect-square w-full" priority song={song} />
+              <h2 className="mt-2 truncate text-sm font-extrabold tracking-[-0.02em]">{song.title}</h2>
+              <p className="truncate text-xs text-muted-foreground">{song.artist}</p>
+              <p className="mt-1 text-[0.68rem] font-bold tracking-[0.06em] text-primary uppercase">
+                {formatSongSource(song.source)}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
 }
 
 function ParticipantSessionFixture({
@@ -350,7 +392,6 @@ function ParticipantSessionFixture({
 
         <SongDetailsDrawer
           alert={detailsAlert}
-          artworkClassName="bg-[radial-gradient(circle_at_70%_25%,oklch(0.88_0.2_335_/_75%),transparent_22%),linear-gradient(145deg,oklch(0.53_0.2_326),oklch(0.23_0.1_286))] text-primary-foreground"
           isOpen={isSongDetailsOpen}
           isSubmitting={isAddingSong}
           onOpenChange={setIsSongDetailsOpen}

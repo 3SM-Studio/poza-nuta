@@ -1,9 +1,8 @@
-import { Music } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PublicQueueResponse } from "./api";
 import { CurrentQueueSongBar } from "./current-queue-song-bar";
+import { SessionSongArtwork } from "./session-song-artwork";
 
 type SessionQueueListProps = {
   message: string | null;
@@ -60,12 +59,10 @@ export function SessionQueueList({
         <div>
           {upcomingItems.map((item) => (
             <article className="flex items-center gap-3 border-b border-border py-4 first:pt-0" key={item.id}>
-              <div
-                aria-hidden="true"
-                className="grid size-12 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground"
-              >
-                <Music className="size-5" />
-              </div>
+              <SessionSongArtwork
+                className="size-12 rounded-lg"
+                song={{ id: item.id, title: item.title, artist: item.artist }}
+              />
               <div className="min-w-0">
                 <p className="mb-1 text-[0.68rem] font-extrabold tracking-[0.08em] text-primary uppercase">#{item.position}</p>
                 {queue.showSongTitles && item.title ? (

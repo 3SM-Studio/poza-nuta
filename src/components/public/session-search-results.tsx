@@ -76,7 +76,7 @@ export function SessionSearchResults({
                 onClick={() => onSongSelect(song)}
                 type="button"
               >
-                <SessionSongArtwork className="size-14" />
+                <SessionSongArtwork className="size-14" song={song} />
                 <span className="min-w-0">
                   <span className="block truncate text-base font-extrabold leading-snug tracking-[-0.02em]">
                     {song.title}
