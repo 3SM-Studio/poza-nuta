@@ -1,10 +1,14 @@
+import { useId } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import type { PublicQueueResponse } from "./api";
 import { CurrentQueueSongBar } from "./current-queue-song-bar";
 import { SessionSongArtwork } from "./session-song-artwork";
 
 type SessionQueueListProps = {
+  className?: string;
   message: string | null;
   queue: PublicQueueResponse | null;
   refreshing: boolean;
@@ -12,17 +16,19 @@ type SessionQueueListProps = {
 };
 
 export function SessionQueueList({
+  className,
   message,
   queue,
   refreshing,
   onRefresh,
 }: SessionQueueListProps) {
+  const headingId = useId();
   const itemCount = queue?.items.length ?? 0;
   const currentItem = queue?.items.find((item) => item.status === "now");
   const upcomingItems = queue?.items.filter((item) => item.status !== "now") ?? [];
 
   return (
-    <section aria-labelledby="public-queue-heading" className="mx-auto w-full max-w-2xl">
+    <section aria-labelledby={headingId} className={cn("mx-auto w-full max-w-2xl", className)}>
       {currentItem && queue ? (
         <CurrentQueueSongBar
           item={currentItem}
@@ -31,9 +37,9 @@ export function SessionQueueList({
       ) : null}
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h1 id="public-queue-heading" className="text-3xl font-extrabold tracking-[-0.055em]">
+          <h2 id={headingId} className="text-3xl font-extrabold tracking-[-0.04em]">
             Kolejka
-          </h1>
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {formatSongCount(itemCount)} w kolejce
           </p>

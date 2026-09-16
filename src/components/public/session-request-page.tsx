@@ -34,7 +34,7 @@ import type {
 } from "./api";
 import { ParticipantProfileDrawer } from "./participant-profile-drawer";
 import { waitForMutationRealtimeOrFallback } from "./session-mutation-refresh";
-import { SessionQueueList } from "./session-queue-list";
+import { SessionQueuePanel } from "./session-queue-panel";
 import { SessionShellHeader } from "./session-shell-header";
 import { SessionSearchResults } from "./session-search-results";
 import { SessionGenreResults } from "./session-genre-results";
@@ -86,7 +86,7 @@ export function SessionRequestPage({
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameMessage, setRenameMessage] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isQueueView, setIsQueueView] = useState(false);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [participantRequests, setParticipantRequests] =
     useState<ParticipantRequest[] | null>(null);
   const [participantRequestsMessage, setParticipantRequestsMessage] =
@@ -399,10 +399,23 @@ export function SessionRequestPage({
     setIsRefreshingQueue(false);
   }
 
+  function openQueue() {
+    setIsSongDetailsOpen(false);
+    setIsQueueOpen(true);
+  }
+
+  function handleQueueOpenChange(open: boolean) {
+    if (open) {
+      openQueue();
+      return;
+    }
+
+    setIsQueueOpen(false);
+  }
+
   return (
     <div className="flex min-h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
       <SessionShellHeader
-        isQueueView={isQueueView}
         isSearching={isSearching}
         isSubmitting={isSubmitting}
         onOpenProfile={() => {
@@ -417,21 +430,13 @@ export function SessionRequestPage({
             clearSearchResults();
           }
         }}
-        onToggleQueue={() => setIsQueueView((current) => !current)}
+        onOpenQueue={openQueue}
         searchTerm={searchTerm}
         showQueue={canViewPublicQueue}
       />
-      {canViewPublicQueue ? (
-        <div className={cn("flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8", !isQueueView && "hidden")}>
-          <SessionQueueList
-            message={queueMessage}
-            onRefresh={() => void refreshQueue()}
-            queue={queue}
-            refreshing={isRefreshingQueue}
-          />
-        </div>
-      ) : null}
-      <div className={cn("mx-auto w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8 lg:max-w-6xl", isQueueView && "hidden")}>
+      <div className="flex min-h-0 flex-1">
+      <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-0">
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
       {capabilities.allSessionFeaturesDisabled ? (
         <section className="mb-7">
           <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">Sesja wydarzenia</h2>
@@ -569,6 +574,19 @@ export function SessionRequestPage({
         </section>
       ) : null}
 
+      </div>
+      </main>
+      {canViewPublicQueue ? (
+        <SessionQueuePanel
+          message={queueMessage}
+          onOpen={openQueue}
+          onOpenChange={handleQueueOpenChange}
+          onRefresh={() => void refreshQueue()}
+          open={isQueueOpen}
+          queue={queue}
+          refreshing={isRefreshingQueue}
+        />
+      ) : null}
       </div>
       <SongDetailsDrawer
         alert={submitAlert}

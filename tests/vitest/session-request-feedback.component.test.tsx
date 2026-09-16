@@ -187,7 +187,9 @@ describe("session request feedback", () => {
     );
 
     await waitFor(() => expect(browseSongs).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
     browseSongs.mockClear();
+    getQueue.mockClear();
 
     fireEvent.click(screen.getByRole("button", { name: "Zmień swój nick" }));
     fireEvent.click(
@@ -196,15 +198,80 @@ describe("session request feedback", () => {
         { name: "Anuluj" },
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Otwórz kolejkę" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Wróć do wyszukiwania" }),
+    const queueHeaderTrigger = screen.getAllByRole("button", {
+      name: "Otwórz kolejkę",
+    })[0]!;
+    fireEvent.click(queueHeaderTrigger);
+    fireEvent.click(await screen.findByRole("button", { name: "Zwiń kolejkę" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Kolejka" })).not.toBeInTheDocument(),
     );
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Otwórz kolejkę" })[1]).toHaveFocus(),
+    );
+    expect(screen.getByRole("heading", { name: "Gatunki" })).toBeVisible();
+    expect(getQueue).not.toHaveBeenCalled();
 
     await act(async () => {
       await realtime.onInvalidate?.("queue", new AbortController().signal);
     });
 
+    expect(browseSongs).not.toHaveBeenCalled();
+  });
+
+  it("preserves submitted search results and avoids search or queue refetches while the queue opens", async () => {
+    render(
+      <SessionRequestPage
+        event={{ ...event, publicQueueEnabled: true }}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "Test" } });
+    fireEvent.submit(searchbox.closest("form")!);
+    expect(await screen.findByRole("heading", { name: "„Test”" })).toBeVisible();
+    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
+    searchSongs.mockClear();
+    getQueue.mockClear();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Otwórz kolejkę" })[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: "Zwiń kolejkę" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Kolejka" })).not.toBeInTheDocument(),
+    );
+
+    expect(searchbox).toHaveValue("Test");
+    expect(screen.getByRole("heading", { name: "„Test”" })).toBeVisible();
+    expect(searchSongs).not.toHaveBeenCalled();
+    expect(getQueue).not.toHaveBeenCalled();
+  });
+
+  it("preserves genre results and avoids a genre refetch while the queue opens", async () => {
+    render(
+      <SessionRequestPage
+        discovery={{
+          genres: [{ value: "pop", label: "Pop", count: 120 }],
+          languages: [],
+          features: { duetCount: 1, hitCount: 1, plusCount: 0 },
+        }}
+        event={{ ...event, publicQueueEnabled: true }}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Pop — 120 piosenek" }));
+    expect(await screen.findByRole("heading", { name: "Pop" })).toBeVisible();
+    await waitFor(() => expect(browseSongs).toHaveBeenCalledTimes(4));
+    browseSongs.mockClear();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Otwórz kolejkę" })[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: "Zwiń kolejkę" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Kolejka" })).not.toBeInTheDocument(),
+    );
+
+    expect(screen.getByRole("heading", { name: "Pop" })).toBeVisible();
     expect(browseSongs).not.toHaveBeenCalled();
   });
 
@@ -395,10 +462,12 @@ describe("session request feedback", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Otwórz kolejkę" }));
-    expect(screen.getByRole("heading", { name: "Kolejka" })).toBeVisible();
-    expect(await screen.findByText("0 utworów w kolejce")).toBeVisible();
-    expect(screen.getByText("Kolejka nie ma jeszcze publicznie widocznych zgłoszeń.")).toBeVisible();
+    fireEvent.click(screen.getAllByRole("button", { name: "Otwórz kolejkę" })[0]!);
+    expect(screen.getAllByRole("heading", { name: "Kolejka" })).toHaveLength(2);
+    expect(await screen.findAllByText("0 utworów w kolejce")).toHaveLength(2);
+    expect(
+      screen.getAllByText("Kolejka nie ma jeszcze publicznie widocznych zgłoszeń."),
+    ).toHaveLength(2);
   });
 
   it("shows a success toast and refreshes the server-backed request list", async () => {

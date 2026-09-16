@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import type { PublicSong } from "./api";
 import { ParticipantJoinGate } from "./participant-join-gate";
 import { ParticipantProfileDrawer } from "./participant-profile-drawer";
-import { SessionQueueList } from "./session-queue-list";
+import { SessionQueuePanel } from "./session-queue-panel";
 import { SessionSearchResults } from "./session-search-results";
 import { SessionDiscoveryHome } from "./session-discovery-home";
 import { SessionGenreResults } from "./session-genre-results";
@@ -25,6 +25,13 @@ export type PublicSessionVisualFixtureState =
   | "profile"
   | "queue"
   | "queue-current"
+  | "queue-mobile-collapsed"
+  | "queue-mobile-expanded"
+  | "queue-mobile-long"
+  | "queue-mobile-empty"
+  | "queue-desktop"
+  | "queue-desktop-long"
+  | "queue-desktop-empty"
   | "search-results"
   | "search-loading"
   | "search-empty"
@@ -76,6 +83,12 @@ const fixtureQueue = {
     ...item,
     status: "approved" as const,
   })),
+};
+
+const fixtureQueueEmpty = {
+  enabled: true,
+  showSongTitles: true,
+  items: [],
 };
 
 const fixtureSongs: PublicSong[] = [
@@ -177,6 +190,22 @@ const fixtureSongs: PublicSong[] = [
   { id: 216, title: "Blinding Lights", artist: "The Weeknd", source: "karafun", durationSeconds: 200, isDuet: false, isExplicit: false, isPlus: false, isHit: true },
 ];
 
+const fixtureQueueLong = {
+  ...fixtureQueueCurrent,
+  items: Array.from({ length: 30 }, (_, index) => {
+    const song = fixtureSongs[index % fixtureSongs.length]!;
+    return {
+      id: 301 + index,
+      singerName: ["Ola", "Maks", "Iga", "Tomek"][index % 4]!,
+      status: (index === 0 ? "now" : "approved") as "now" | "approved",
+      position: index + 1,
+      createdAt: `2026-09-15T18:${String(index).padStart(2, "0")}:00.000Z`,
+      title: song.title,
+      artist: song.artist,
+    };
+  }),
+};
+
 const fixtureDiscovery = {
   genres: [
     { value: "pop", label: "Pop", count: 214 },
@@ -251,8 +280,8 @@ function ParticipantSessionFixture({
 }: {
   initialState: Exclude<PublicSessionVisualFixtureState, "pre-join">;
 }) {
-  const [isQueueView, setIsQueueView] = useState(
-    initialState === "queue" || initialState === "queue-current",
+  const [isQueueOpen, setIsQueueOpen] = useState(
+    ["queue", "queue-current", "queue-mobile-expanded", "queue-mobile-long", "queue-mobile-empty"].includes(initialState),
   );
   const [isProfileOpen, setIsProfileOpen] = useState(initialState === "profile");
   const [isCategoryView, setIsCategoryView] = useState(
@@ -266,6 +295,15 @@ function ParticipantSessionFixture({
     "discovery-loading",
     "discovery-network",
     "discovery-minimal",
+    "queue",
+    "queue-current",
+    "queue-mobile-collapsed",
+    "queue-mobile-expanded",
+    "queue-mobile-long",
+    "queue-mobile-empty",
+    "queue-desktop",
+    "queue-desktop-long",
+    "queue-desktop-empty",
   ].includes(initialState);
   const isSearchFixture = [
     "search-results",
@@ -298,6 +336,13 @@ function ParticipantSessionFixture({
   const [isAddingSong, setIsAddingSong] = useState(isSongDetailsSubmitting);
   const detailsAlert =
     initialState === "song-details-error" ? "duplicate_request" : null;
+  const fixtureQueueState = ["queue-mobile-empty", "queue-desktop-empty"].includes(initialState)
+    ? fixtureQueueEmpty
+    : ["queue-mobile-long", "queue-desktop-long"].includes(initialState)
+      ? fixtureQueueLong
+      : initialState === "queue-current" || initialState === "queue-mobile-collapsed" || initialState === "queue-mobile-expanded" || initialState === "queue-desktop"
+        ? fixtureQueueCurrent
+        : fixtureQueue;
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -309,30 +354,25 @@ function ParticipantSessionFixture({
   }
 
   return (
-    <main className="min-h-dvh bg-background text-foreground">
+    <div className="min-h-dvh bg-background text-foreground">
       <div className="flex min-h-dvh max-h-dvh flex-col overflow-hidden">
         <SessionShellHeader
-          isQueueView={isQueueView}
           isSearching={isSearchLoading}
           isSubmitting={isAddingSong}
           onOpenProfile={() => setIsProfileOpen(true)}
           onSearch={handleSearch}
           onSearchTermChange={setSearchTerm}
-          onToggleQueue={() => setIsQueueView((current) => !current)}
+          onOpenQueue={() => {
+            setIsSongDetailsOpen(false);
+            setIsQueueOpen(true);
+          }}
           searchTerm={searchTerm}
           showQueue
         />
 
-        <div className={isQueueView ? "flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8" : "hidden"}>
-          <SessionQueueList
-            message={null}
-            onRefresh={() => undefined}
-            queue={initialState === "queue-current" ? fixtureQueueCurrent : fixtureQueue}
-            refreshing={false}
-          />
-        </div>
-
-        <div className={isQueueView ? "hidden" : "mx-auto w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8 lg:max-w-6xl"}>
+        <div className="flex min-h-0 flex-1">
+        <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
           {isCategoryView ? (
             <SessionGenreResults
               genre={selectedGenre}
@@ -340,6 +380,7 @@ function ParticipantSessionFixture({
               onBack={() => setIsCategoryView(false)}
               onSongSelect={(song) => {
                 setSelectedSong(song);
+                setIsQueueOpen(false);
                 setIsSongDetailsOpen(true);
               }}
               sessionToken="visual-fixture-session-token"
@@ -365,6 +406,7 @@ function ParticipantSessionFixture({
               }
               onSongSelect={(song) => {
                 setSelectedSong(song);
+                setIsQueueOpen(false);
                 setIsSongDetailsOpen(true);
               }}
               onGenreSelect={(genre) => {
@@ -382,12 +424,27 @@ function ParticipantSessionFixture({
               onBack={() => setSearchTerm("")}
               onSongSelect={(song) => {
                 setSelectedSong(song);
+                setIsQueueOpen(false);
                 setIsSongDetailsOpen(true);
               }}
               query={searchTerm}
               songs={isSearchEmpty || isSearchLoading ? [] : fixtureSongs}
             />
           ) : null}
+        </div>
+        </main>
+        <SessionQueuePanel
+          message={null}
+          onOpen={() => {
+            setIsSongDetailsOpen(false);
+            setIsQueueOpen(true);
+          }}
+          onOpenChange={setIsQueueOpen}
+          onRefresh={() => undefined}
+          open={isQueueOpen}
+          queue={fixtureQueueState}
+          refreshing={false}
+        />
         </div>
 
         <SongDetailsDrawer
@@ -409,6 +466,6 @@ function ParticipantSessionFixture({
           value={nickname}
         />
       </div>
-    </main>
+    </div>
   );
 }
