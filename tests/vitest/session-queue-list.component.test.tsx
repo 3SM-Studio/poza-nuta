@@ -38,6 +38,23 @@ describe("SessionQueueList", () => {
     expect(screen.getAllByText("Dancing Queen")).toHaveLength(1);
     expect(screen.queryByText("#1")).not.toBeInTheDocument();
     expect(screen.getByText("#2")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Aktualnie wykonywany utwór" })).toHaveTextContent("Śpiewa: Ola");
+    expect(screen.getByText("Śpiewa: Maks")).toBeVisible();
+  });
+
+  it("keeps the participant nickname visible alongside the own-request badge", () => {
+    render(<SessionQueueList message={null} onRefresh={vi.fn()} ownSingerName="Maks" queue={queueWithCurrent} refreshing={false} />);
+
+    expect(screen.getByText("Śpiewa: Maks")).toBeVisible();
+    expect(screen.getByText("Twoje")).toBeVisible();
+    expect(screen.getByText("Śpiewa: Ola")).toBeVisible();
+  });
+
+  it("omits the participant line for legacy queue rows without a name", () => {
+    render(<SessionQueueList message={null} onRefresh={vi.fn()} queue={{ ...queueWithCurrent, items: [{ ...queueWithCurrent.items[1], singerName: "   " }] }} refreshing={false} />);
+
+    expect(screen.queryByText(/^Śpiewa:/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Twoje")).not.toBeInTheDocument();
   });
 
   it("does not invent a current song when the queue contains no now status", () => {

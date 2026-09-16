@@ -25,6 +25,7 @@ import { SessionQueuePanel } from "./session-queue-panel";
 import { SessionShellHeader } from "./session-shell-header";
 import { SessionSearchResults } from "./session-search-results";
 import { SessionCatalogGenres } from "./session-catalog-genres";
+import { getSessionCatalogRoute, type SessionCatalogRoute } from "./session-catalog-route";
 import { SongDetailsDrawer } from "./song-details-drawer";
 import { SessionDiscoveryHome } from "./session-discovery-home";
 import {
@@ -61,6 +62,7 @@ export function SessionRequestPage({
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PublicSong[]>([]);
+  const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null);
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -90,6 +92,9 @@ export function SessionRequestPage({
   const searchControllerRef = useRef<AbortController | null>(null);
   const searchVersionRef = useRef(0);
   const searchDebounceRef = useRef<number | null>(null);
+  const shouldDebounceSearchRef = useRef(false);
+  const lastDispatchedSearchQueryRef = useRef<string | null>(null);
+  const enteredSearchFromSessionRef = useRef(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
   const searchScrollPositionRef = useRef<{ main: number; page: number } | null>(null);
   const lastPathnameRef = useRef(pathname);
@@ -98,11 +103,30 @@ export function SessionRequestPage({
   const canSubmitSongRequests = capabilities.canSubmitSongRequests;
   const canViewPublicQueue = capabilities.canViewPublicQueue;
   const normalizedSearchTerm = normalizePublicSearchTerm(searchTerm);
-  const isSearchActive = normalizedSearchTerm.length > 0;
+  const isSearchRoute = pathname.endsWith("/search");
+  const wasOnSearchRouteRef = useRef(isSearchRoute);
+  const routeSearchQuery = isSearchRoute
+    ? normalizePublicSearchTerm(searchParams.get("q") ?? "")
+    : "";
+  const searchInputValue = isSearchRoute ? routeSearchQuery : searchTerm;
+  const searchDisplayQuery = isSearchRoute
+    ? routeSearchQuery
+    : pendingSearchQuery ?? normalizedSearchTerm;
+  const isSearchActive = isSearchRoute
+    ? canSearchPublicSongs(routeSearchQuery)
+    : normalizedSearchTerm.length > 0;
   const catalogView = useMemo(
-    () => getCatalogView(pathname, searchParams, discovery),
-    [discovery, pathname, searchParams],
+    () =>
+      getSessionCatalogRoute({
+        pathname,
+        searchParams: new URLSearchParams(searchParams.toString()),
+        sessionToken,
+        discovery,
+      }),
+    [discovery, pathname, searchParams, sessionToken],
   );
+  const catalogViewBeforeSearchRef = useRef<SessionCatalogRoute>(catalogView);
+  const displayedCatalogView = isSearchRoute ? catalogViewBeforeSearchRef.current : catalogView;
 
   useEffect(() => {
     if (pathname !== lastPathnameRef.current) {
@@ -110,6 +134,15 @@ export function SessionRequestPage({
       lastPathnameRef.current = pathname;
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (catalogView.kind !== "catalog" || !catalogView.canonicalHref) return;
+    router.replace(catalogView.canonicalHref);
+  }, [catalogView, router]);
+
+  useEffect(() => {
+    if (!isSearchRoute) catalogViewBeforeSearchRef.current = catalogView;
+  }, [catalogView, isSearchRoute]);
 
   const loadParticipantRequests = useCallback(
     async (signal?: AbortSignal) => {
@@ -343,17 +376,68 @@ export function SessionRequestPage({
     }
   }, [sessionToken]);
 
+  const navigateToSearch = useCallback((query: string) => {
+    const href = `/s/${encodeURIComponent(sessionToken)}/search?${new URLSearchParams({ q: query }).toString()}`;
+    setPendingSearchQuery(query);
+    if (lastDispatchedSearchQueryRef.current !== query) {
+      lastDispatchedSearchQueryRef.current = query;
+      void runSearch(query);
+    }
+    if (isSearchRoute) {
+      router.replace(href);
+    } else {
+      enteredSearchFromSessionRef.current = true;
+      router.push(href);
+    }
+  }, [isSearchRoute, router, runSearch, sessionToken]);
+
   useEffect(() => {
-    if (!canSearchPublicSongs(normalizedSearchTerm)) return;
+    if (!isSearchRoute) {
+      if (wasOnSearchRouteRef.current) {
+        lastDispatchedSearchQueryRef.current = null;
+        const clearStaleSearchState = window.setTimeout(() => {
+          setSearchTerm("");
+          setPendingSearchQuery(null);
+          setSearchResults([]);
+          setSearchMessage(null);
+          setIsSearching(false);
+          restoreCatalogScrollPosition();
+        }, 0);
+        wasOnSearchRouteRef.current = false;
+        return () => window.clearTimeout(clearStaleSearchState);
+      }
+      wasOnSearchRouteRef.current = false;
+      return;
+    }
+
+    wasOnSearchRouteRef.current = true;
+
+    if (!canSearchPublicSongs(routeSearchQuery)) {
+      searchControllerRef.current?.abort();
+      searchVersionRef.current += 1;
+      router.replace(`/s/${encodeURIComponent(sessionToken)}`);
+      return;
+    }
+
+    if (lastDispatchedSearchQueryRef.current === routeSearchQuery) return;
+    lastDispatchedSearchQueryRef.current = routeSearchQuery;
+    void runSearch(routeSearchQuery);
+  }, [isSearchRoute, routeSearchQuery, router, runSearch, sessionToken]);
+
+  useEffect(() => {
+    if (!shouldDebounceSearchRef.current || !canSearchPublicSongs(normalizedSearchTerm)) {
+      return;
+    }
+    shouldDebounceSearchRef.current = false;
     searchDebounceRef.current = window.setTimeout(() => {
       searchDebounceRef.current = null;
-      void runSearch(normalizedSearchTerm);
+      navigateToSearch(normalizedSearchTerm);
     }, 250);
     return () => {
       if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
       searchDebounceRef.current = null;
     };
-  }, [normalizedSearchTerm, runSearch]);
+  }, [navigateToSearch, normalizedSearchTerm]);
 
   useEffect(() => () => {
     searchControllerRef.current?.abort();
@@ -366,21 +450,30 @@ export function SessionRequestPage({
     if (canSearchPublicSongs(query)) {
       if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
       searchDebounceRef.current = null;
-      void runSearch(query);
+      shouldDebounceSearchRef.current = false;
+      navigateToSearch(query);
     }
   }
 
   function handleSearchTermChange(value: string) {
     const query = normalizePublicSearchTerm(value);
-    if (query && !isSearchActive) captureCatalogScrollPosition();
+    if (query && !isSearchRoute) captureCatalogScrollPosition();
     setSearchTerm(value);
+    shouldDebounceSearchRef.current = true;
     if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = null;
     searchControllerRef.current?.abort();
     searchVersionRef.current += 1;
-    setSearchResults([]);
-    setSearchMessage(query ? (canSearchPublicSongs(query) ? null : "Wpisz co najmniej 2 znaki.") : null);
-    setIsSearching(canSearchPublicSongs(query));
+    if (!canSearchPublicSongs(query)) {
+      shouldDebounceSearchRef.current = false;
+      setSearchResults([]);
+      setSearchMessage(query ? "Wpisz co najmniej 2 znaki." : null);
+      setIsSearching(false);
+    } else {
+      setSearchResults([]);
+      setSearchMessage(null);
+      setIsSearching(true);
+    }
     if (!query) clearSearchResults();
   }
 
@@ -394,11 +487,21 @@ export function SessionRequestPage({
     searchControllerRef.current?.abort();
     searchVersionRef.current += 1;
     setSearchTerm("");
+    setPendingSearchQuery(null);
     setSearchResults([]);
     setSearchMessage(null);
     setSelectedSong(null);
     setIsSongDetailsOpen(false);
     setSubmitAlert(null);
+    if (enteredSearchFromSessionRef.current) {
+      enteredSearchFromSessionRef.current = false;
+      router.back();
+      return;
+    }
+    if (isSearchRoute) {
+      router.replace(`/s/${encodeURIComponent(sessionToken)}`);
+      return;
+    }
     restoreCatalogScrollPosition();
   }
 
@@ -430,11 +533,7 @@ export function SessionRequestPage({
     try {
       const invalidationVersion = realtimeInvalidationVersionRef.current;
       await createSessionRequest(sessionToken, { songId: selectedSong.id });
-      setSelectedSong(null);
-      setSearchTerm("");
-      setSearchResults([]);
-      setSearchMessage(null);
-      setIsSongDetailsOpen(false);
+      clearSearchResults();
       toast.success("Dodano zgłoszenie", {
         description: "Operator musi je zatwierdzić.",
       });
@@ -496,7 +595,7 @@ export function SessionRequestPage({
         onSearch={handleSearch}
         onSearchTermChange={handleSearchTermChange}
         onOpenQueue={openQueue}
-        searchTerm={searchTerm}
+        searchTerm={searchInputValue}
         showQueue={canViewPublicQueue || Boolean(participantDisplayName)}
       />
       <div className="flex min-h-0 flex-1">
@@ -512,18 +611,18 @@ export function SessionRequestPage({
       {canSubmitSongRequests ? (
         <section aria-label="Wyszukiwanie piosenek" className="mb-7">
           <div hidden={isSearchActive}>
-            {catalogView.kind === "discovery" && discovery ? (
+            {displayedCatalogView.kind === "discovery" && discovery ? (
               <SessionDiscoveryHome discovery={discovery} onSongSelect={selectSong} sessionToken={sessionToken} />
             ) : null}
-            {catalogView.kind === "genres" && discovery ? (
+            {displayedCatalogView.kind === "genres" && discovery ? (
               <SessionCatalogGenres genres={discovery.genres} onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, hasClientNavigationRef.current)} sessionToken={sessionToken} />
             ) : null}
-            {catalogView.kind === "catalog" ? (
+            {displayedCatalogView.kind === "catalog" ? (
               <CatalogSongList
-                backLabel={catalogView.backLabel}
-                heading={catalogView.heading}
-                input={catalogView.input}
-                onBack={() => navigateBack(router, catalogView.fallbackHref, hasClientNavigationRef.current)}
+                backLabel={displayedCatalogView.backLabel}
+                heading={displayedCatalogView.heading}
+                input={displayedCatalogView.input}
+                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, hasClientNavigationRef.current)}
                 onSongSelect={selectSong}
                 sessionToken={sessionToken}
               />
@@ -535,7 +634,7 @@ export function SessionRequestPage({
               message={searchMessage}
               onBack={clearSearchResults}
               onSongSelect={selectSong}
-              query={normalizedSearchTerm}
+               query={searchDisplayQuery}
               songs={searchResults}
             />
           ) : null}
@@ -702,53 +801,6 @@ function hasSessionEventChanged(current: SessionEvent, next: SessionEvent) {
     current.endsAt !== next.endsAt ||
     current.closedAt !== next.closedAt
   );
-}
-
-type CatalogView =
-  | { kind: "discovery" }
-  | { kind: "genres" }
-  | {
-      kind: "catalog";
-      heading: string;
-      backLabel: string;
-      fallbackHref: string;
-      input: { genre?: string; hit?: boolean; duet?: boolean; sort?: "newest" };
-    };
-
-function getCatalogView(
-  pathname: string,
-  searchParams: ReturnType<typeof useSearchParams>,
-  discovery?: SessionSongDiscovery,
-): CatalogView {
-  const tokenMatch = pathname.match(/^\/s\/([^/]+)/);
-  const token = tokenMatch?.[1] ?? "";
-  const sessionHref = `/s/${token}`;
-  if (pathname.endsWith("/catalog/genres")) return { kind: "genres" };
-  if (!pathname.endsWith("/catalog")) return { kind: "discovery" };
-
-  const genre = searchParams.get("genre");
-  if (genre) {
-    const knownGenre = discovery?.genres.find((item) => item.value === genre);
-    return {
-      kind: "catalog",
-      heading: knownGenre?.label ?? genre,
-      backLabel: "Wróć do gatunków",
-      fallbackHref: `${sessionHref}/catalog/genres`,
-      input: { genre },
-    };
-  }
-
-  if (searchParams.get("filter") === "hits") {
-    return { kind: "catalog", heading: "Hity", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: { hit: true } };
-  }
-  if (searchParams.get("filter") === "duets") {
-    return { kind: "catalog", heading: "Duety", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: { duet: true } };
-  }
-  if (searchParams.get("sort") === "newest") {
-    return { kind: "catalog", heading: "Najnowsze", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: { sort: "newest" } };
-  }
-
-  return { kind: "catalog", heading: "Katalog", backLabel: "Wróć do odkrywania", fallbackHref: sessionHref, input: {} };
 }
 
 function navigateBack(

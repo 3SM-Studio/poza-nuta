@@ -45,6 +45,8 @@ export type LocalSupabaseFixture = {
       participantId: number;
       songTitle: string;
       status: string;
+      requestedBy: string;
+      createdAt: Date;
       requestDisplayName: string;
       currentDisplayName: string;
     }[]
@@ -484,6 +486,8 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           participant_id: number;
           song_title: string;
           status: string;
+          requested_by: string;
+          created_at: Date;
           request_display_name: string;
           current_display_name: string;
         }[]
@@ -495,6 +499,8 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           ep.participant_id,
           s.title AS song_title,
           r.status,
+          r.requested_by,
+          r.created_at,
           r.display_name AS request_display_name,
           ep.display_name AS current_display_name
         FROM public.song_requests r
@@ -522,6 +528,8 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
         participantId: row.participant_id,
         songTitle: row.song_title,
         status: row.status,
+        requestedBy: row.requested_by,
+        createdAt: row.created_at,
         requestDisplayName: row.request_display_name,
         currentDisplayName: row.current_display_name,
       }));

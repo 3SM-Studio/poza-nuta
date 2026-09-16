@@ -13,6 +13,7 @@ export function CurrentQueueSongBar({
   showSongTitles,
 }: CurrentQueueSongBarProps) {
   const hasSongDetails = showSongTitles && item.title;
+  const singerName = item.singerName.trim();
 
   return (
     <section
@@ -33,6 +34,11 @@ export function CurrentQueueSongBar({
         <p className="truncate text-sm text-primary-foreground/80">
           {hasSongDetails ? item.artist : "Tytuł ukryty publicznie"}
         </p>
+        {singerName ? (
+          <p className="mt-1 truncate text-sm font-medium text-primary-foreground/90">
+            Śpiewa: {singerName}
+          </p>
+        ) : null}
       </div>
     </section>
   );

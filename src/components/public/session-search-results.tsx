@@ -26,7 +26,7 @@ export function SessionSearchResults({
   onBack,
   onSongSelect,
   heading = `„${query}”`,
-  backLabel = "Wróć do wyszukiwania",
+  backLabel = "Wróć do katalogu",
   emptyMessage = "Nie znaleziono pasujących piosenek.",
 }: SessionSearchResultsProps) {
   const hasSearchState = isLoading || message !== null || songs.length > 0;

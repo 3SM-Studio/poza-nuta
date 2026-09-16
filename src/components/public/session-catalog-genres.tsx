@@ -5,6 +5,7 @@ import { ArrowLeft, Disc3, Sparkles, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { SongDiscoveryCategory } from "./api";
+import { buildSessionGenreCatalogHref } from "./session-catalog-route";
 
 const CARD_GRADIENTS = [
   "from-fuchsia-600 via-violet-700 to-slate-950",
@@ -47,12 +48,11 @@ export function SessionCatalogGenres({
 
 function GenreCard({ genre, index, sessionToken }: { genre: SongDiscoveryCategory; index: number; sessionToken: string }) {
   const Icon: LucideIcon = index % 2 === 0 ? Disc3 : Sparkles;
-  const params = new URLSearchParams({ genre: genre.value });
   return (
     <Link
       aria-label={`${genre.label}, ${genre.count} piosenek`}
       className={`group relative flex aspect-square overflow-hidden rounded-xl bg-gradient-to-br ${CARD_GRADIENTS[index % CARD_GRADIENTS.length]} p-3 text-primary-foreground shadow-[0_12px_28px_oklch(0_0_0_/_28%)] transition-transform duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/60`}
-      href={`/s/${encodeURIComponent(sessionToken)}/catalog?${params.toString()}`}
+      href={buildSessionGenreCatalogHref(sessionToken, genre.value)}
       prefetch={false}
     >
       <span className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,oklch(1_0_0_/_28%),transparent_24%),linear-gradient(to_top,oklch(0_0_0_/_80%),oklch(0_0_0_/_14%)_68%)]" />

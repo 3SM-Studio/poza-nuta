@@ -13,6 +13,10 @@ import {
 } from "@/components/ui/carousel";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PublicSong, SessionSongDiscovery } from "./api";
+import {
+  buildSessionCatalogHref,
+  buildSessionGenreCatalogHref,
+} from "./session-catalog-route";
 import { browseSessionSongs } from "./session-api";
 import { SessionSongArtwork } from "./session-song-artwork";
 
@@ -389,13 +393,13 @@ function buildCatalogHref(
   if (destination === "genres") {
     return `/s/${encodeURIComponent(sessionToken)}/catalog/genres`;
   }
-  const searchParams = new URLSearchParams();
-  if (input.genre) searchParams.set("genre", input.genre);
-  if (input.hit) searchParams.set("filter", "hits");
-  if (input.duet) searchParams.set("filter", "duets");
-  if (input.sort) searchParams.set("sort", input.sort);
-  const query = searchParams.toString();
-  return `/s/${encodeURIComponent(sessionToken)}/catalog${query ? `?${query}` : ""}`;
+  if (input.genre) return buildSessionGenreCatalogHref(sessionToken, input.genre);
+  if (input.hit) return buildSessionCatalogHref(sessionToken, { kind: "hits" });
+  if (input.duet) return buildSessionCatalogHref(sessionToken, { kind: "duets" });
+  if (input.sort === "newest") {
+    return buildSessionCatalogHref(sessionToken, { kind: "newest" });
+  }
+  return `/s/${encodeURIComponent(sessionToken)}/catalog`;
 }
 
 function slugify(value: string) {

@@ -58,11 +58,11 @@ describe("session discovery home", () => {
     expect(screen.queryByText("Popularne")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pop, 120 piosenek" })).toHaveAttribute(
       "href",
-      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog?genre=pop",
+      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog?filter=genre%3Apop",
     );
     expect(screen.getByRole("link", { name: "Zobacz więcej: Najnowsze" })).toHaveAttribute(
       "href",
-      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog?sort=newest",
+      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog?filter=newest",
     );
   });
 

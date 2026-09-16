@@ -24,6 +24,7 @@ const {
   refreshRouter,
   routerBack,
   routerPush,
+  routerReplace,
   navigationState,
   searchSongs,
   browseSongs,
@@ -47,6 +48,7 @@ const {
     refreshRouter: vi.fn(),
     routerBack: vi.fn(),
     routerPush: vi.fn(),
+    routerReplace: vi.fn(),
     navigationState: {
       pathname: "/s/AbCdEfGhIjKlMnOpQrStUv",
       searchParams: new URLSearchParams(),
@@ -88,7 +90,12 @@ vi.mock("@/components/public/use-public-queue-realtime", () => ({
 }));
 
 vi.mock("next/navigation", () => {
-  const router = { back: routerBack, push: routerPush, refresh: refreshRouter };
+  const router = {
+    back: routerBack,
+    push: routerPush,
+    replace: routerReplace,
+    refresh: refreshRouter,
+  };
 
   return {
     useRouter: () => router,
@@ -139,6 +146,7 @@ describe("session request feedback", () => {
     refreshRouter.mockReset();
     routerBack.mockReset();
     routerPush.mockReset();
+    routerReplace.mockReset();
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv";
     navigationState.searchParams = new URLSearchParams();
     searchSongs.mockReset();
@@ -381,6 +389,121 @@ describe("session request feedback", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
     expect(searchSongs).toHaveBeenCalledOnce();
+  });
+
+  it("initializes a direct Search route from q and performs one request", async () => {
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=abba");
+
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    expect(await screen.findByRole("heading", { name: "„abba”" })).toBeVisible();
+    expect(screen.getByRole("searchbox")).toHaveValue("abba");
+    expect(searchSongs).toHaveBeenCalledTimes(1);
+    expect(searchSongs).toHaveBeenCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv",
+      "abba",
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("returns direct invalid Search URLs to Discovery without requesting search", async () => {
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=a");
+
+    render(
+      <SessionRequestPage
+        discovery={{ genres: [], languages: [], features: { duetCount: 0, hitCount: 0, plusCount: 0 } }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(routerReplace).toHaveBeenCalledWith("/s/AbCdEfGhIjKlMnOpQrStUv"),
+    );
+    expect(searchSongs).not.toHaveBeenCalled();
+  });
+
+  it("pushes the first Search route and replaces subsequent effective queries", async () => {
+    const { rerender } = render(
+      <SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />,
+    );
+    const searchbox = screen.getByRole("searchbox");
+
+    fireEvent.change(searchbox, { target: { value: "AB" } });
+    fireEvent.submit(searchbox.closest("form")!);
+    expect(routerPush).toHaveBeenCalledWith(
+      "/s/AbCdEfGhIjKlMnOpQrStUv/search?q=AB",
+    );
+
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=AB");
+    rerender(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    await screen.findByRole("heading", { name: "„AB”" });
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "ABC" } });
+    fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
+    expect(routerReplace).toHaveBeenCalledWith(
+      "/s/AbCdEfGhIjKlMnOpQrStUv/search?q=ABC",
+    );
+  });
+
+  it("uses a Discovery replacement when direct Search is cleared", async () => {
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=abba");
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    await screen.findByRole("heading", { name: "„abba”" });
+    fireEvent.click(screen.getByRole("button", { name: "Wróć do katalogu" }));
+
+    expect(routerReplace).toHaveBeenCalledWith("/s/AbCdEfGhIjKlMnOpQrStUv");
+    expect(routerBack).not.toHaveBeenCalled();
+  });
+
+  it("keeps the mounted catalog route when clearing a non-navigating short query", () => {
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/catalog";
+    navigationState.searchParams = new URLSearchParams("filter=genre%3Arock");
+    render(
+      <SessionRequestPage
+        discovery={{
+          genres: [{ value: "rock", label: "Rock", count: 120 }],
+          languages: [],
+          features: { duetCount: 0, hitCount: 0, plusCount: 0 },
+        }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "a" } });
+    fireEvent.change(searchbox, { target: { value: "" } });
+
+    expect(routerBack).not.toHaveBeenCalled();
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  it("canonicalizes a legacy catalog genre with replace while retaining one browse request", async () => {
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/catalog";
+    navigationState.searchParams = new URLSearchParams("genre=Rock");
+    render(
+      <SessionRequestPage
+        discovery={{
+          genres: [{ value: "rock", label: "Rock", count: 120 }],
+          languages: [],
+          features: { duetCount: 0, hitCount: 0, plusCount: 0 },
+        }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Rock" })).toBeVisible();
+    await waitFor(() => expect(browseSongs).toHaveBeenCalledOnce());
+    expect(routerReplace).toHaveBeenCalledWith(
+      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog?filter=genre%3Arock",
+    );
   });
 
   it("restores the catalog scroll position after clearing live search", async () => {
