@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 
@@ -8,7 +6,6 @@ import { SessionRequestPage } from "@/components/public/session-request-page";
 import { ParticipantJoinGate } from "@/components/public/participant-join-gate";
 import { SessionStateAlert } from "@/components/public/session-state-alert";
 import type { SessionEvent } from "@/components/public/session-api";
-import styles from "@/components/public/public.module.css";
 import { consumeSessionRequestRateLimit } from "@/server/session-api/rate-limit";
 import { PARTICIPANT_CREDENTIAL_COOKIE } from "@/server/session-api/participant-credential";
 import {
@@ -62,13 +59,6 @@ export default async function PublicSessionPage({
   const access = serviceUnavailable
     ? ({ status: "service_unavailable" } as const)
     : pageData?.access ?? ({ status: "rate_limited" } as const);
-  const event =
-    access.status === "invalid" ||
-    access.status === "rate_limited" ||
-    access.status === "service_unavailable"
-      ? null
-      : access.event;
-
   if (access.status === "invalid") {
     notFound();
   }
@@ -77,23 +67,7 @@ export default async function PublicSessionPage({
   const discovery = pageData?.discovery ?? null;
 
   return (
-    <main className={styles.publicPage}>
-      <div className={styles.publicShell}>
-        <header className={styles.publicHeader}>
-          <Link className={styles.brand} href="/" aria-label="Strona główna">
-            <Image
-              className={styles.brandLogo}
-              src="/brand/poza_nuta_logo-white.png"
-              alt="Poza Nutą"
-              width={1254}
-              height={1254}
-              loading="eager"
-            />
-          </Link>
-          <h1>{event?.name ?? "Sesja karaoke"}</h1>
-          {event?.venue ? <p>{event.venue}</p> : null}
-        </header>
-
+    <main className="min-h-dvh bg-background text-foreground">
         {access.status === "active" ? (
           canUseSessionSongRequests(access.event) ||
           canUseSessionPublicQueue(access.event) ? (
@@ -105,7 +79,10 @@ export default async function PublicSessionPage({
                 discovery={discovery ?? undefined}
               />
             ) : (
-              <ParticipantJoinGate sessionToken={token} />
+              <ParticipantJoinGate
+                eventName={access.event.name}
+                sessionToken={token}
+              />
             )
           ) : (
             <SessionRequestPage
@@ -114,12 +91,11 @@ export default async function PublicSessionPage({
             />
           )
         ) : (
-          <section className={styles.publicSection}>
-            <h2>Sesja karaoke</h2>
+          <section className="mx-auto w-full max-w-lg px-4 pt-[max(2rem,env(safe-area-inset-top))] sm:px-8">
+            <h2 className="mb-3 text-xl font-bold tracking-[-0.035em]">Sesja karaoke</h2>
             <SessionStateAlert kind={access.status} />
           </section>
         )}
-      </div>
     </main>
   );
 }

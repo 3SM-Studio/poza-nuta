@@ -134,17 +134,138 @@ describe("session request feedback", () => {
     getParticipantRequests.mockResolvedValue({ items: [] });
   });
 
-  it("keeps field validation inline without a toast", () => {
+  it("requires selecting a result before exposing the add-to-queue action", () => {
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
-    const submit = screen.getByRole("button", { name: "Dodaj do kolejki" });
-    fireEvent.submit(submit.closest("form")!);
-
-    expect(screen.getByText("Wybierz piosenkę.")).toBeVisible();
-    expect(screen.queryByLabelText("Imię lub ksywka")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Dodaj do kolejki" })).not.toBeInTheDocument();
     expect(toastSuccess).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
     expect(createRequest).not.toHaveBeenCalled();
+  });
+
+  it("opens song details from a result and renders only available metadata", async () => {
+    searchSongs.mockResolvedValueOnce([{ ...song, durationSeconds: 215 }]);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    await openSongDetails();
+
+    const drawer = await screen.findByRole("dialog", { name: "Test Song" });
+    expect(within(drawer).getByText("iSing")).toBeVisible();
+    expect(within(drawer).getByText("3:35")).toBeVisible();
+    expect(within(drawer).queryByText(/rok|tonacja|wersja/i)).not.toBeInTheDocument();
+  });
+
+  it("renders an accessible fallback artwork and truncation-safe long result title", async () => {
+    const longTitle =
+      "Thank You for the Music (Live at Wembley Arena, London, 1979)";
+    searchSongs.mockResolvedValueOnce([{ ...song, title: longTitle }]);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Music" } });
+    fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
+
+    const result = (await screen.findByText(longTitle)).closest("button");
+    if (!result) throw new Error("Expected the long title to remain in its result button.");
+    expect(result).toHaveAttribute("type", "button");
+    expect(result.querySelector("svg")).not.toBeNull();
+  });
+
+  it("renders search loading before a pending result response resolves", async () => {
+    const search = deferred<typeof song[]>();
+    searchSongs.mockReturnValueOnce(search.promise);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Test" } });
+    fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
+
+    expect(await screen.findByLabelText("Wczytywanie wyników")).toBeVisible();
+    search.resolve([song]);
+    expect(await screen.findByRole("button", { name: /Test Song/ })).toBeVisible();
+  });
+
+  it("renders a calm no-results state", async () => {
+    searchSongs.mockResolvedValueOnce([]);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "xyz" } });
+    fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
+
+    expect(await screen.findByText("Nie znaleziono pasujących piosenek.")).toBeVisible();
+  });
+
+  it("disables the drawer CTA while a request is being submitted", async () => {
+    const request = deferred<{}>();
+    createRequest.mockReturnValueOnce(request.promise);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    await openSongDetails();
+    const drawer = await screen.findByRole("dialog", { name: "Test Song" });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Dodaj do kolejki" }));
+
+    expect(await within(drawer).findByRole("button", { name: "Dodaję…" })).toBeDisabled();
+    expect(createRequest).toHaveBeenCalledOnce();
+    request.resolve({});
+  });
+
+  it("blocks a double submit while the first request is pending", async () => {
+    const request = deferred<{}>();
+    createRequest.mockReturnValueOnce(request.promise);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    await openSongDetails();
+    const submit = within(
+      await screen.findByRole("dialog", { name: "Test Song" }),
+    ).getByRole("button", { name: "Dodaj do kolejki" });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    expect(createRequest).toHaveBeenCalledOnce();
+    request.resolve({});
+  });
+
+  it("closes song details by its close action and Escape", async () => {
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    await openSongDetails();
+
+    fireEvent.click(screen.getByRole("button", { name: "Zamknij szczegóły utworu" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Test Song" })).toBeNull());
+
+    await openSongDetails();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Test Song" })).toBeNull());
+  });
+
+  it("opens and closes the participant nickname drawer without a mutation", async () => {
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={event}
+        participantDisplayName="Ala"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Zmień swój nick" }));
+    const drawer = screen.getByRole("dialog", { name: "Zmień swój nick" });
+    expect(drawer).toBeVisible();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Anuluj" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(renameParticipant).not.toHaveBeenCalled();
+  });
+
+  it("renders the queue view and its empty state", async () => {
+    render(
+      <SessionRequestPage
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={{ ...event, publicQueueEnabled: true }}
+        participantDisplayName="Ala"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Otwórz kolejkę" }));
+    expect(screen.getByRole("heading", { name: "Kolejka" })).toBeVisible();
+    expect(await screen.findByText("0 utworów w kolejce")).toBeVisible();
+    expect(screen.getByText("Kolejka nie ma jeszcze publicznie widocznych zgłoszeń.")).toBeVisible();
   });
 
   it("shows a success toast and refreshes the server-backed request list", async () => {
@@ -228,7 +349,9 @@ describe("session request feedback", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Zmień nazwę w tym wydarzeniu"), {
+    fireEvent.click(screen.getByRole("button", { name: "Zmień swój nick" }));
+    expect(screen.getByRole("dialog", { name: "Zmień swój nick" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Twój nick"), {
       target: { value: "Nowa Ala" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Zapisz" }));
@@ -238,7 +361,10 @@ describe("session request feedback", () => {
         "Nowa Ala",
       ),
     );
-    expect(await screen.findByText("Nowa Ala")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Nazwa została zmieniona");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Zmień swój nick" })).toBeNull(),
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "Anuluj" }));
     getParticipantRequests.mockResolvedValue({
@@ -277,7 +403,8 @@ describe("session request feedback", () => {
           participantDisplayName="Ala"
         />,
       );
-      const input = screen.getByLabelText("Zmień nazwę w tym wydarzeniu");
+      fireEvent.click(screen.getByRole("button", { name: "Zmień swój nick" }));
+      const input = screen.getByLabelText("Twój nick");
 
       expect(input).not.toHaveAttribute("minlength");
       expect(input).not.toHaveAttribute("maxlength");
@@ -424,7 +551,8 @@ describe("session request feedback", () => {
     expect(getQueue).toHaveBeenCalledOnce();
     expect(getEvent).not.toHaveBeenCalled();
     expect(await screen.findByText("New request")).toBeVisible();
-    expect(await screen.findByText("Queue song - Queue artist")).toBeVisible();
+    expect(await screen.findByText("Queue song")).toBeVisible();
+    expect(screen.getByText("Queue artist")).toBeVisible();
   });
 
   it("uses one queue refresh for an own create and its following broadcast", async () => {
@@ -567,12 +695,21 @@ describe("session request feedback", () => {
 });
 
 async function completeRequestForm() {
+  await openSongDetails();
+  fireEvent.click(
+    within(await screen.findByRole("dialog", { name: "Test Song" })).getByRole(
+      "button",
+      { name: "Dodaj do kolejki" },
+    ),
+  );
+}
+
+async function openSongDetails() {
   fireEvent.change(screen.getByRole("searchbox"), {
     target: { value: "Test" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Szukaj" }));
+  fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
   fireEvent.click(await screen.findByRole("button", { name: /Test Song/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Dodaj do kolejki" }));
 }
 
 function deferred<T>() {

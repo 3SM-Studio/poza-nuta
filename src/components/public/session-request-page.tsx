@@ -20,21 +20,23 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
-  getParticipantNicknameLength,
   isParticipantNicknameLengthValid,
   normalizeParticipantNickname,
-  PARTICIPANT_NICKNAME_MAX_LENGTH,
 } from "@/lib/participant-nickname";
-import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 import { getSessionCapabilityState } from "@/lib/session-capabilities";
 import type {
   PublicQueueResponse,
   PublicSong,
   SessionSongDiscovery,
 } from "./api";
-import styles from "./public.module.css";
+import { ParticipantProfileDrawer } from "./participant-profile-drawer";
+import { waitForMutationRealtimeOrFallback } from "./session-mutation-refresh";
+import { SessionQueueList } from "./session-queue-list";
+import { SessionShellHeader } from "./session-shell-header";
+import { SessionSearchResults } from "./session-search-results";
+import { SongDetailsDrawer } from "./song-details-drawer";
 import { SongDiscoveryTeaser } from "./song-discovery-page";
 import {
   cancelParticipantRequest,
@@ -50,14 +52,9 @@ import {
 } from "./session-api";
 import {
   canSearchPublicSongs,
-  formatSongSource,
   normalizePublicSearchTerm,
 } from "./validation";
 import { usePublicQueueRealtime } from "./use-public-queue-realtime";
-
-type SessionRequestFormErrors = Partial<Record<"songId", string>>;
-
-const mutationRealtimeGraceMs = 250;
 
 export function SessionRequestPage({
   sessionToken,
@@ -76,14 +73,16 @@ export function SessionRequestPage({
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [formErrors, setFormErrors] = useState<SessionRequestFormErrors>({});
   const [submitAlert, setSubmitAlert] =
     useState<SessionStateAlertKind | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSongDetailsOpen, setIsSongDetailsOpen] = useState(false);
   const [displayName, setDisplayName] = useState(participantDisplayName ?? "");
   const [renameValue, setRenameValue] = useState(participantDisplayName ?? "");
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameMessage, setRenameMessage] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isQueueView, setIsQueueView] = useState(false);
   const [participantRequests, setParticipantRequests] =
     useState<ParticipantRequest[] | null>(null);
   const [participantRequestsMessage, setParticipantRequestsMessage] =
@@ -153,40 +152,21 @@ export function SessionRequestPage({
     waiters.forEach((resolve) => resolve());
   }, []);
   const waitForRealtimeOrRefresh = useCallback(
-    async (versionBeforeMutation: number) => {
-      if (realtimeInvalidationVersionRef.current !== versionBeforeMutation) {
-        return;
-      }
-
-      await new Promise<void>((resolve) => {
-        let settled = false;
-        const controller = new AbortController();
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          controller.abort();
-          window.clearTimeout(timer);
-          realtimeInvalidationWaitersRef.current.delete(finish);
-          resolve();
-        };
-        const timer = window.setTimeout(() => {
-          void Promise.all([
-            loadParticipantRequests(controller.signal),
-            canViewPublicQueue
-              ? loadQueue(controller.signal)
-              : Promise.resolve(),
-          ]).finally(finish);
-        }, mutationRealtimeGraceMs);
-
-        realtimeInvalidationWaitersRef.current.add(finish);
-        if (realtimeInvalidationVersionRef.current !== versionBeforeMutation) {
-          finish();
-        }
-      });
-    },
+    (versionBeforeMutation: number) =>
+      waitForMutationRealtimeOrFallback({
+        onFallback: async (signal) => {
+          await Promise.all([
+            loadParticipantRequests(signal),
+            canViewPublicQueue ? loadQueue(signal) : Promise.resolve(),
+          ]);
+        },
+        realtimeInvalidationVersionRef,
+        realtimeInvalidationWaitersRef,
+        versionBeforeMutation,
+      }),
     [canViewPublicQueue, loadParticipantRequests, loadQueue],
   );
-  const liveStatus = usePublicQueueRealtime(
+  usePublicQueueRealtime(
     canViewPublicQueue || participantDisplayName ? sessionToken : null,
     async (reason, signal) => {
       noteRealtimeInvalidation();
@@ -276,6 +256,7 @@ export function SessionRequestPage({
       );
       setDisplayName(response.participant.displayName);
       setRenameValue(response.participant.displayName);
+      setIsProfileOpen(false);
       toast.success("Nazwa została zmieniona");
     } catch (caughtError) {
       if (
@@ -351,36 +332,31 @@ export function SessionRequestPage({
 
   function selectSong(song: PublicSong) {
     setSelectedSong(song);
-    setFormErrors((current) => ({ ...current, songId: undefined }));
+    setSubmitAlert(null);
+    setIsSongDetailsOpen(true);
+  }
+
+  function clearSearchResults() {
+    setSearchResults([]);
+    setSearchMessage(null);
+    setSelectedSong(null);
+    setIsSongDetailsOpen(false);
     setSubmitAlert(null);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitSelectedSong() {
+    if (isSubmitting || !selectedSong) return;
     setSubmitAlert(null);
-
-    const validation = validateSessionRequestForm({
-      songId: selectedSong?.id ?? null,
-    });
-
-    if (!validation.success) {
-      setFormErrors(validation.errors);
-      return;
-    }
-
-    if (!selectedSong) {
-      return;
-    }
-
-    setFormErrors({});
     setIsSubmitting(true);
 
     try {
       const invalidationVersion = realtimeInvalidationVersionRef.current;
-      await createSessionRequest(sessionToken, validation.data);
+      await createSessionRequest(sessionToken, { songId: selectedSong.id });
       setSelectedSong(null);
       setSearchTerm("");
       setSearchResults([]);
+      setSearchMessage(null);
+      setIsSongDetailsOpen(false);
       toast.success("Dodano zgłoszenie", {
         description: "Operator musi je zatwierdzić.",
       });
@@ -417,174 +393,67 @@ export function SessionRequestPage({
   }
 
   return (
-    <>
-      {participantDisplayName ? (
-        <section className={styles.publicSection} aria-labelledby="participant-identity-heading">
-          <h2 id="participant-identity-heading">Twoja nazwa</h2>
-          <p className={styles.inlineMessage}>
-            Dołączono jako <strong>{displayName}</strong>
-          </p>
-          <form className={styles.renameForm} onSubmit={handleRename}>
-            <label className={styles.fieldLabel} htmlFor="participant-display-name">
-              Zmień nazwę w tym wydarzeniu
-            </label>
-            <div className={styles.inlineForm}>
-              <Input
-                id="participant-display-name"
-                value={renameValue}
-                onChange={(event) => {
-                  setRenameValue(event.target.value);
-                  setRenameMessage(null);
-                }}
-                autoComplete="nickname"
-                aria-invalid={Boolean(renameMessage)}
-                aria-describedby={
-                  renameMessage ? "participant-rename-error" : undefined
-                }
-                disabled={isRenaming}
-              />
-              <Button type="submit" variant="outline" disabled={isRenaming}>
-                {isRenaming ? "Zapisuję…" : "Zapisz"}
-              </Button>
-            </div>
-            <span className={styles.characterCount}>
-              {getParticipantNicknameLength(
-                normalizeParticipantNickname(renameValue).displayName,
-              )}
-              /{PARTICIPANT_NICKNAME_MAX_LENGTH}
-            </span>
-            {renameMessage ? (
-              <p
-                className={styles.fieldError}
-                id="participant-rename-error"
-                role="alert"
-              >
-                {renameMessage}
-              </p>
-            ) : null}
-          </form>
-        </section>
+    <div className="flex min-h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
+      <SessionShellHeader
+        isQueueView={isQueueView}
+        isSearching={isSearching}
+        isSubmitting={isSubmitting}
+        onOpenProfile={() => {
+          setRenameValue(displayName);
+          setRenameMessage(null);
+          setIsProfileOpen(true);
+        }}
+        onSearch={handleSearch}
+        onSearchTermChange={setSearchTerm}
+        onToggleQueue={() => setIsQueueView((current) => !current)}
+        searchTerm={searchTerm}
+        showQueue={canViewPublicQueue}
+      />
+      {canViewPublicQueue ? (
+        <div className={cn("flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8", !isQueueView && "hidden")}>
+          <SessionQueueList
+            message={queueMessage}
+            onRefresh={() => void refreshQueue()}
+            queue={queue}
+            refreshing={isRefreshingQueue}
+          />
+        </div>
       ) : null}
-
+      <div className={cn("mx-auto w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-8", isQueueView && "hidden")}>
       {capabilities.allSessionFeaturesDisabled ? (
-        <section className={styles.publicSection}>
-          <h2>Sesja wydarzenia</h2>
+        <section className="mb-7">
+          <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">Sesja wydarzenia</h2>
           <SessionStateAlert kind="queue_disabled" />
         </section>
       ) : null}
 
       {canSubmitSongRequests ? (
         <>
-      <section className={styles.publicSection}>
-        <div className={styles.sectionHeading}>
-          <h2>Wybierz piosenkę</h2>
-          <span className={styles.inlineMessage}>Sesja: {event.name}</span>
-        </div>
+      <section aria-label="Wyszukiwanie piosenek" className="mb-7">
 
-        <form className={styles.searchForm} onSubmit={handleSearch}>
-          <label className={styles.visuallyHidden} htmlFor="session-song-search">
-            Tytuł lub wykonawca
-          </label>
-          <Input
-            id="session-song-search"
-            type="search"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Tytuł lub wykonawca"
-            disabled={isSearching || isSubmitting}
-          />
-          <Button
-            type="submit"
-            disabled={
-              isSearching || isSubmitting || !canSearchPublicSongs(searchTerm)
-            }
-          >
-            {isSearching ? "Szukam..." : "Szukaj"}
-          </Button>
-        </form>
-
-        {discovery ? (
+        {searchResults.length === 0 && searchMessage === null && !isSearching && discovery ? (
           <SongDiscoveryTeaser
             sessionToken={sessionToken}
             discovery={discovery}
           />
         ) : null}
 
-        {searchMessage ? (
-          <p className={styles.inlineMessage} role="status">
-            {searchMessage}
-          </p>
-        ) : null}
-
-        {searchResults.length > 0 ? (
-          <div className={styles.searchResults} aria-label="Wyniki wyszukiwania">
-            {searchResults.map((song) => (
-              <button
-                key={song.id}
-                className={`${styles.songResult} ${
-                  selectedSong?.id === song.id ? styles.selectedResult : ""
-                }`}
-                type="button"
-                onClick={() => selectSong(song)}
-                aria-pressed={selectedSong?.id === song.id}
-                disabled={isSubmitting}
-              >
-                <span className={styles.songResultTitle}>{song.title}</span>
-                <span className={styles.songResultArtist}>{song.artist}</span>
-                <span className={styles.songResultMeta}>
-                  Źródło: {formatSongSource(song.source)} · Duet:{" "}
-                  {song.isDuet ? "tak" : "nie"} · Explicit:{" "}
-                  {song.isExplicit ? "tak" : "nie"} · Plus:{" "}
-                  {song.isPlus ? "tak" : "nie"} · Hit:{" "}
-                  {song.isHit ? "tak" : "nie"}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </section>
-
-      <section className={styles.publicSection}>
-        <h2>Twoje zgłoszenie</h2>
-
-        <div
-          className={`${styles.selectedSong} ${
-            formErrors.songId ? styles.invalidSelection : ""
-          }`}
-        >
-          <span className={styles.fieldLabel}>Wybrana piosenka</span>
-          {selectedSong ? (
-            <>
-              <strong>{selectedSong.title}</strong>
-              <span>{selectedSong.artist}</span>
-            </>
-          ) : (
-            <span>Najpierw wybierz wynik wyszukiwania.</span>
-          )}
-        </div>
-        {formErrors.songId ? (
-          <p className={styles.fieldError}>{formErrors.songId}</p>
-        ) : null}
-
-        <form className={styles.requestForm} onSubmit={handleSubmit}>
-          <Button
-            className={styles.submitButton}
-            type="submit"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Dodaję..." : "Dodaj do kolejki"}
-          </Button>
-        </form>
-
-        {submitAlert ? <SessionStateAlert kind={submitAlert} /> : null}
+        <SessionSearchResults
+          isLoading={isSearching}
+          message={searchMessage}
+          onBack={clearSearchResults}
+          onSongSelect={selectSong}
+          query={normalizePublicSearchTerm(searchTerm)}
+          songs={searchResults}
+        />
       </section>
         </>
       ) : null}
 
       {participantDisplayName ? (
-        <section className={styles.publicSection} aria-labelledby="participant-requests-heading">
-          <div className={styles.sectionHeading}>
-            <h2 id="participant-requests-heading">Moje zgłoszenia</h2>
+        <section className="mb-7" aria-labelledby="participant-requests-heading">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-xl font-bold tracking-[-0.035em]" id="participant-requests-heading">Moje zgłoszenia</h2>
             <Button
               type="button"
               variant="ghost"
@@ -595,25 +464,25 @@ export function SessionRequestPage({
             </Button>
           </div>
           {participantRequestsMessage ? (
-            <p className={styles.errorMessage} role="alert">{participantRequestsMessage}</p>
+            <p className="mt-3 text-sm text-destructive" role="alert">{participantRequestsMessage}</p>
           ) : participantRequests === null ? (
-            <p className={styles.inlineMessage} role="status">Wczytywanie zgłoszeń…</p>
+            <p className="mt-3 text-sm text-muted-foreground" role="status">Wczytywanie zgłoszeń…</p>
           ) : participantRequests.length === 0 ? (
-            <p className={styles.inlineMessage}>Nie masz jeszcze zgłoszeń w tej sesji.</p>
+            <p className="mt-3 text-sm text-muted-foreground">Nie masz jeszcze zgłoszeń w tej sesji.</p>
           ) : (
-            <div className={styles.participantRequestList}>
+            <div className="mt-3">
               {participantRequests.map((request) => (
                 <article
-                  className={styles.participantRequestItem}
+                  className="flex items-start justify-between gap-4 border-b border-border px-0.5 py-4"
                   key={request.id}
                   data-participant-request-id={request.id}
                 >
-                  <div>
+                  <div className="min-w-0">
                     <RequestStatusBadge status={request.status} />
-                    <h3>{request.title}</h3>
-                    <p>{request.artist}</p>
+                    <h3 className="mt-2 text-base font-extrabold tracking-[-0.02em]">{request.title}</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{request.artist}</p>
                     {request.queuePosition !== null ? (
-                      <p className={styles.inlineMessage}>
+                      <p className="mt-2 text-sm text-muted-foreground">
                         Pozycja zgłoszenia w kolejce: #{request.queuePosition}
                         {request.isNext ? " · Następne zaakceptowane zgłoszenie" : ""}
                       </p>
@@ -669,98 +538,34 @@ export function SessionRequestPage({
         </section>
       ) : null}
 
-      {canViewPublicQueue ? (
-      <section className={styles.publicSection}>
-        <div className={styles.sectionHeading}>
-          <div>
-            <h2>Kolejka tej sesji</h2>
-            <span className={styles.inlineMessage} role="status">
-              {formatLiveStatus(liveStatus)}
-            </span>
-          </div>
-          <button
-            className={styles.secondaryButton}
-            type="button"
-            onClick={() => void refreshQueue()}
-            disabled={isRefreshingQueue}
-          >
-            {isRefreshingQueue ? "Odświeżanie…" : "Odśwież"}
-          </button>
-        </div>
-        {queueMessage ? (
-          <p className={styles.inlineMessage} role="status">
-            {queueMessage}
-          </p>
-        ) : null}
-        {queue && queue.items.length > 0 ? (
-          <div className={styles.publicQueueList}>
-            {queue.items.map((item) => (
-              <article
-                key={item.id}
-                className={`${styles.publicQueueItem} ${
-                  item.status === "now" ? styles.nowItem : ""
-                }`}
-              >
-                <div>
-                  <RequestStatusBadge status={item.status} />
-                  <h2>{item.singerName}</h2>
-                  {queue.showSongTitles && item.title ? (
-                    <p>
-                      {item.title} - {item.artist}
-                    </p>
-                  ) : item.status === "now" ? (
-                    <p>Aktualnie śpiewane</p>
-                  ) : (
-                    <p>Tytuły piosenek są ukryte publicznie.</p>
-                  )}
-                </div>
-                <span className={styles.queuePosition}>
-                  {item.status === "now" ? "Teraz" : `#${item.position}`}
-                </span>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className={styles.inlineMessage}>
-            Kolejka nie ma jeszcze publicznie widocznych zgłoszeń.
-          </p>
-        )}
-      </section>
+      </div>
+      <SongDetailsDrawer
+        alert={submitAlert}
+        isOpen={isSongDetailsOpen}
+        isSubmitting={isSubmitting}
+        onOpenChange={(open) => {
+          setIsSongDetailsOpen(open);
+          if (!open) setSubmitAlert(null);
+        }}
+        onSubmit={() => void submitSelectedSong()}
+        song={selectedSong}
+      />
+      {participantDisplayName ? (
+        <ParticipantProfileDrawer
+          error={renameMessage}
+          isOpen={isProfileOpen}
+          isSaving={isRenaming}
+          onOpenChange={setIsProfileOpen}
+          onSubmit={handleRename}
+          onValueChange={(value) => {
+            setRenameValue(value);
+            setRenameMessage(null);
+          }}
+          value={renameValue}
+        />
       ) : null}
-    </>
+    </div>
   );
-}
-
-function validateSessionRequestForm(input: {
-  songId: number | null;
-}):
-  | {
-      success: true;
-      data: {
-        songId: number;
-      };
-    }
-  | { success: false; errors: SessionRequestFormErrors } {
-  const errors: SessionRequestFormErrors = {};
-
-  if (
-    input.songId === null ||
-    !Number.isSafeInteger(input.songId) ||
-    input.songId <= 0
-  ) {
-    errors.songId = "Wybierz piosenkę.";
-  }
-
-  if (Object.keys(errors).length > 0) {
-    return { success: false, errors };
-  }
-
-  return {
-    success: true,
-    data: {
-      songId: input.songId as number,
-    },
-  };
 }
 
 function getSubmitErrorMessage(error: unknown) {
@@ -853,17 +658,6 @@ function getCancelErrorMessage(error: unknown) {
     }
   }
   return "Odśwież listę i spróbuj ponownie.";
-}
-
-function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
-  switch (status) {
-    case "live":
-      return "Połączenie live";
-    case "unavailable":
-      return "Live niedostępne";
-    default:
-      return "Łączenie live…";
-  }
 }
 
 function isAbortError(error: unknown) {

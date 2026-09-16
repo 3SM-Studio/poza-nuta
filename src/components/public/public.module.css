@@ -662,3 +662,17 @@
     transition: none;
   }
 }
+
+/* Nontrivial visual surfaces reserved for the public-session identity. */
+.sessionJoinGradient {
+  background:
+    radial-gradient(circle at 22% 14%, oklch(0.69 0.26 345 / 94%), transparent 34rem),
+    radial-gradient(circle at 82% 46%, oklch(0.52 0.22 325 / 58%), transparent 31rem),
+    linear-gradient(145deg, oklch(0.57 0.23 340), oklch(0.36 0.19 309) 59%, oklch(0.17 0.07 286));
+}
+
+.currentQueueSongSurface {
+  background:
+    radial-gradient(circle at 88% 0%, oklch(0.88 0.2 335 / 35%), transparent 12rem),
+    linear-gradient(135deg, oklch(0.61 0.24 343), oklch(0.46 0.2 317));
+}

@@ -40,7 +40,7 @@ describe("participant nickname join gate", () => {
     fireEvent.change(screen.getByLabelText("Imię lub ksywka"), {
       target: { value: "  Michał   Żółć " },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Dołącz do wydarzenia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dołącz" }));
 
     await waitFor(() =>
       expect(joinSession).toHaveBeenCalledWith(
@@ -56,7 +56,7 @@ describe("participant nickname join gate", () => {
     fireEvent.change(screen.getByLabelText("Imię lub ksywka"), {
       target: { value: "A" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Dołącz do wydarzenia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dołącz" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("od 2 do 24 znaków");
     expect(joinSession).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ describe("participant nickname join gate", () => {
     expect(input).not.toHaveAttribute("maxlength");
 
     fireEvent.change(input, { target: { value: "🎤".repeat(24) } });
-    fireEvent.click(screen.getByRole("button", { name: "Dołącz do wydarzenia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dołącz" }));
 
     await waitFor(() => expect(joinSession).toHaveBeenCalledOnce());
     expect(refreshRouter).toHaveBeenCalledOnce();
@@ -84,7 +84,7 @@ describe("participant nickname join gate", () => {
     fireEvent.change(screen.getByLabelText("Imię lub ksywka"), {
       target: { value: "Michał" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Dołącz do wydarzenia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dołącz" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "już używana w tym wydarzeniu",
