@@ -445,6 +445,63 @@ async function assertWriteLifecycle(
           AS "completeAudits"
     `;
     assert.deepEqual(evidence, { songs: 2, completeAudits: 1 });
+    const rerunJobId = await insertQueuedJob(admin, "ising", "write");
+    await admin`
+      UPDATE songs
+      SET title = 'Stale title'
+      WHERE source = 'ising' AND source_song_id = '101'
+    `;
+    assert.equal(await runImportWorkerCycle(worker.dependencies), "succeeded");
+    const [rerunJob] = await admin<
+      Array<{
+        status: string;
+        total: number;
+        processed: number;
+        imported: number;
+        skipped: number;
+        errors: number;
+      }>
+    >`
+      SELECT status::text AS status, total_rows AS total,
+        processed_count AS processed, imported_count AS imported,
+        skipped_count AS skipped, error_count AS errors
+      FROM import_jobs WHERE id = ${rerunJobId}
+    `;
+    assert.deepEqual(rerunJob, {
+      status: "succeeded",
+      total: 2,
+      processed: 2,
+      imported: 2,
+      skipped: 0,
+      errors: 0,
+    });
+    const metadata = await admin<
+      Array<{
+        sourceSongId: string;
+        title: string;
+        languages: string[];
+        isDuet: boolean;
+      }>
+    >`
+      SELECT source_song_id AS "sourceSongId", title, languages, is_duet AS "isDuet"
+      FROM songs
+      WHERE source = 'ising'
+      ORDER BY source_song_id
+    `;
+    assert.deepEqual(Array.from(metadata), [
+      {
+        sourceSongId: "101",
+        title: "Song 101",
+        languages: ["Polish"],
+        isDuet: false,
+      },
+      {
+        sourceSongId: "102",
+        title: "Song 102",
+        languages: [],
+        isDuet: true,
+      },
+    ]);
   } finally {
     await worker.close();
   }
@@ -892,7 +949,8 @@ async function workerContext(
           timeoutMs: 1_000,
         },
         {
-          fetchFn: async () => response(page(songs)),
+          fetchFn: async (input) =>
+            response(page(workerCollectionFor(new URL(String(input)), songs))),
           delayFn: async () => undefined,
           persistBatch: claim.mode === "write" ? batchWriter : undefined,
           checkpoint: ({ phase, progress }) => checkpoint(phase, progress),
@@ -1070,11 +1128,18 @@ function song(id: number) {
     artist: `Artist ${id}`,
     duration: 180,
     genre: ["Pop"],
-    languages: ["Polish"],
   };
 }
 
-function page(songs: unknown[]) {
+function workerCollectionFor(url: URL, songs: readonly unknown[]) {
+  const language = url.searchParams.get("lang");
+  if (language === "pl") return songs.slice(0, 1);
+  if (language === "-pl") return songs.slice(1);
+  if (url.searchParams.get("tag") === "duet") return songs.slice(1, 2);
+  return songs;
+}
+
+function page(songs: readonly unknown[]) {
   return { data: { found: songs.length, q: "", results: { songs } }, links: {} };
 }
 
