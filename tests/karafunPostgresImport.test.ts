@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -63,4 +64,11 @@ test("parseDelimitedRecord handles quoted delimiters and escaped quotes", () => 
     parseDelimitedRecord('1;"Title; Live";"Artist ""Alias"""'),
     ["1", "Title; Live", 'Artist "Alias"'],
   );
+});
+
+test("KaraFun production upsert does not assign public_id", () => {
+  const importer = readFileSync("src/db/import-karafun-csv.ts", "utf8");
+  const conflictUpdate = importer.match(/\.onConflictDoUpdate\(\{[\s\S]*?\n      \}\);/)?.[0];
+  assert.ok(conflictUpdate);
+  assert.doesNotMatch(conflictUpdate, /publicId|public_id/);
 });

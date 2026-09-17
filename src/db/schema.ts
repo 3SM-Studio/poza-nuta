@@ -228,6 +228,7 @@ export const songs = pgTable(
     id: idColumn(),
     source: songSourceEnum("source").notNull(),
     sourceSongId: text("source_song_id"),
+    publicId: uuid("public_id").defaultRandom(),
     title: text("title").notNull(),
     artist: text("artist").notNull(),
     normalizedTitle: text("normalized_title").notNull(),

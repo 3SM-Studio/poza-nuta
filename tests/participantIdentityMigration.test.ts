@@ -36,17 +36,17 @@ test("0023 remains immutable and 0024 is the next Drizzle journal entry", () => 
       breakpoints: boolean;
     }>;
   };
-  assert.deepEqual(journal.entries.at(-2), {
+  assert.deepEqual(journal.entries.find(({ idx }) => idx === 23), {
     idx: 23,
     version: "7",
-    when: journal.entries.at(-2)?.when,
+    when: journal.entries.find(({ idx }) => idx === 23)?.when,
     tag: "0023_foamy_gargoyle",
     breakpoints: true,
   });
-  assert.deepEqual(journal.entries.at(-1), {
+  assert.deepEqual(journal.entries.find(({ idx }) => idx === 24), {
     idx: 24,
     version: "7",
-    when: journal.entries.at(-1)?.when,
+    when: journal.entries.find(({ idx }) => idx === 24)?.when,
     tag: "0024_remarkable_brother_voodoo",
     breakpoints: true,
   });

@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
+    "db:backfill:song-public-id": "node --experimental-strip-types src/db/backfill-song-public-id.ts",
     "db:import:karafun": "node --experimental-strip-types src/db/import-karafun-csv.ts",
     "db:import:ising": "node --experimental-strip-types src/db/import-ising.ts",
     "import-worker": "node --experimental-strip-types src/server/platform-admin/import-worker-process.ts",
