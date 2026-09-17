@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import {
   events,
@@ -8,83 +8,81 @@ import {
   workspaces,
 } from "../../db/schema.ts";
 import type { PlatformAdminOverviewMetrics } from "./overview-core.ts";
-import type { PlatformRole } from "./policy.ts";
 
 type Database = typeof import("../db.ts").getDb extends () => infer T
   ? T
   : never;
 
-const countSelection = {
-  value: sql<number>`count(*)::int`,
+type OverviewRow = {
+  activeOperators: number;
+  eligibleOwners: number;
+  platformOwners: number;
+  platformAdmins: number;
+  supportMembers: number;
+  activeWorkspaces: number;
+  catalogSongs: number;
+  activePublicEvents: number;
 };
 
 export async function readPlatformAdminOverviewMetrics(
   database: Database,
 ): Promise<PlatformAdminOverviewMetrics> {
-  const [
-    activeOperatorsRows,
-    eligibleOwnersRows,
-    membershipRows,
-    activeWorkspaceRows,
-    catalogSongRows,
-    activePublicEventRows,
-  ] = await Promise.all([
-    database
-      .select(countSelection)
-      .from(operatorUsers)
-      .where(
-        and(eq(operatorUsers.active, true), isNull(operatorUsers.suspendedAt)),
-      ),
-    database
-      .select(countSelection)
-      .from(platformMembers)
-      .innerJoin(
-        operatorUsers,
-        eq(operatorUsers.id, platformMembers.operatorUserId),
-      )
-      .where(
-        and(
-          eq(platformMembers.active, true),
-          eq(platformMembers.role, "platform_owner"),
-          eq(operatorUsers.active, true),
-          isNull(operatorUsers.suspendedAt),
-        ),
-      ),
-    database
-      .select({
-        role: platformMembers.role,
-        value: sql<number>`count(*)::int`,
-      })
-      .from(platformMembers)
-      .where(eq(platformMembers.active, true))
-      .groupBy(platformMembers.role),
-    database
-      .select(countSelection)
-      .from(workspaces)
-      .where(eq(workspaces.active, true)),
-    database.select(countSelection).from(songs),
-    database
-      .select(countSelection)
-      .from(events)
-      .where(eq(events.isActivePublicEvent, true)),
-  ]);
+  const [row] = await database.execute<OverviewRow>(sql`
+        select
+        (
+          select count(*)::int from ${operatorUsers}
+          where ${operatorUsers.active} = true
+            and ${operatorUsers.suspendedAt} is null
+        ) as "activeOperators",
+        (
+          select count(*)::int from ${platformMembers}
+          inner join ${operatorUsers}
+            on ${operatorUsers.id} = ${platformMembers.operatorUserId}
+          where ${platformMembers.active} = true
+            and ${platformMembers.role} = 'platform_owner'
+            and ${operatorUsers.active} = true
+            and ${operatorUsers.suspendedAt} is null
+        ) as "eligibleOwners",
+        (
+          select count(*)::int from ${platformMembers}
+          where ${platformMembers.active} = true
+            and ${platformMembers.role} = 'platform_owner'
+        ) as "platformOwners",
+        (
+          select count(*)::int from ${platformMembers}
+          where ${platformMembers.active} = true
+            and ${platformMembers.role} = 'platform_admin'
+        ) as "platformAdmins",
+        (
+          select count(*)::int from ${platformMembers}
+          where ${platformMembers.active} = true
+            and ${platformMembers.role} = 'support'
+        ) as "supportMembers",
+        (
+          select count(*)::int from ${workspaces}
+          where ${workspaces.active} = true
+        ) as "activeWorkspaces",
+        (select count(*)::int from ${songs}) as "catalogSongs",
+        (
+          select count(*)::int from ${events}
+          where ${events.isActivePublicEvent} = true
+        ) as "activePublicEvents"
+      `);
 
-  const activePlatformMemberships: Record<PlatformRole, number> = {
-    platform_owner: 0,
-    platform_admin: 0,
-    support: 0,
-  };
-
-  for (const row of membershipRows) {
-    activePlatformMemberships[row.role] = row.value;
+  if (!row) {
+    throw new Error("Platform admin overview metrics query returned no row.");
   }
 
   return {
-    activeOperators: activeOperatorsRows[0]?.value ?? 0,
-    eligibleOwners: eligibleOwnersRows[0]?.value ?? 0,
-    activePlatformMemberships,
-    activeWorkspaces: activeWorkspaceRows[0]?.value ?? 0,
-    catalogSongs: catalogSongRows[0]?.value ?? 0,
-    activePublicEvents: activePublicEventRows[0]?.value ?? 0,
+    activeOperators: row.activeOperators,
+    eligibleOwners: row.eligibleOwners,
+    activePlatformMemberships: {
+      platform_owner: row.platformOwners,
+      platform_admin: row.platformAdmins,
+      support: row.supportMembers,
+    },
+    activeWorkspaces: row.activeWorkspaces,
+    catalogSongs: row.catalogSongs,
+    activePublicEvents: row.activePublicEvents,
   };
 }

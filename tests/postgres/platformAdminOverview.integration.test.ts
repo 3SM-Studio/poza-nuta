@@ -36,14 +36,25 @@ test(
         await applyPostgresMigrations(sql, 15);
         await seedOverviewFixtures(sql);
 
-        const database = drizzle({ client: sql, schema });
+        let queryCount = 0;
+        const database = drizzle({
+          client: sql,
+          schema,
+          logger: {
+            logQuery() {
+              queryCount += 1;
+            },
+          },
+        });
         const metrics = await readPlatformAdminOverviewMetrics(database);
+
+        assert.equal(queryCount, 1, "Overview must use one database statement");
 
         assert.deepEqual(metrics, {
           activeOperators: 2,
           eligibleOwners: 1,
           activePlatformMemberships: {
-            platform_owner: 1,
+            platform_owner: 3,
             platform_admin: 1,
             support: 1,
           },
@@ -84,6 +95,15 @@ async function seedOverviewFixtures(
     suspended: true,
     suspendedByOperatorId: ownerId,
   });
+  const suspendedOwnerId = await insertOperator(sql, "overview_suspended_owner", {
+    active: true,
+    suspended: true,
+    suspendedByOperatorId: ownerId,
+  });
+  const inactiveOwnerId = await insertOperator(sql, "overview_inactive_owner", {
+    active: false,
+    suspended: false,
+  });
   const inactiveId = await insertOperator(sql, "overview_inactive", {
     active: false,
     suspended: false,
@@ -93,6 +113,8 @@ async function seedOverviewFixtures(
     INSERT INTO platform_members (operator_user_id, role, active)
     VALUES
       (${ownerId}, 'platform_owner', true),
+      (${suspendedOwnerId}, 'platform_owner', true),
+      (${inactiveOwnerId}, 'platform_owner', true),
       (${adminId}, 'platform_admin', true),
       (${suspendedSupportId}, 'support', true),
       (${inactiveId}, 'support', false)
