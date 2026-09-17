@@ -7,6 +7,11 @@ import {
   isParticipantNicknameLengthValid,
   normalizeParticipantNickname,
 } from "../../lib/participant-nickname.ts";
+import {
+  isCatalogCollectionFilterKey,
+  isCatalogCollectionSection,
+  type CatalogCollectionSection,
+} from "../../lib/catalog-collections.ts";
 
 export type ParticipantJoinInput = {
   displayName: string;
@@ -21,6 +26,7 @@ export type ParticipantRenameInput = ParticipantJoinInput;
 
 export const PUBLIC_SONG_BROWSE_DEFAULT_LIMIT = 24;
 export const PUBLIC_SONG_BROWSE_MAX_LIMIT = 40;
+export const PUBLIC_COLLECTION_SONG_LIMIT = 50;
 
 export type SongBrowseSort = "title" | "artist" | "newest";
 
@@ -50,6 +56,28 @@ export type PublicSongBrowseQuery = {
   duet: boolean;
   hit: boolean;
   sort: SongBrowseSort;
+};
+
+export type CatalogCollectionCursor =
+  | {
+      version: 1;
+      filterKey: string;
+      mode: "manual";
+      songId: number;
+    }
+  | {
+      version: 1;
+      filterKey: string;
+      mode: "rule";
+      normalizedTitle: string;
+      normalizedArtist: string;
+      id: number;
+    };
+
+export type CatalogCollectionBrowseQuery = {
+  filterKey: string;
+  limit: number;
+  cursor: CatalogCollectionCursor | null;
 };
 
 const PUBLIC_REQUEST_ID_PATTERN =
@@ -179,6 +207,53 @@ export function encodeSongBrowseCursor(cursor: SongBrowseCursor) {
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
 }
 
+export function validateCatalogCollectionListQuery(
+  searchParams: URLSearchParams,
+): ValidationResult<{ section: CatalogCollectionSection }> {
+  const section = searchParams.get("section") ?? "";
+  if (!isCatalogCollectionSection(section)) {
+    return {
+      success: false,
+      issues: [{ field: "section", message: "section is not supported." }],
+    };
+  }
+
+  return { success: true, data: { section } };
+}
+
+export function validateCatalogCollectionBrowseQuery(
+  searchParams: URLSearchParams,
+): ValidationResult<CatalogCollectionBrowseQuery> {
+  const filterKey = searchParams.get("filter") ?? "";
+  if (!isCatalogCollectionFilterKey(filterKey)) {
+    return {
+      success: false,
+      issues: [{ field: "filter", message: "filter is invalid." }],
+    };
+  }
+
+  const issues: ValidationIssue[] = [];
+  const limit = parseCollectionLimit(searchParams.get("limit"), issues);
+  if (issues.length > 0) return { success: false, issues };
+
+  const cursor = parseCatalogCollectionCursor(
+    searchParams.get("cursor"),
+    filterKey,
+  );
+  if (!cursor.success) return cursor;
+
+  return {
+    success: true,
+    data: { filterKey, limit, cursor: cursor.data },
+  };
+}
+
+export function encodeCatalogCollectionCursor(
+  cursor: CatalogCollectionCursor,
+) {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
 export function getSongBrowseFilterKey(
   query: Omit<PublicSongBrowseQuery, "cursor">,
 ) {
@@ -207,6 +282,29 @@ function parseBrowseLimit(input: string | null, issues: ValidationIssue[]) {
   }
 
   return Math.min(limit, PUBLIC_SONG_BROWSE_MAX_LIMIT);
+}
+
+function parseCollectionLimit(
+  input: string | null,
+  issues: ValidationIssue[],
+) {
+  if (input === null || input === "") return PUBLIC_COLLECTION_SONG_LIMIT;
+
+  if (!/^[1-9]\d*$/.test(input)) {
+    issues.push({ field: "limit", message: "limit must be a positive integer." });
+    return PUBLIC_COLLECTION_SONG_LIMIT;
+  }
+
+  const limit = Number(input);
+  if (!Number.isSafeInteger(limit) || limit > PUBLIC_COLLECTION_SONG_LIMIT) {
+    issues.push({
+      field: "limit",
+      message: `limit must be between 1 and ${PUBLIC_COLLECTION_SONG_LIMIT}.`,
+    });
+    return PUBLIC_COLLECTION_SONG_LIMIT;
+  }
+
+  return limit;
 }
 
 function parseBrowseCategory(
@@ -314,6 +412,68 @@ function parseSongBrowseCursor(
     }
   } catch {
     // Return the same safe validation response for malformed cursors.
+  }
+
+  return invalidBrowseCursor();
+}
+
+function parseCatalogCollectionCursor(
+  input: string | null,
+  expectedFilterKey: string,
+): ValidationResult<CatalogCollectionCursor | null> {
+  if (input === null || input === "") {
+    return { success: true, data: null };
+  }
+
+  if (input.length > 1_024 || !/^[A-Za-z0-9_-]+$/.test(input)) {
+    return invalidBrowseCursor();
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(input, "base64url").toString("utf8"));
+    if (
+      !isRecord(decoded) ||
+      decoded.version !== 1 ||
+      decoded.filterKey !== expectedFilterKey
+    ) {
+      return invalidBrowseCursor();
+    }
+
+    if (
+      decoded.mode === "manual" &&
+      isPositiveSafeInteger(decoded.songId)
+    ) {
+      return {
+        success: true,
+        data: {
+          version: 1,
+          filterKey: decoded.filterKey,
+          mode: "manual",
+          songId: decoded.songId,
+        },
+      };
+    }
+
+    if (
+      decoded.mode === "rule" &&
+      isPositiveSafeInteger(decoded.id) &&
+      isCursorText(decoded.normalizedTitle) &&
+      isCursorText(decoded.normalizedArtist)
+    ) {
+      return {
+        success: true,
+        data: {
+          version: 1,
+          filterKey: decoded.filterKey,
+          mode: "rule",
+          normalizedTitle: decoded.normalizedTitle,
+          normalizedArtist: decoded.normalizedArtist,
+          id: decoded.id,
+        },
+      };
+    }
+  } catch {
+    // Return the same safe response for every malformed collection cursor.
   }
 
   return invalidBrowseCursor();

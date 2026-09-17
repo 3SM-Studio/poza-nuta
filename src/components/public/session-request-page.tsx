@@ -18,13 +18,18 @@ import type {
   PublicSong,
   SessionSongDiscovery,
 } from "./api";
-import { CatalogSongList } from "./catalog-song-list";
+import {
+  CatalogCollectionSongList,
+  CatalogCollectionUnavailable,
+  CatalogSongList,
+} from "./catalog-song-list";
 import { ParticipantProfileDrawer } from "./participant-profile-drawer";
 import { waitForMutationRealtimeOrFallback } from "./session-mutation-refresh";
 import { SessionQueuePanel } from "./session-queue-panel";
 import { SessionShellHeader } from "./session-shell-header";
 import { SessionSearchResults } from "./session-search-results";
 import { SessionCatalogGenres } from "./session-catalog-genres";
+import { SessionCatalogCollections } from "./session-catalog-collections";
 import { getSessionCatalogRoute, type SessionCatalogRoute } from "./session-catalog-route";
 import { SongDetailsDrawer } from "./song-details-drawer";
 import { SessionDiscoveryHome } from "./session-discovery-home";
@@ -617,6 +622,26 @@ export function SessionRequestPage({
             ) : null}
             {displayedCatalogView.kind === "genres" && discovery ? (
               <SessionCatalogGenres genres={discovery.genres} onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, hasClientNavigationRef.current)} sessionToken={sessionToken} />
+            ) : null}
+            {displayedCatalogView.kind === "collections" ? (
+              <SessionCatalogCollections
+                onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, hasClientNavigationRef.current)}
+                section={displayedCatalogView.section}
+                sessionToken={sessionToken}
+              />
+            ) : null}
+            {displayedCatalogView.kind === "playlist" && displayedCatalogView.filterKey ? (
+              <CatalogCollectionSongList
+                filterKey={displayedCatalogView.filterKey}
+                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, hasClientNavigationRef.current)}
+                onSongSelect={selectSong}
+                sessionToken={sessionToken}
+              />
+            ) : null}
+            {displayedCatalogView.kind === "playlist" && !displayedCatalogView.filterKey ? (
+              <CatalogCollectionUnavailable
+                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, hasClientNavigationRef.current)}
+              />
             ) : null}
             {displayedCatalogView.kind === "catalog" ? (
               <CatalogSongList

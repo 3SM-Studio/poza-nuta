@@ -302,6 +302,8 @@ test("session API remains anonymous, identity-scoped and rate limited", () => {
     "src/app/api/s/[token]/songs/search/route.ts",
     "src/app/api/s/[token]/songs/browse/route.ts",
     "src/app/api/s/[token]/songs/discovery/route.ts",
+    "src/app/api/s/[token]/catalog/collections/route.ts",
+    "src/app/api/s/[token]/catalog/playlist/route.ts",
     "src/app/api/s/[token]/requests/route.ts",
     "src/app/api/s/[token]/queue/route.ts",
     "src/app/api/s/[token]/join/route.ts",

@@ -41,13 +41,16 @@ export function requireRuntimeDatabaseUrl(
 export function isSupabaseTransactionPoolerUrl(value: string) {
   try {
     const url = new URL(value);
-    const isSupabaseHost =
-      url.hostname.endsWith(".pooler.supabase.com") ||
-      (url.hostname.startsWith("db.") && url.hostname.endsWith(".supabase.co"));
+    const isSharedPooler = url.hostname.endsWith(".pooler.supabase.com");
+    const isDedicatedPooler =
+      url.hostname.startsWith("db.") && url.hostname.endsWith(".supabase.co");
+    const usesRuntimeRole = isSharedPooler
+      ? /^postgres\.[a-z0-9]+$/.test(url.username)
+      : isDedicatedPooler && url.username === "postgres";
 
     return (
       POSTGRES_PROTOCOLS.has(url.protocol) &&
-      isSupabaseHost &&
+      usesRuntimeRole &&
       url.port === SUPABASE_TRANSACTION_POOLER_PORT
     );
   } catch {

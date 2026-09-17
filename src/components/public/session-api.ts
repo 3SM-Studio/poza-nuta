@@ -1,10 +1,12 @@
 import type {
+  PublicCatalogCollection,
   PublicQueueResponse,
   PublicSong,
   PublicSongBrowseItem,
   SessionSongBrowseInput,
   SessionSongDiscovery,
 } from "./api";
+import type { CatalogCollectionSection } from "@/lib/catalog-collections";
 
 export type SessionEvent = {
   name: string;
@@ -114,6 +116,37 @@ export function browseSessionSongs(
     nextCursor: string | null;
   }>(
     `/api/s/${encodeURIComponent(publicToken)}/songs/browse${query ? `?${query}` : ""}`,
+    { signal },
+  );
+}
+
+export function getSessionCatalogCollections(
+  publicToken: string,
+  section: CatalogCollectionSection,
+  signal?: AbortSignal,
+) {
+  const searchParams = new URLSearchParams({ section });
+  return requestJson<{ items: PublicCatalogCollection[] }>(
+    `/api/s/${encodeURIComponent(publicToken)}/catalog/collections?${searchParams.toString()}`,
+    { signal },
+  );
+}
+
+export function browseSessionCatalogCollection(
+  publicToken: string,
+  input: { filterKey: string; cursor?: string | null; limit?: number },
+  signal?: AbortSignal,
+) {
+  const searchParams = new URLSearchParams({ filter: input.filterKey });
+  if (input.cursor) searchParams.set("cursor", input.cursor);
+  if (input.limit) searchParams.set("limit", String(input.limit));
+
+  return requestJson<{
+    collection: PublicCatalogCollection;
+    items: PublicSongBrowseItem[];
+    nextCursor: string | null;
+  }>(
+    `/api/s/${encodeURIComponent(publicToken)}/catalog/playlist?${searchParams.toString()}`,
     { signal },
   );
 }

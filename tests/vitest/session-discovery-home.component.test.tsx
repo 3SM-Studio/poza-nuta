@@ -54,7 +54,12 @@ describe("session discovery home", () => {
     expect(screen.getByRole("heading", { name: "Hity" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Najnowsze" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Duety" })).toBeVisible();
-    expect(screen.queryByText("Playlisty")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Otwórz katalog: Playlisty" }),
+    ).toHaveAttribute(
+      "href",
+      "/s/AbCdEfGhIjKlMnOpQrStUv/catalog/playlists",
+    );
     expect(screen.queryByText("Popularne")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Pop, 120 piosenek" })).toHaveAttribute(
       "href",

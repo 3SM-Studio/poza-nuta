@@ -59,6 +59,17 @@ export const platformMemberRoleValues = [
   "platform_admin",
   "support",
 ] as const;
+export const catalogCollectionTypeValues = ["playlist", "style"] as const;
+export const catalogCollectionSectionValues = [
+  "top",
+  "playlist",
+  "style",
+] as const;
+export const catalogCollectionModeValues = [
+  "manual",
+  "rule",
+  "ranking",
+] as const;
 
 export const operatorSuspensionReasonMaxLength = 500;
 
@@ -97,6 +108,18 @@ export const workspaceMemberRoleEnum = pgEnum(
 export const platformMemberRoleEnum = pgEnum(
   "platform_member_role",
   platformMemberRoleValues,
+);
+export const catalogCollectionTypeEnum = pgEnum(
+  "catalog_collection_type",
+  catalogCollectionTypeValues,
+);
+export const catalogCollectionSectionEnum = pgEnum(
+  "catalog_collection_section",
+  catalogCollectionSectionValues,
+);
+export const catalogCollectionModeEnum = pgEnum(
+  "catalog_collection_mode",
+  catalogCollectionModeValues,
 );
 
 const idColumn = () =>
@@ -269,6 +292,95 @@ export const songs = pgTable(
     check(
       "songs_duration_seconds_check",
       sql`${table.durationSeconds} is null or ${table.durationSeconds} >= 0`,
+    ),
+  ],
+).enableRLS();
+
+export type CatalogCollectionRuleConfig = {
+  genre: string;
+};
+
+export const catalogCollections = pgTable(
+  "catalog_collections",
+  {
+    id: idColumn(),
+    publicId: uuid("public_id").notNull().defaultRandom(),
+    filterKey: text("filter_key").notNull(),
+    type: catalogCollectionTypeEnum("type").notNull(),
+    section: catalogCollectionSectionEnum("section").notNull(),
+    mode: catalogCollectionModeEnum("mode").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    coverImage: text("cover_image"),
+    active: boolean("active").notNull().default(true),
+    position: integer("position").notNull(),
+    ruleConfig: jsonb("rule_config").$type<CatalogCollectionRuleConfig>(),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+    updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("catalog_collections_public_id_idx").on(table.publicId),
+    uniqueIndex("catalog_collections_filter_key_idx").on(table.filterKey),
+    index("catalog_collections_active_section_position_idx")
+      .on(table.section, table.position, table.id)
+      .where(sql`${table.active} = true`),
+    check(
+      "catalog_collections_filter_key_format_check",
+      sql`(${table.type} = 'playlist' and ${table.filterKey} ~ '^pl_[a-z0-9]+(-[a-z0-9]+)*$')
+        or (${table.type} = 'style' and ${table.filterKey} ~ '^st_[a-z0-9]+(-[a-z0-9]+)*$')`,
+    ),
+    check(
+      "catalog_collections_section_type_mode_check",
+      sql`(${table.section} = 'top' and ${table.type} = 'playlist' and ${table.mode} in ('manual', 'ranking'))
+        or (${table.section} = 'playlist' and ${table.type} = 'playlist' and ${table.mode} = 'manual')
+        or (${table.section} = 'style' and ${table.type} = 'style' and ${table.mode} = 'rule')`,
+    ),
+    check(
+      "catalog_collections_position_check",
+      sql`${table.position} >= 0`,
+    ),
+    check(
+      "catalog_collections_rule_config_check",
+      sql`(${table.mode} = 'manual' and ${table.ruleConfig} is null)
+        or (${table.mode} = 'rule'
+          and ${table.ruleConfig} is not null
+          and jsonb_typeof(${table.ruleConfig}) = 'object'
+          and jsonb_typeof(${table.ruleConfig}->'genre') = 'string'
+          and ${table.ruleConfig} = jsonb_build_object('genre', ${table.ruleConfig}->>'genre')
+          and char_length(btrim(${table.ruleConfig}->>'genre')) between 1 and 100
+          and ${table.ruleConfig}->>'genre' !~ '[[:cntrl:]]')
+        or (${table.mode} = 'ranking' and ${table.ruleConfig} is null)`,
+    ),
+  ],
+).enableRLS();
+
+export const catalogCollectionItems = pgTable(
+  "catalog_collection_items",
+  {
+    id: idColumn(),
+    collectionId: bigint("collection_id", { mode: "number" })
+      .notNull()
+      .references(() => catalogCollections.id, { onDelete: "cascade" }),
+    songId: bigint("song_id", { mode: "number" })
+      .notNull()
+      .references(() => songs.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("catalog_collection_items_collection_song_idx").on(
+      table.collectionId,
+      table.songId,
+    ),
+    index("catalog_collection_items_collection_position_id_idx").on(
+      table.collectionId,
+      table.position,
+      table.id,
+    ),
+    index("catalog_collection_items_song_id_idx").on(table.songId),
+    check(
+      "catalog_collection_items_position_check",
+      sql`${table.position} >= 0`,
     ),
   ],
 ).enableRLS();

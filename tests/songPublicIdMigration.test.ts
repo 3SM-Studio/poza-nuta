@@ -14,8 +14,9 @@ const previousSnapshot = JSON.parse(readFileSync("drizzle/meta/0024_snapshot.jso
 const snapshot = JSON.parse(readFileSync("drizzle/meta/0025_snapshot.json", "utf8")) as typeof previousSnapshot;
 
 test("0025 journal and snapshot contain only the songs public identity addition", () => {
-  assert.deepEqual(journal.entries.at(-1), {
-    ...journal.entries.at(-1),
+  const entry = journal.entries.find(({ idx }) => idx === 25);
+  assert.deepEqual(entry, {
+    ...entry,
     idx: 25,
     tag: "0025_absurd_nemesis",
   });

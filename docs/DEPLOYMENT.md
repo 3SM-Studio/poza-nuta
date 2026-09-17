@@ -17,7 +17,10 @@ Set runtime variables in Vercel and administration variables only in the local
 shell used for controlled database operations:
 
 - `DATABASE_URL` - Vercel runtime only. It must be a Supabase Transaction
-  Pooler connection string on port `6543`.
+  Pooler connection string on port `6543`, using the `postgres.<project-ref>`
+  login for the shared pooler or `postgres` for the dedicated pooler. The
+  runtime rejects custom database roles because the server-side Drizzle access
+  model depends on Supabase's `postgres` role with `BYPASSRLS`.
 - `DIRECT_URL` - Drizzle migrations and one-off database administration only.
   Use a Direct connection or the Supabase Session Pooler on port `5432`; do not
   configure this variable in the Vercel runtime.

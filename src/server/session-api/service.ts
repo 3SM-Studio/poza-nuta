@@ -18,6 +18,8 @@ import {
 } from "drizzle-orm";
 
 import {
+  catalogCollectionItems,
+  catalogCollections,
   eventSessionCodes,
   eventSessions,
   events,
@@ -27,6 +29,10 @@ import {
   songRequests,
   songs,
 } from "../../db/schema";
+import {
+  parseCatalogCollectionRuleConfig,
+  type CatalogCollectionSection,
+} from "../../lib/catalog-collections";
 import { canResolveEventJoinCode } from "../../lib/event-session-lifecycle";
 import { isEventSessionPublicToken } from "../../lib/event-session-identity";
 import {
@@ -56,11 +62,17 @@ import type {
   ParticipantJoinInput,
   ParticipantRenameInput,
   ParticipantSessionRequestInput,
+  CatalogCollectionBrowseQuery,
+  CatalogCollectionCursor,
   PublicSongBrowseQuery,
   SongBrowseCursor,
   SongBrowseSort,
 } from "./validation";
-import { encodeSongBrowseCursor, getSongBrowseFilterKey } from "./validation";
+import {
+  encodeCatalogCollectionCursor,
+  encodeSongBrowseCursor,
+  getSongBrowseFilterKey,
+} from "./validation";
 
 type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
@@ -150,6 +162,15 @@ export type PublicSongDiscovery = {
     hitCount: number;
     plusCount: number;
   };
+};
+
+export type PublicCatalogCollection = {
+  filterKey: string;
+  type: "playlist" | "style";
+  section: CatalogCollectionSection;
+  title: string;
+  description: string | null;
+  coverImage: string | null;
 };
 
 const PUBLIC_SONG_DISCOVERY_CATEGORY_LIMIT = 30;
@@ -403,6 +424,279 @@ export async function browsePublicSessionSongs(
           )
         : null,
   };
+}
+
+export async function listPublicSessionCatalogCollections(
+  publicToken: string,
+  section: CatalogCollectionSection,
+): Promise<{ items: PublicCatalogCollection[] }> {
+  await requireSongRequestSession({ kind: "token", value: publicToken });
+
+  const items = await getDb()
+    .select({
+      filterKey: catalogCollections.filterKey,
+      type: catalogCollections.type,
+      section: catalogCollections.section,
+      title: catalogCollections.title,
+      description: catalogCollections.description,
+      coverImage: catalogCollections.coverImage,
+    })
+    .from(catalogCollections)
+    .where(
+      and(
+        eq(catalogCollections.active, true),
+        eq(catalogCollections.section, section),
+      ),
+    )
+    .orderBy(asc(catalogCollections.position), asc(catalogCollections.id));
+
+  return { items };
+}
+
+export async function browsePublicSessionCatalogCollection(
+  publicToken: string,
+  query: CatalogCollectionBrowseQuery,
+): Promise<{
+  collection: PublicCatalogCollection;
+  items: PublicSongBrowseItem[];
+  nextCursor: string | null;
+}> {
+  await requireSongRequestSession({ kind: "token", value: publicToken });
+
+  const [collection] = await getDb()
+    .select({
+      id: catalogCollections.id,
+      filterKey: catalogCollections.filterKey,
+      type: catalogCollections.type,
+      section: catalogCollections.section,
+      mode: catalogCollections.mode,
+      title: catalogCollections.title,
+      description: catalogCollections.description,
+      coverImage: catalogCollections.coverImage,
+      ruleConfig: catalogCollections.ruleConfig,
+    })
+    .from(catalogCollections)
+    .where(
+      and(
+        eq(catalogCollections.filterKey, query.filterKey),
+        eq(catalogCollections.active, true),
+      ),
+    )
+    .limit(1);
+
+  if (!collection) throw catalogCollectionNotFoundError();
+
+  const publicCollection = toPublicCatalogCollection(collection);
+  if (collection.mode === "manual") {
+    if (query.cursor && query.cursor.mode !== "manual") {
+      throw invalidCatalogCollectionCursorError();
+    }
+    const page = await browseManualCatalogCollection(
+      collection.id,
+      collection.filterKey,
+      query.limit,
+      query.cursor,
+    );
+    return { collection: publicCollection, ...page };
+  }
+
+  if (collection.mode === "rule") {
+    if (query.cursor && query.cursor.mode !== "rule") {
+      throw invalidCatalogCollectionCursorError();
+    }
+    const rule = parseCatalogCollectionRuleConfig(collection.ruleConfig);
+    if (collection.type !== "style" || !rule) {
+      throw catalogCollectionNotFoundError();
+    }
+    const page = await browseStyleCatalogCollection(
+      collection.filterKey,
+      rule.genre,
+      query.limit,
+      query.cursor,
+    );
+    return { collection: publicCollection, ...page };
+  }
+
+  throw catalogCollectionNotFoundError();
+}
+
+async function browseManualCatalogCollection(
+  collectionId: number,
+  filterKey: string,
+  limit: number,
+  cursor: CatalogCollectionCursor | null,
+) {
+  const conditions: SQL[] = [
+    eq(catalogCollectionItems.collectionId, collectionId),
+  ];
+  if (cursor?.mode === "manual") {
+    const [cursorItem] = await getDb()
+      .select({
+        id: catalogCollectionItems.id,
+        position: catalogCollectionItems.position,
+      })
+      .from(catalogCollectionItems)
+      .where(
+        and(
+          eq(catalogCollectionItems.collectionId, collectionId),
+          eq(catalogCollectionItems.songId, cursor.songId),
+        ),
+      )
+      .limit(1);
+    if (!cursorItem) throw invalidCatalogCollectionCursorError();
+    conditions.push(
+      or(
+        gt(catalogCollectionItems.position, cursorItem.position),
+        and(
+          eq(catalogCollectionItems.position, cursorItem.position),
+          gt(catalogCollectionItems.id, cursorItem.id),
+        ),
+      )!,
+    );
+  }
+
+  const rows = await getDb()
+    .select({
+      id: songs.id,
+      source: songs.source,
+      title: songs.title,
+      artist: songs.artist,
+      durationSeconds: songs.durationSeconds,
+      genres: songs.genres,
+      languages: songs.languages,
+      isDuet: songs.isDuet,
+      isExplicit: songs.isExplicit,
+      isPlus: songs.isPlus,
+      isHit: songs.isHit,
+      normalizedTitle: songs.normalizedTitle,
+      normalizedArtist: songs.normalizedArtist,
+      createdAt: songs.createdAt,
+    })
+    .from(catalogCollectionItems)
+    .innerJoin(songs, eq(songs.id, catalogCollectionItems.songId))
+    .where(and(...conditions))
+    .orderBy(
+      asc(catalogCollectionItems.position),
+      asc(catalogCollectionItems.id),
+    )
+    .limit(limit + 1);
+
+  const pageRows = rows.slice(0, limit);
+  const lastRow = pageRows.at(-1);
+  return {
+    items: pageRows.map(toPublicSongBrowseItem),
+    nextCursor:
+      rows.length > limit && lastRow
+        ? encodeCatalogCollectionCursor({
+            version: 1,
+            filterKey,
+            mode: "manual",
+            songId: lastRow.id,
+          })
+        : null,
+  };
+}
+
+async function browseStyleCatalogCollection(
+  filterKey: string,
+  genre: string,
+  limit: number,
+  cursor: CatalogCollectionCursor | null,
+) {
+  const conditions: SQL[] = [matchesNormalizedSongCategory(songs.genres, genre)];
+  if (cursor?.mode === "rule") {
+    conditions.push(
+      or(
+        gt(songs.normalizedTitle, cursor.normalizedTitle),
+        and(
+          eq(songs.normalizedTitle, cursor.normalizedTitle),
+          gt(songs.normalizedArtist, cursor.normalizedArtist),
+        ),
+        and(
+          eq(songs.normalizedTitle, cursor.normalizedTitle),
+          eq(songs.normalizedArtist, cursor.normalizedArtist),
+          gt(songs.id, cursor.id),
+        ),
+      )!,
+    );
+  }
+
+  const rows = await getDb()
+    .select({
+      id: songs.id,
+      source: songs.source,
+      title: songs.title,
+      artist: songs.artist,
+      durationSeconds: songs.durationSeconds,
+      genres: songs.genres,
+      languages: songs.languages,
+      isDuet: songs.isDuet,
+      isExplicit: songs.isExplicit,
+      isPlus: songs.isPlus,
+      isHit: songs.isHit,
+      normalizedTitle: songs.normalizedTitle,
+      normalizedArtist: songs.normalizedArtist,
+      createdAt: songs.createdAt,
+    })
+    .from(songs)
+    .where(and(...conditions))
+    .orderBy(
+      asc(songs.normalizedTitle),
+      asc(songs.normalizedArtist),
+      asc(songs.id),
+    )
+    .limit(limit + 1);
+
+  const pageRows = rows.slice(0, limit);
+  const lastRow = pageRows.at(-1);
+  return {
+    items: pageRows.map(toPublicSongBrowseItem),
+    nextCursor:
+      rows.length > limit && lastRow
+        ? encodeCatalogCollectionCursor({
+            version: 1,
+            filterKey,
+            mode: "rule",
+            normalizedTitle: lastRow.normalizedTitle,
+            normalizedArtist: lastRow.normalizedArtist,
+            id: lastRow.id,
+          })
+        : null,
+  };
+}
+
+function toPublicCatalogCollection(collection: {
+  filterKey: string;
+  type: "playlist" | "style";
+  section: CatalogCollectionSection;
+  title: string;
+  description: string | null;
+  coverImage: string | null;
+}): PublicCatalogCollection {
+  return {
+    filterKey: collection.filterKey,
+    type: collection.type,
+    section: collection.section,
+    title: collection.title,
+    description: collection.description,
+    coverImage: collection.coverImage,
+  };
+}
+
+function catalogCollectionNotFoundError() {
+  return new PublicApiError(
+    404,
+    "CATALOG_COLLECTION_NOT_FOUND",
+    "The catalog collection does not exist.",
+  );
+}
+
+function invalidCatalogCollectionCursorError() {
+  return new PublicApiError(
+    400,
+    "CATALOG_COLLECTION_CURSOR_INVALID",
+    "The collection cursor is invalid.",
+  );
 }
 
 function searchSongs(query: string | null) {

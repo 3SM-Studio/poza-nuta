@@ -73,11 +73,34 @@ describe("session catalog route parser", () => {
       `genre:${genre.trim().toLocaleLowerCase("en-US")}`,
     );
   });
+
+  it.each([
+    ["top", "top"],
+    ["playlists", "playlist"],
+    ["styles", "style"],
+  ] as const)("maps /catalog/%s to the global section", (path, section) => {
+    expect(parse("", `/s/${token}/catalog/${path}`)).toEqual({
+      kind: "collections",
+      section,
+    });
+  });
+
+  it("uses one playlist route with a stable filter key", () => {
+    expect(parse("filter=pl_test-classics", `/s/${token}/playlist`)).toEqual({
+      kind: "playlist",
+      filterKey: "pl_test-classics",
+      fallbackHref: `/s/${token}`,
+    });
+    expect(parse("filter=123", `/s/${token}/playlist`)).toMatchObject({
+      kind: "playlist",
+      filterKey: null,
+    });
+  });
 });
 
-function parse(query: string) {
+function parse(query: string, pathname = `/s/${token}/catalog`) {
   return getSessionCatalogRoute({
-    pathname: `/s/${token}/catalog`,
+    pathname,
     searchParams: new URLSearchParams(query),
     sessionToken: token,
     discovery,

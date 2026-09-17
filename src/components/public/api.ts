@@ -1,3 +1,5 @@
+import type { CatalogCollectionSection } from "@/lib/catalog-collections";
+
 export type PublicSong = {
   id: number;
   source: "ising" | "karafun" | "manual";
@@ -8,6 +10,15 @@ export type PublicSong = {
   isExplicit: boolean;
   isPlus: boolean;
   isHit: boolean;
+};
+
+export type PublicCatalogCollection = {
+  filterKey: string;
+  type: "playlist" | "style";
+  section: CatalogCollectionSection;
+  title: string;
+  description: string | null;
+  coverImage: string | null;
 };
 
 export type PublicSongBrowseItem = PublicSong & {

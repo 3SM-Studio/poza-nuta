@@ -31,8 +31,10 @@ better suited for migrations and short one-off scripts, while serverless
 runtime needs a small connection footprint.
 
 The runtime validates this contract when it creates the database client. A
-Session Pooler or Direct connection configured as Vercel `DATABASE_URL` fails
-closed with a safe configuration error instead of consuming session clients.
+Session Pooler, Direct connection, or custom database role configured as Vercel
+`DATABASE_URL` fails closed with a safe configuration error. The shared pooler
+login must be `postgres.<project-ref>`; the dedicated pooler login is
+`postgres`. Do not log the URL while verifying this setting.
 
 The runtime Postgres client is configured with:
 

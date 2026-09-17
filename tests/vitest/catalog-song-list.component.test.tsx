@@ -3,12 +3,23 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CatalogSongList } from "@/components/public/catalog-song-list";
+import {
+  CatalogCollectionSongList,
+  CatalogSongList,
+} from "@/components/public/catalog-song-list";
 
-const { browseSongs } = vi.hoisted(() => ({ browseSongs: vi.fn() }));
+const { browseCollection, browseSongs } = vi.hoisted(() => ({
+  browseCollection: vi.fn(),
+  browseSongs: vi.fn(),
+}));
 
 vi.mock("@/components/public/session-api", () => ({
+  browseSessionCatalogCollection: browseCollection,
   browseSessionSongs: browseSongs,
+  SessionClientError: class SessionClientError extends Error {
+    status = 500;
+    code = "TEST_ERROR";
+  },
 }));
 
 const firstSong = {
@@ -26,7 +37,44 @@ const firstSong = {
 };
 
 describe("CatalogSongList", () => {
-  beforeEach(() => browseSongs.mockReset());
+  beforeEach(() => {
+    browseCollection.mockReset();
+    browseSongs.mockReset();
+  });
+
+  it("loads collection pages in batches of 50 and sends a selected song through the shared callback", async () => {
+    const onSongSelect = vi.fn();
+    browseCollection.mockResolvedValue({
+      collection: {
+        filterKey: "pl_test-classics",
+        type: "playlist",
+        section: "playlist",
+        title: "Testowe klasyki",
+        description: null,
+        coverImage: null,
+      },
+      items: [firstSong],
+      nextCursor: null,
+    });
+
+    render(
+      <CatalogCollectionSongList
+        filterKey="pl_test-classics"
+        onBack={vi.fn()}
+        onSongSelect={onSongSelect}
+        sessionToken="token"
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Testowe klasyki" })).toBeVisible();
+    expect(browseCollection).toHaveBeenCalledWith(
+      "token",
+      { filterKey: "pl_test-classics", limit: 50 },
+      expect.any(AbortSignal),
+    );
+    fireEvent.click(screen.getByText("First Song"));
+    expect(onSongSelect).toHaveBeenCalledWith(firstSong);
+  });
 
   it("loads a bounded first page, appends exactly one cursor page, and de-duplicates songs", async () => {
     browseSongs

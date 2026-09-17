@@ -37,6 +37,8 @@ test("Vercel runtime rejects session and direct connection modes safely", () => 
   for (const databaseUrl of [
     sessionPoolerUrl,
     "postgresql://postgres:password@db.example.supabase.co:5432/postgres",
+    "postgresql://custom_role.example:password@aws-0-eu.pooler.supabase.com:6543/postgres",
+    "postgresql://custom_role:password@db.example.supabase.co:6543/postgres",
     "not-a-database-url-with-a-secret",
   ]) {
     assert.throws(

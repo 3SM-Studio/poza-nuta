@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Disc3, Heart, Sparkles, type LucideIcon } from "lucide-react";
+import {
+  Disc3,
+  Heart,
+  ListMusic,
+  Palette,
+  Sparkles,
+  Trophy,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -107,13 +115,16 @@ export function SessionDiscoveryHome({
   const hasGenres = discovery.genres.length > 0;
   const hasSongSection = enabledSections.length > 0;
 
-  if (forceMinimal || (!hasGenres && !hasSongSection)) {
+  if (forceMinimal) {
     return <DiscoveryMinimalState sessionToken={sessionToken} />;
   }
 
   return (
     <div className="space-y-8 pb-2 sm:space-y-10">
       <h1 className="sr-only">Odkrywaj muzykę</h1>
+      <DiscoverySection title="Kolekcje">
+        <CatalogCollectionNavigation sessionToken={sessionToken} />
+      </DiscoverySection>
       {hasGenres ? (
         <DiscoverySection
           title="Gatunki"
@@ -152,6 +163,39 @@ export function SessionDiscoveryHome({
           </DiscoverySection>
         );
       })}
+      {!hasGenres && !hasSongSection ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Pozostałe sekcje katalogu są teraz puste.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CatalogCollectionNavigation({ sessionToken }: { sessionToken: string }) {
+  const items = [
+    { path: "top", title: "Top", icon: Trophy },
+    { path: "playlists", title: "Playlisty", icon: ListMusic },
+    { path: "styles", title: "Style", icon: Palette },
+  ] as const;
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {items.map(({ path, title, icon: Icon }, index) => (
+        <Link
+          aria-label={`Otwórz katalog: ${title}`}
+          className={`group relative flex min-h-28 overflow-hidden rounded-xl bg-gradient-to-br ${CARD_GRADIENTS[index]} p-4 text-primary-foreground shadow-[0_12px_28px_oklch(0_0_0_/_24%)] transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/60`}
+          href={`/s/${encodeURIComponent(sessionToken)}/catalog/${path}`}
+          key={path}
+          prefetch={false}
+        >
+          <span className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,oklch(1_0_0_/_24%),transparent_24%),linear-gradient(to_top,oklch(0_0_0_/_74%),transparent_72%)]" />
+          <Icon aria-hidden="true" className="relative size-6 opacity-90" />
+          <span className="relative mt-auto text-base font-extrabold tracking-[-0.025em]">
+            {title}
+          </span>
+        </Link>
+      ))}
     </div>
   );
 }

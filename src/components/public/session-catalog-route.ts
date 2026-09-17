@@ -1,8 +1,14 @@
 import type { SessionSongDiscovery } from "./api";
+import {
+  isCatalogCollectionFilterKey,
+  type CatalogCollectionSection,
+} from "@/lib/catalog-collections";
 
 export type SessionCatalogRoute =
   | { kind: "discovery" }
   | { kind: "genres" }
+  | { kind: "collections"; section: CatalogCollectionSection }
+  | { kind: "playlist"; filterKey: string | null; fallbackHref: string }
   | {
       kind: "catalog";
       heading: string;
@@ -31,6 +37,23 @@ export function getSessionCatalogRoute({
 }): SessionCatalogRoute {
   const sessionHref = `/s/${encodeURIComponent(sessionToken)}`;
   if (pathname.endsWith("/catalog/genres")) return { kind: "genres" };
+  if (pathname.endsWith("/catalog/top")) {
+    return { kind: "collections", section: "top" };
+  }
+  if (pathname.endsWith("/catalog/playlists")) {
+    return { kind: "collections", section: "playlist" };
+  }
+  if (pathname.endsWith("/catalog/styles")) {
+    return { kind: "collections", section: "style" };
+  }
+  if (pathname.endsWith("/playlist")) {
+    const filterKey = searchParams.get("filter") ?? "";
+    return {
+      kind: "playlist",
+      filterKey: isCatalogCollectionFilterKey(filterKey) ? filterKey : null,
+      fallbackHref: sessionHref,
+    };
+  }
   if (!pathname.endsWith("/catalog")) return { kind: "discovery" };
 
   const filter = parseCatalogFilter(searchParams);
