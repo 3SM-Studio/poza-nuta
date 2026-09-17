@@ -25,12 +25,75 @@ vi.mock("sonner", () => ({
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   refresh.mockReset();
   toastSuccess.mockReset();
   toastError.mockReset();
 });
 
 describe("AdminImportsPanel", () => {
+  it("downloads the XLSX once and exposes loading and success states", async () => {
+    let resolveResponse: ((response: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:library-export");
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL");
+    let downloadedFilename = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloadedFilename = this.download;
+    });
+    renderPanel({ jobs: [] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Eksportuj XLSX" }));
+    expect(screen.getByRole("button", { name: "Eksportowanie…" })).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      resolveResponse?.(
+        new Response(new Blob(["xlsx"]), {
+          headers: {
+            "Content-Disposition":
+              'attachment; filename="poza-nuta-library-2026-09-17.xlsx"',
+          },
+        }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Eksport gotowy", {
+        description: "Pobrano pełną bibliotekę utworów w formacie XLSX.",
+      }),
+    );
+    expect(downloadedFilename).toBe("poza-nuta-library-2026-09-17.xlsx");
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:library-export");
+    expect(screen.getByRole("button", { name: "Eksportuj XLSX" })).toBeEnabled();
+  });
+
+  it("shows a safe error when the XLSX download fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503 })),
+    );
+    renderPanel({ jobs: [] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Eksportuj XLSX" }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Eksport nieudany", {
+        description: "Nie udało się pobrać biblioteki. Spróbuj ponownie.",
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Eksportuj XLSX" })).toBeEnabled();
+  });
+
   it("keeps support read-only", () => {
     renderPanel({
       capabilities: { canStartISing: false, canCancel: false },

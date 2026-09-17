@@ -21,6 +21,46 @@ import {
 const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+test("song public ID backfill orders batches by the numeric song ID", { timeout: 600_000 }, async () => {
+  const harness = await startPostgresTestHarness("pozanuta-song-public-id-order", images[0]);
+  const sql = createPostgresTestClient(harness, "postgres", 2);
+  try {
+    await installPostgresCompatibilityFixture(sql);
+    await applyPostgresMigrations(sql, 25);
+    await sql`
+      INSERT INTO public.songs
+        (id, source, source_song_id, public_id, title, artist,
+         normalized_title, normalized_artist, search_text)
+      OVERRIDING SYSTEM VALUE
+      VALUES
+        (2, 'karafun', 'numeric-2', NULL, 'Two', 'Artist', 'two', 'artist', 'artist two'),
+        (10, 'karafun', 'numeric-10', NULL, 'Ten', 'Artist', 'ten', 'artist', 'artist ten'),
+        (11, 'karafun', 'numeric-11', NULL, 'Eleven', 'Artist', 'eleven', 'artist', 'artist eleven'),
+        (20, 'karafun', 'numeric-20', NULL, 'Twenty', 'Artist', 'twenty', 'artist', 'artist twenty')
+    `;
+
+    const result = await runSongPublicIdBackfill(sql, { batchSize: 2 });
+    assert.ok(result.batches > 1);
+    assert.equal(result.remainingNull, 0);
+
+    const ids = await sql<{ id: string; public_id: string }[]>`
+      SELECT id::text AS id, public_id::text AS public_id
+      FROM public.songs
+      ORDER BY public.songs.id
+    `;
+    assert.deepEqual(ids.map(({ id }) => id), ["2", "10", "11", "20"]);
+    assert.equal(new Set(ids.map(({ public_id }) => public_id)).size, ids.length);
+    ids.forEach(({ public_id }) => assert.match(public_id, uuidV4));
+
+    const rerun = await runSongPublicIdBackfill(sql, { batchSize: 2 });
+    assert.equal(rerun.updated, 0);
+    assert.equal(rerun.remainingNull, 0);
+  } finally {
+    await sql.end({ timeout: 5 });
+    await removePostgresTestHarness(harness.containerName);
+  }
+});
+
 test("0025 expand and bounded backfill preserve song and request identity", { timeout: 1_200_000 }, async (context) => {
   for (const image of images) {
     await context.test(image, async () => {

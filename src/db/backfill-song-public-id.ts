@@ -105,9 +105,9 @@ async function updateNextBatch(sql: postgres.Sql, cursor: bigint, batchSize: num
     await transaction.unsafe("SET LOCAL lock_timeout = '2s'");
     await transaction.unsafe("SET LOCAL statement_timeout = '8s'");
     const selected = await transaction.unsafe<{ id: string }[]>(
-      `SELECT id::text AS id FROM public.songs
-       WHERE id > $1::bigint AND public_id IS NULL
-       ORDER BY id LIMIT $2 FOR UPDATE`,
+      `SELECT song.id::text AS id FROM public.songs AS song
+       WHERE song.id > $1::bigint AND song.public_id IS NULL
+       ORDER BY song.id LIMIT $2 FOR UPDATE`,
       [cursor.toString(), batchSize],
     );
     if (selected.length === 0) return { selected: 0, updated: 0, lastId: cursor };

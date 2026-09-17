@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   BanIcon,
+  DownloadIcon,
   LoaderCircleIcon,
   PlayIcon,
   RefreshCwIcon,
@@ -49,6 +50,7 @@ export function AdminImportsPanel({
 }: AdminImportsPanelProps) {
   const router = useRouter();
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [writeConfirmationOpen, setWriteConfirmationOpen] = useState(false);
   const [cancelConfirmationJob, setCancelConfirmationJob] =
     useState<ImportJobViewModel | null>(null);
@@ -100,6 +102,40 @@ export function AdminImportsPanel({
     startRefreshTransition(() => router.refresh());
   }
 
+  async function exportLibrary() {
+    if (isExporting) return;
+    setIsExporting(true);
+
+    try {
+      const response = await fetch("/api/admin/library/export", {
+        method: "GET",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error("Library export failed.");
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = getDownloadFilename(response.headers.get("Content-Disposition"));
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+      toast.success("Eksport gotowy", {
+        description: "Pobrano pełną bibliotekę utworów w formacie XLSX.",
+      });
+    } catch {
+      toast.error("Eksport nieudany", {
+        description: "Nie udało się pobrać biblioteki. Spróbuj ponownie.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   const startsDisabled =
     isBusy ||
     hasActiveISingJob ||
@@ -118,7 +154,7 @@ export function AdminImportsPanel({
       </header>
 
       <section
-        aria-label="Akcje importu"
+        aria-label="Akcje katalogu"
         className="flex flex-col gap-3 border-y border-border py-4 sm:flex-row sm:items-center"
       >
         <div className="flex flex-wrap gap-2">
@@ -143,6 +179,19 @@ export function AdminImportsPanel({
           >
             <PlayIcon aria-hidden="true" />
             Importuj iSing
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void exportLibrary()}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
+            ) : (
+              <DownloadIcon aria-hidden="true" />
+            )}
+            {isExporting ? "Eksportowanie…" : "Eksportuj XLSX"}
           </Button>
         </div>
         <Button
@@ -478,4 +527,9 @@ function initiatorLabel(initiator: ImportJobViewModel["initiatorKind"]) {
   if (initiator === "operator") return "operator";
   if (initiator === "system") return "system";
   return "legacy";
+}
+
+function getDownloadFilename(contentDisposition: string | null) {
+  const match = contentDisposition?.match(/filename="([^"\\/]+\.xlsx)"/i);
+  return match?.[1] ?? "poza-nuta-library.xlsx";
 }
