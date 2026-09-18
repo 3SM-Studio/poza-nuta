@@ -393,6 +393,8 @@ function ParticipantSessionFixture({
               onOpenProfile={() => setIsProfileOpen(true)}
               onSearch={handleSearch}
               onSearchTermChange={setSearchTerm}
+              onSearchCompositionStart={() => undefined}
+              onSearchCompositionEnd={setSearchTerm}
               onOpenQueue={() => {
                 setIsSongDetailsOpen(false);
                 setIsQueueOpen(true);

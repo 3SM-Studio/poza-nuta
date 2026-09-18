@@ -14,6 +14,8 @@ type SessionShellHeaderProps = {
   onOpenProfile: () => void;
   onSearch: (event: FormEvent<HTMLFormElement>) => void;
   onSearchTermChange: (value: string) => void;
+  onSearchCompositionStart: () => void;
+  onSearchCompositionEnd: (value: string) => void;
   onOpenQueue: () => void;
 };
 
@@ -24,6 +26,8 @@ export function SessionShellHeader({
   onOpenProfile,
   onSearch,
   onSearchTermChange,
+  onSearchCompositionStart,
+  onSearchCompositionEnd,
   onOpenQueue,
 }: SessionShellHeaderProps) {
   return (
@@ -78,6 +82,8 @@ export function SessionShellHeader({
           className="h-12 rounded-xl border-border bg-secondary pl-10 text-[15px] placeholder:text-muted-foreground"
           disabled={isSubmitting}
           onChange={(event) => onSearchTermChange(event.target.value)}
+          onCompositionStart={onSearchCompositionStart}
+          onCompositionEnd={(event) => onSearchCompositionEnd(event.currentTarget.value)}
           placeholder="Szukaj utworu lub wykonawcy"
           type="search"
           value={searchTerm}

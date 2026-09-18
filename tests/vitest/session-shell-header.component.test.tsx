@@ -14,6 +14,8 @@ describe("SessionShellHeader", () => {
         onOpenQueue={vi.fn()}
         onSearch={vi.fn()}
         onSearchTermChange={vi.fn()}
+        onSearchCompositionStart={vi.fn()}
+        onSearchCompositionEnd={vi.fn()}
         searchTerm=""
         showQueue
       />,

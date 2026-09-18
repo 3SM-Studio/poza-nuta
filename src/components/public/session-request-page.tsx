@@ -65,9 +65,10 @@ export function SessionRequestPage({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() =>
+    pathname.endsWith("/search") ? searchParams.get("q") ?? "" : "",
+  );
   const [searchResults, setSearchResults] = useState<PublicSong[]>([]);
-  const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null);
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -97,8 +98,13 @@ export function SessionRequestPage({
   const searchControllerRef = useRef<AbortController | null>(null);
   const searchVersionRef = useRef(0);
   const searchDebounceRef = useRef<number | null>(null);
-  const shouldDebounceSearchRef = useRef(false);
   const lastDispatchedSearchQueryRef = useRef<string | null>(null);
+  const effectiveSearchQueryRef = useRef(normalizePublicSearchTerm(searchTerm));
+  const isComposingSearchRef = useRef(false);
+  const selfSearchUrlsRef = useRef(new Set<string>());
+  const observedRouteRef = useRef<string | null>(null);
+  const searchEditVersionRef = useRef(0);
+  const preserveRawOnSearchExitRef = useRef(false);
   const enteredSearchFromSessionRef = useRef(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
   const searchScrollPositionRef = useRef<{ main: number; page: number } | null>(null);
@@ -109,17 +115,10 @@ export function SessionRequestPage({
   const canViewPublicQueue = capabilities.canViewPublicQueue;
   const normalizedSearchTerm = normalizePublicSearchTerm(searchTerm);
   const isSearchRoute = pathname.endsWith("/search");
-  const wasOnSearchRouteRef = useRef(isSearchRoute);
-  const routeSearchQuery = isSearchRoute
-    ? normalizePublicSearchTerm(searchParams.get("q") ?? "")
-    : "";
-  const searchInputValue = isSearchRoute ? routeSearchQuery : searchTerm;
-  const searchDisplayQuery = isSearchRoute
-    ? routeSearchQuery
-    : pendingSearchQuery ?? normalizedSearchTerm;
-  const isSearchActive = isSearchRoute
-    ? canSearchPublicSongs(routeSearchQuery)
-    : normalizedSearchTerm.length > 0;
+  const routeSearchInput = isSearchRoute ? searchParams.get("q") ?? "" : "";
+  const routeSearchQuery = normalizePublicSearchTerm(routeSearchInput);
+  const routeHref = `${pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
+  const isSearchActive = normalizedSearchTerm.length > 0;
   const catalogView = useMemo(
     () =>
       getSessionCatalogRoute({
@@ -374,7 +373,6 @@ export function SessionRequestPage({
       setSearchMessage(songs.length === 0 ? "Nie znaleziono pasujących piosenek." : null);
     } catch (caughtError) {
       if (controller.signal.aborted || isAbortError(caughtError) || requestVersion !== searchVersionRef.current) return;
-      setSearchResults([]);
       setSearchMessage("Nie udało się wyszukać piosenek. Spróbuj ponownie.");
     } finally {
       if (!controller.signal.aborted && requestVersion === searchVersionRef.current) setIsSearching(false);
@@ -383,66 +381,73 @@ export function SessionRequestPage({
 
   const navigateToSearch = useCallback((query: string) => {
     const href = `/s/${encodeURIComponent(sessionToken)}/search?${new URLSearchParams({ q: query }).toString()}`;
-    setPendingSearchQuery(query);
     if (lastDispatchedSearchQueryRef.current !== query) {
       lastDispatchedSearchQueryRef.current = query;
       void runSearch(query);
     }
-    if (isSearchRoute) {
-      router.replace(href);
-    } else {
+    if (window.location.pathname !== `/s/${encodeURIComponent(sessionToken)}/search`) {
       enteredSearchFromSessionRef.current = true;
-      router.push(href);
+      selfSearchUrlsRef.current.add(href);
+      window.history.pushState(null, "", href);
+    } else if (`${window.location.pathname}${window.location.search}` !== href) {
+      selfSearchUrlsRef.current.add(href);
+      window.history.replaceState(null, "", href);
     }
-  }, [isSearchRoute, router, runSearch, sessionToken]);
+  }, [runSearch, sessionToken]);
 
   useEffect(() => {
+    if (observedRouteRef.current === routeHref) return;
+    const previousRoute = observedRouteRef.current;
+    observedRouteRef.current = routeHref;
+    if (selfSearchUrlsRef.current.delete(routeHref)) {
+      if (`${window.location.pathname}${window.location.search}` === routeHref) {
+        selfSearchUrlsRef.current.clear();
+      }
+      return;
+    }
+    if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = null;
+
     if (!isSearchRoute) {
-      if (wasOnSearchRouteRef.current) {
+      enteredSearchFromSessionRef.current = false;
+      if (previousRoute?.split("?")[0].endsWith("/search")) {
+        const preserveRawInput = preserveRawOnSearchExitRef.current;
+        preserveRawOnSearchExitRef.current = false;
+        searchControllerRef.current?.abort();
+        searchVersionRef.current += 1;
         lastDispatchedSearchQueryRef.current = null;
-        const clearStaleSearchState = window.setTimeout(() => {
-          setSearchTerm("");
-          setPendingSearchQuery(null);
+        effectiveSearchQueryRef.current = "";
+        const editVersion = searchEditVersionRef.current;
+        const resetTimer = window.setTimeout(() => {
+          if (searchEditVersionRef.current !== editVersion) return;
+          if (!preserveRawInput) setSearchTerm("");
           setSearchResults([]);
           setSearchMessage(null);
           setIsSearching(false);
           restoreCatalogScrollPosition();
         }, 0);
-        wasOnSearchRouteRef.current = false;
-        return () => window.clearTimeout(clearStaleSearchState);
+        selfSearchUrlsRef.current.clear();
+        return () => window.clearTimeout(resetTimer);
       }
-      wasOnSearchRouteRef.current = false;
+      selfSearchUrlsRef.current.clear();
       return;
     }
-
-    wasOnSearchRouteRef.current = true;
 
     if (!canSearchPublicSongs(routeSearchQuery)) {
-      searchControllerRef.current?.abort();
-      searchVersionRef.current += 1;
-      router.replace(`/s/${encodeURIComponent(sessionToken)}`);
+      window.history.replaceState(null, "", `/s/${encodeURIComponent(sessionToken)}`);
       return;
     }
 
-    if (lastDispatchedSearchQueryRef.current === routeSearchQuery) return;
+    effectiveSearchQueryRef.current = routeSearchQuery;
+    preserveRawOnSearchExitRef.current = false;
+    const editVersion = searchEditVersionRef.current;
     lastDispatchedSearchQueryRef.current = routeSearchQuery;
-    void runSearch(routeSearchQuery);
-  }, [isSearchRoute, routeSearchQuery, router, runSearch, sessionToken]);
-
-  useEffect(() => {
-    if (!shouldDebounceSearchRef.current || !canSearchPublicSongs(normalizedSearchTerm)) {
-      return;
-    }
-    shouldDebounceSearchRef.current = false;
-    searchDebounceRef.current = window.setTimeout(() => {
-      searchDebounceRef.current = null;
-      navigateToSearch(normalizedSearchTerm);
-    }, 250);
-    return () => {
-      if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
-      searchDebounceRef.current = null;
-    };
-  }, [navigateToSearch, normalizedSearchTerm]);
+    queueMicrotask(() => {
+      if (observedRouteRef.current !== routeHref || searchEditVersionRef.current !== editVersion) return;
+      setSearchTerm(routeSearchInput);
+      void runSearch(routeSearchQuery);
+    });
+  }, [isSearchRoute, routeHref, routeSearchInput, routeSearchQuery, runSearch, sessionToken]);
 
   useEffect(() => () => {
     searchControllerRef.current?.abort();
@@ -453,33 +458,61 @@ export function SessionRequestPage({
     event.preventDefault();
     const query = normalizePublicSearchTerm(searchTerm);
     if (canSearchPublicSongs(query)) {
+      if (isComposingSearchRef.current) return;
       if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
       searchDebounceRef.current = null;
-      shouldDebounceSearchRef.current = false;
       navigateToSearch(query);
     }
   }
 
+  function scheduleSearch(query: string) {
+    if (!canSearchPublicSongs(query)) return;
+    searchDebounceRef.current = window.setTimeout(() => {
+      searchDebounceRef.current = null;
+      navigateToSearch(query);
+    }, 250);
+  }
+
   function handleSearchTermChange(value: string) {
+    searchEditVersionRef.current += 1;
     const query = normalizePublicSearchTerm(value);
     if (query && !isSearchRoute) captureCatalogScrollPosition();
     setSearchTerm(value);
-    shouldDebounceSearchRef.current = true;
+    if (query === effectiveSearchQueryRef.current) return;
+    effectiveSearchQueryRef.current = query;
     if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = null;
     searchControllerRef.current?.abort();
     searchVersionRef.current += 1;
+    lastDispatchedSearchQueryRef.current = null;
     if (!canSearchPublicSongs(query)) {
-      shouldDebounceSearchRef.current = false;
       setSearchResults([]);
       setSearchMessage(query ? "Wpisz co najmniej 2 znaki." : null);
       setIsSearching(false);
     } else {
-      setSearchResults([]);
       setSearchMessage(null);
-      setIsSearching(true);
+      setIsSearching(!isComposingSearchRef.current);
     }
-    if (!query) clearSearchResults();
+    if (!query && !isComposingSearchRef.current) {
+      clearSearchResults(value);
+    } else if (!isComposingSearchRef.current) {
+      scheduleSearch(query);
+    }
+  }
+
+  function handleSearchCompositionEnd(value: string) {
+    isComposingSearchRef.current = false;
+    const previousQuery = effectiveSearchQueryRef.current;
+    handleSearchTermChange(value);
+    const query = normalizePublicSearchTerm(value);
+    if (!query) {
+      if (previousQuery === query) clearSearchResults(value);
+      return;
+    }
+    if (query === previousQuery && canSearchPublicSongs(query) && lastDispatchedSearchQueryRef.current !== query) {
+      setIsSearching(true);
+      scheduleSearch(query);
+    }
   }
 
   function selectSong(song: PublicSong) {
@@ -488,13 +521,19 @@ export function SessionRequestPage({
     setIsSongDetailsOpen(true);
   }
 
-  function clearSearchResults() {
+  function clearSearchResults(rawValue = "") {
+    searchEditVersionRef.current += 1;
+    preserveRawOnSearchExitRef.current = rawValue.length > 0;
+    if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = null;
     searchControllerRef.current?.abort();
     searchVersionRef.current += 1;
-    setSearchTerm("");
-    setPendingSearchQuery(null);
+    lastDispatchedSearchQueryRef.current = null;
+    effectiveSearchQueryRef.current = "";
+    setSearchTerm(rawValue);
     setSearchResults([]);
     setSearchMessage(null);
+    setIsSearching(false);
     setSelectedSong(null);
     setIsSongDetailsOpen(false);
     setSubmitAlert(null);
@@ -504,7 +543,7 @@ export function SessionRequestPage({
       return;
     }
     if (isSearchRoute) {
-      router.replace(`/s/${encodeURIComponent(sessionToken)}`);
+      window.history.replaceState(null, "", `/s/${encodeURIComponent(sessionToken)}`);
       return;
     }
     restoreCatalogScrollPosition();
@@ -601,8 +640,14 @@ export function SessionRequestPage({
             }}
             onSearch={handleSearch}
             onSearchTermChange={handleSearchTermChange}
+            onSearchCompositionStart={() => {
+              isComposingSearchRef.current = true;
+              if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+              searchDebounceRef.current = null;
+            }}
+            onSearchCompositionEnd={handleSearchCompositionEnd}
             onOpenQueue={openQueue}
-            searchTerm={searchInputValue}
+            searchTerm={searchTerm}
             showQueue={canViewPublicQueue || Boolean(participantDisplayName)}
           />
           <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0" ref={mainScrollRef}>
@@ -658,9 +703,9 @@ export function SessionRequestPage({
             <SessionSearchResults
               isLoading={isSearching}
               message={searchMessage}
-              onBack={clearSearchResults}
+              onBack={() => clearSearchResults()}
               onSongSelect={selectSong}
-               query={searchDisplayQuery}
+               query={normalizedSearchTerm}
               songs={searchResults}
             />
           ) : null}

@@ -149,6 +149,7 @@ describe("session request feedback", () => {
     routerReplace.mockReset();
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv";
     navigationState.searchParams = new URLSearchParams();
+    window.history.replaceState(null, "", navigationState.pathname);
     searchSongs.mockReset();
     browseSongs.mockReset();
     toastSuccess.mockReset();
@@ -394,6 +395,7 @@ describe("session request feedback", () => {
   it("initializes a direct Search route from q and performs one request", async () => {
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
     navigationState.searchParams = new URLSearchParams("q=abba");
+    window.history.replaceState(null, "", `${navigationState.pathname}?q=abba`);
 
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
@@ -407,9 +409,129 @@ describe("session request feedback", () => {
     );
   });
 
+  it("keeps raw whitespace and rapid Backspace local while querying only effective changes", async () => {
+    vi.useFakeTimers();
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=AB");
+    window.history.replaceState(null, "", `${navigationState.pathname}?q=AB`);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    await act(async () => {});
+
+    const searchbox = screen.getByRole("searchbox");
+    expect(searchbox).toHaveValue("AB");
+    expect(searchSongs).toHaveBeenCalledOnce();
+    searchbox.focus();
+    fireEvent.change(searchbox, { target: { value: "AB " } });
+    expect(searchbox).toHaveValue("AB ");
+    fireEvent.change(searchbox, { target: { value: "AB  " } });
+    expect(searchbox).toHaveValue("AB  ");
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(searchSongs).toHaveBeenCalledOnce();
+    expect(window.location.search).toBe("?q=AB");
+
+    fireEvent.change(searchbox, { target: { value: "AB C" } });
+    expect(searchbox).toHaveValue("AB C");
+    expect(document.activeElement).toBe(searchbox);
+    expect(searchSongs).toHaveBeenCalledOnce();
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(searchSongs).toHaveBeenCalledTimes(2);
+    expect(searchSongs).toHaveBeenLastCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv", "AB C", expect.any(AbortSignal),
+    );
+    expect(window.location.search).toBe("?q=AB+C");
+
+    fireEvent.change(searchbox, { target: { value: "AB   CD" } });
+    expect(searchbox).toHaveValue("AB   CD");
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(searchSongs).toHaveBeenLastCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv", "AB CD", expect.any(AbortSignal),
+    );
+    for (const value of ["AB   C", "AB   ", "AB  ", "AB ", "AB"]) {
+      fireEvent.change(searchbox, { target: { value } });
+      expect(searchbox).toHaveValue(value);
+      expect(document.activeElement).toBe(searchbox);
+    }
+    fireEvent.change(searchbox, { target: { value: " " } });
+    expect(searchbox).toHaveValue(" ");
+    expect(window.location.pathname).toBe("/s/AbCdEfGhIjKlMnOpQrStUv");
+    fireEvent.change(searchbox, { target: { value: " Lady" } });
+    expect(searchbox).toHaveValue(" Lady");
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(searchSongs).toHaveBeenLastCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv", "Lady", expect.any(AbortSignal),
+    );
+  });
+
+  it("keeps useful results visible until the newest search resolves and ignores URL echo", async () => {
+    vi.useFakeTimers();
+    const next = deferred<Array<typeof song>>();
+    searchSongs.mockResolvedValueOnce([song]).mockReturnValueOnce(next.promise);
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=AB");
+    window.history.replaceState(null, "", `${navigationState.pathname}?q=AB`);
+    const { rerender } = render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: /Test Song/ })).toBeVisible();
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "ABC" } });
+    expect(screen.getByRole("button", { name: /Test Song/ })).toBeVisible();
+    expect(screen.queryByLabelText("Wczytywanie wyników")).not.toBeInTheDocument();
+    expect(screen.getByText("Aktualizowanie wyników…")).toBeVisible();
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(searchSongs).toHaveBeenCalledTimes(2);
+    navigationState.searchParams = new URLSearchParams("q=ABC");
+    rerender(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    await act(async () => {});
+    expect(searchSongs).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("searchbox")).toHaveValue("ABC");
+
+    await act(async () => { next.resolve([{ ...song, title: "Newest Song" }]); await next.promise; });
+    expect(screen.getByText("Newest Song")).toBeVisible();
+    expect(screen.queryByText("Test Song")).not.toBeInTheDocument();
+  });
+
+  it("does not search or navigate during IME composition and searches its final value", async () => {
+    vi.useFakeTimers();
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.compositionStart(searchbox);
+    fireEvent.change(searchbox, { target: { value: "ż" } });
+    fireEvent.change(searchbox, { target: { value: "żółć 🎵" } });
+    expect(searchbox).toHaveValue("żółć 🎵");
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(searchSongs).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/s/AbCdEfGhIjKlMnOpQrStUv");
+    fireEvent.compositionEnd(searchbox);
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(searchSongs).toHaveBeenCalledOnce();
+    expect(searchSongs).toHaveBeenCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv", "żółć 🎵", expect.any(AbortSignal),
+    );
+    expect(searchbox).toHaveValue("żółć 🎵");
+  });
+
+  it("waits until composition ends before clearing a direct Search route", async () => {
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=AB");
+    window.history.replaceState(null, "", `${navigationState.pathname}?q=AB`);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    const searchbox = screen.getByRole("searchbox");
+    await waitFor(() => expect(searchSongs).toHaveBeenCalledOnce());
+    const replace = vi.spyOn(window.history, "replaceState");
+
+    fireEvent.compositionStart(searchbox);
+    fireEvent.change(searchbox, { target: { value: "" } });
+    expect(searchbox).toHaveValue("");
+    expect(window.location.pathname).toBe(navigationState.pathname);
+    fireEvent.compositionEnd(searchbox);
+    expect(window.location.pathname).toBe("/s/AbCdEfGhIjKlMnOpQrStUv");
+    expect(replace).toHaveBeenCalledTimes(1);
+  });
+
   it("returns direct invalid Search URLs to Discovery without requesting search", async () => {
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
     navigationState.searchParams = new URLSearchParams("q=a");
+    window.history.replaceState(null, "", `${navigationState.pathname}?q=a`);
 
     render(
       <SessionRequestPage
@@ -420,12 +542,12 @@ describe("session request feedback", () => {
     );
 
     await waitFor(() =>
-      expect(routerReplace).toHaveBeenCalledWith("/s/AbCdEfGhIjKlMnOpQrStUv"),
+      expect(window.location.pathname).toBe("/s/AbCdEfGhIjKlMnOpQrStUv"),
     );
     expect(searchSongs).not.toHaveBeenCalled();
   });
 
-  it("pushes the first Search route and replaces subsequent effective queries", async () => {
+  it("adds one Search history entry and replaces subsequent effective queries", async () => {
     const { rerender } = render(
       <SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />,
     );
@@ -433,7 +555,7 @@ describe("session request feedback", () => {
 
     fireEvent.change(searchbox, { target: { value: "AB" } });
     fireEvent.submit(searchbox.closest("form")!);
-    expect(routerPush).toHaveBeenCalledWith(
+    expect(`${window.location.pathname}${window.location.search}`).toBe(
       "/s/AbCdEfGhIjKlMnOpQrStUv/search?q=AB",
     );
 
@@ -444,20 +566,23 @@ describe("session request feedback", () => {
 
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "ABC" } });
     fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
-    expect(routerReplace).toHaveBeenCalledWith(
+    expect(`${window.location.pathname}${window.location.search}`).toBe(
       "/s/AbCdEfGhIjKlMnOpQrStUv/search?q=ABC",
     );
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it("uses a Discovery replacement when direct Search is cleared", async () => {
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
     navigationState.searchParams = new URLSearchParams("q=abba");
+    window.history.replaceState(null, "", `${navigationState.pathname}?q=abba`);
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
     await screen.findByRole("heading", { name: "„abba”" });
     fireEvent.click(screen.getByRole("button", { name: "Wróć do katalogu" }));
 
-    expect(routerReplace).toHaveBeenCalledWith("/s/AbCdEfGhIjKlMnOpQrStUv");
+    expect(window.location.pathname).toBe("/s/AbCdEfGhIjKlMnOpQrStUv");
     expect(routerBack).not.toHaveBeenCalled();
   });
 
@@ -608,12 +733,59 @@ describe("session request feedback", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
     await act(async () => {
-      first.resolve([{ ...song, title: "Obsolete Song" }]);
       second.resolve([{ ...song, title: "Newest Song" }]);
-      await Promise.all([first.promise, second.promise]);
+      await second.promise;
+    });
+    await act(async () => {
+      first.resolve([{ ...song, title: "Obsolete Song" }]);
+      await first.promise;
     });
     expect(screen.getByText("Newest Song")).toBeVisible();
     expect(screen.queryByText("Obsolete Song")).not.toBeInTheDocument();
+  });
+
+  it("does not replace newer results with an obsolete request error", async () => {
+    const first = deferred<Array<typeof song>>();
+    const second = deferred<Array<typeof song>>();
+    searchSongs.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "AB" } });
+    fireEvent.submit(searchbox.closest("form")!);
+    const oldSignal = searchSongs.mock.calls[0]?.[2] as AbortSignal;
+    fireEvent.change(searchbox, { target: { value: "ABC" } });
+    fireEvent.submit(searchbox.closest("form")!);
+    expect(oldSignal.aborted).toBe(true);
+
+    await act(async () => { second.resolve([{ ...song, title: "Newest Song" }]); await second.promise; });
+    await act(async () => { first.reject(new Error("obsolete")); await first.promise.catch(() => undefined); });
+    expect(screen.getByText("Newest Song")).toBeVisible();
+    expect(screen.queryByText("Nie udało się wyszukać piosenek. Spróbuj ponownie.")).not.toBeInTheDocument();
+  });
+
+  it("clears immediately, aborts a pending request, and restores Discovery", async () => {
+    const pending = deferred<Array<typeof song>>();
+    searchSongs.mockReturnValueOnce(pending.promise);
+    navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
+    navigationState.searchParams = new URLSearchParams("q=AB");
+    window.history.replaceState(null, "", `${navigationState.pathname}?q=AB`);
+    render(
+      <SessionRequestPage
+        discovery={{ genres: [], languages: [], features: { duetCount: 0, hitCount: 0, plusCount: 0 } }}
+        event={event}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+      />,
+    );
+    const searchbox = screen.getByRole("searchbox");
+    await waitFor(() => expect(searchSongs).toHaveBeenCalledOnce());
+    const signal = searchSongs.mock.calls[0]?.[2] as AbortSignal;
+    fireEvent.change(searchbox, { target: { value: "" } });
+    expect(searchbox).toHaveValue("");
+    expect(signal.aborted).toBe(true);
+    expect(window.location.pathname).toBe("/s/AbCdEfGhIjKlMnOpQrStUv");
+    expect(screen.getByRole("heading", { name: "Kolekcje" })).toBeVisible();
+    await act(async () => { pending.resolve([song]); await pending.promise; });
+    expect(screen.queryByRole("heading", { name: "„AB”" })).not.toBeInTheDocument();
   });
 
   it("renders a calm no-results state", async () => {

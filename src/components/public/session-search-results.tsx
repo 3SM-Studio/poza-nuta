@@ -55,7 +55,12 @@ export function SessionSearchResults({
         </h1>
       </div>
 
-      {isLoading ? <SearchResultSkeletons /> : null}
+      {isLoading && songs.length === 0 ? <SearchResultSkeletons /> : null}
+      {isLoading && songs.length > 0 ? (
+        <p className="mb-2 text-sm text-muted-foreground" role="status">
+          Aktualizowanie wyników…
+        </p>
+      ) : null}
       {isEmpty ? (
         <p className="py-8 text-center text-sm text-muted-foreground" role="status">
           {message}
