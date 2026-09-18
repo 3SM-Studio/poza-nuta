@@ -39,6 +39,7 @@
     "test:postgres:import-job-worker-foundation": "node --experimental-strip-types --test tests/postgres/importJobWorkerFoundation.integration.test.ts",
     "test:postgres:import-worker-runtime": "node --experimental-strip-types --test tests/postgres/importWorkerRuntime.integration.test.ts",
     "test:postgres:canonical-session-access": "node --experimental-strip-types --test tests/postgres/canonicalSessionAccess.integration.test.ts",
+    "test:postgres:session-code-6-digits": "node --experimental-strip-types --test tests/postgres/sessionCodeSixDigits.integration.test.ts",
     "test:postgres:public-event-session-identity": "vitest run --config vitest.public-session-postgres.config.ts",
     "test:postgres:guest-session-queue": "vitest run --config vitest.postgres.config.ts",
     "test:postgres:db-contention": "vitest run --config vitest.db-contention.config.ts",

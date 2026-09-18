@@ -34,7 +34,7 @@ CSPRNG bytes and encoded as unpadded Base64URL. The result is 22 characters and
 provides 128 bits of entropy. `/s/{publicToken}` is the canonical public session
 route and is marked `noindex`.
 
-The eight-digit code is only a manual entry alias. `/join` is used because the
+The strict six-digit code is only a manual entry alias. `/join` is used because the
 user is joining an event session; `/invite` remains reserved for future operator
 and organization invitations. `/join/{code}` resolves an active assignment and
 returns a temporary, non-cacheable redirect to `/s/{publicToken}`.
@@ -50,13 +50,10 @@ session, revokes the current assignment, creates a new CSPRNG code, dual-writes
 payloads never include either code or public token.
 
 Migration 0021 keeps codes globally unique across all history. Revoked codes
-receive `release_after` at least 365 days after revocation, but no recycling is
-enabled. This deliberately preserves the existing unique
-`events.session_code` contract.
-
-A later reviewed contract migration 0022 may remove the historical global
-uniqueness constraint, prove that quarantine has expired, add a safe allocator,
-and eventually retire the legacy dual-write. It must not recycle public tokens.
+receive `release_after` as retention metadata at least 365 days after
+revocation, but Stage 1 never reuses an issued code. This deliberately
+preserves the existing unique `events.session_code` contract. The lifetime
+capacity of the strict six-digit code space is 1,000,000 issued codes.
 
 ### Lifecycle operations
 
@@ -109,8 +106,8 @@ ID. Dashboard topics continue to use the internal event ID server-side.
   identity.
 - Giving sessions a separate status: this would create a second lifecycle and
   allow event/session state drift.
-- Immediate code recycling: safe reuse requires quarantine enforcement and a
-  reviewed contract migration, so it is deferred to 0022.
+- Code recycling: Stage 1 deliberately keeps every issued code globally unique
+  across history and never makes it available again.
 
 ## Consequences
 

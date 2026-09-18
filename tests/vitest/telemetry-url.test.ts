@@ -22,10 +22,15 @@ describe("telemetry URL redaction", () => {
   });
 
   it("redacts join and session codes", () => {
-    expect(normalizeTelemetryUrl("/join/12345678")).toBe("/join/[code]");
-    expect(normalizeTelemetryUrl("/session/12345678")).toBe(
+    expect(normalizeTelemetryUrl("/join/004271")).toBe("/join/[code]");
+    expect(normalizeTelemetryUrl("/session/999999")).toBe(
       "/session/[code]",
     );
+    expect(normalizeTelemetryUrl("/join/12345678")).toBe("/join/[invalid-code]");
+    expect(normalizeTelemetryUrl("/session/12345678")).toBe(
+      "/session/[invalid-code]",
+    );
+    expect(normalizeTelemetryUrl("/join/letters")).toBe("/join/[invalid-code]");
   });
 
   it("keeps only privacy-safe query structure", () => {

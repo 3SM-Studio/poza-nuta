@@ -4,8 +4,8 @@
 
 This expand migration adds stable public UUIDs for dashboard event routes, one
 durable session identity per event, and rotatable short-code history. It does
-not apply the future 0022 recycling contract and does not remove
-`events.session_code` or its unique index.
+not remove `events.session_code` or its unique index. Issued codes remain
+globally reserved across history.
 
 ## Required release order
 
@@ -153,13 +153,11 @@ drop columns/tables or restore schema 0020 in place. Keep maintenance enabled,
 restore the full pre-migration backup only if no accepted post-migration writes
 must survive, or ship a reviewed forward-fix migration and code correction.
 
-## Future code-reuse contract
+## Issued-code retention contract
 
-A future review may activate code reuse only after `release_after`, at least
-365 days after final revocation. It
-must reconcile the legacy unique column/index, preserve immutable public tokens
-and history, prove no active/historical collision, and provide its own backup,
-restore, rollout, and rollback plan.
+Stage 1 never reuses an issued session code. `release_after` is retained as
+historical retention metadata only and does not make a code available again.
+The global unique index over all code history remains authoritative.
 
 ## Observability
 

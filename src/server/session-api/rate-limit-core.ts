@@ -14,6 +14,8 @@ const globalRateLimit = globalThis as typeof globalThis & {
   pozaNutaSessionRateLimit?: Map<string, RateLimitBucket>;
 };
 
+// Defense-in-depth only. Production enumeration protection is provided by a
+// Vercel WAF rate-limit rule in front of every public code-resolution route.
 const buckets =
   globalRateLimit.pozaNutaSessionRateLimit ?? new Map<string, RateLimitBucket>();
 globalRateLimit.pozaNutaSessionRateLimit = buckets;

@@ -171,7 +171,7 @@ export const events = pgTable(
     sessionCode: text("session_code")
       .notNull()
       .default(
-        sql`lpad((mod((('x' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))::bit(32)::bigint), 100000000))::text, 8, '0')`,
+        sql`lpad((mod((('x' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))::bit(32)::bigint), 1000000))::text, 6, '0')`,
       ),
     startsAt: timestampColumn("starts_at").notNull(),
     facebookUrl: text("facebook_url"),
@@ -235,7 +235,7 @@ export const events = pgTable(
     ),
     check(
       "events_session_code_format_check",
-      sql`${table.sessionCode} ~ '^[0-9]{8}$'`,
+      sql`length(${table.sessionCode}) = 6 AND octet_length(translate(${table.sessionCode}, '0123456789', '')) = 0`,
     ),
     check(
       "events_close_reason_check",
@@ -463,6 +463,7 @@ export const eventSessionCodes = pgTable(
       .notNull()
       .references(() => eventSessions.id, { onDelete: "cascade" }),
     code: text("code").notNull(),
+    legacyCode: text("legacy_code"),
     validFrom: timestampColumn("valid_from").notNull().defaultNow(),
     validUntil: timestampColumn("valid_until"),
     revokedAt: timestampColumn("revoked_at"),
@@ -475,7 +476,11 @@ export const eventSessionCodes = pgTable(
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
   },
   (table) => [
+    // Stage 1 invariant: issued codes are never reused; history retains global uniqueness.
     uniqueIndex("event_session_codes_code_idx").on(table.code),
+    uniqueIndex("event_session_codes_legacy_code_idx")
+      .on(table.legacyCode)
+      .where(sql`${table.legacyCode} is not null`),
     uniqueIndex("event_session_codes_current_session_idx")
       .on(table.sessionId)
       .where(sql`${table.validUntil} is null and ${table.revokedAt} is null`),
@@ -488,7 +493,11 @@ export const eventSessionCodes = pgTable(
       .where(sql`${table.releaseAfter} is not null`),
     check(
       "event_session_codes_code_format_check",
-      sql`${table.code} ~ '^[0-9]{8}$'`,
+      sql`length(${table.code}) = 6 AND octet_length(translate(${table.code}, '0123456789', '')) = 0`,
+    ),
+    check(
+      "event_session_codes_legacy_code_format_check",
+      sql`${table.legacyCode} is null or (length(${table.legacyCode}) = 8 AND octet_length(translate(${table.legacyCode}, '0123456789', '')) = 0)`,
     ),
     check(
       "event_session_codes_chronology_check",

@@ -2,7 +2,7 @@ const TELEMETRY_URL_ORIGIN = "https://telemetry.invalid";
 
 // These match the public route contracts without importing server-only helpers.
 const EVENT_SESSION_PUBLIC_TOKEN_PATTERN = /^[A-Za-z0-9_-]{22}$/;
-const SESSION_CODE_PATTERN = /^\d{8}$/;
+const SESSION_CODE_PATTERN = /^[0-9]{6}$/;
 const SAFE_SORT_VALUES = new Set(["title", "artist", "newest"]);
 const PRIVATE_PATH_PREFIXES = [
   "/dashboard",
@@ -73,9 +73,11 @@ function redactPathname(pathname: string) {
   if (
     (segments[1] === "join" || segments[1] === "session") &&
     segments[2] !== undefined &&
-    SESSION_CODE_PATTERN.test(segments[2])
+    segments[2] !== ""
   ) {
-    segments[2] = "[code]";
+    segments[2] = SESSION_CODE_PATTERN.test(segments[2])
+      ? "[code]"
+      : "[invalid-code]";
   }
 
   return segments.join("/") || "/";

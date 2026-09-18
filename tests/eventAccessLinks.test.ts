@@ -3,63 +3,37 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
-  generateCanonicalSessionCode,
   isCanonicalSessionCode,
   normalizeSessionCode,
-  withSessionCodeCollisionRetry,
 } from "../src/lib/session-code.ts";
-import { isSessionCodeUniqueViolation } from "../src/lib/session-code-db-error.ts";
-
-test("canonical session codes are unique eight-digit strings", () => {
-  const codes = Array.from({ length: 128 }, () =>
-    generateCanonicalSessionCode(),
-  );
-
-  assert.equal(new Set(codes).size, codes.length);
-  for (const code of codes) assert.match(code, /^[0-9]{8}$/);
-});
 
 test("canonical session codes preserve a leading zero", () => {
-  assert.equal(generateCanonicalSessionCode(() => 42), "00000042");
-  assert.equal(isCanonicalSessionCode("00000042"), true);
+  assert.equal(isCanonicalSessionCode("000042"), true);
   assert.equal(isCanonicalSessionCode("42"), false);
+  assert.equal(isCanonicalSessionCode("00000042"), false);
 });
 
-test("session code paste normalization removes spaces and hyphens only", () => {
-  assert.equal(normalizeSessionCode(" 00-00 00-42 "), "00000042");
-  assert.equal(normalizeSessionCode("00a00042"), "00a00042");
+test("session code validation accepts exactly six ASCII digits", () => {
+  for (const code of ["000000", "000001", "004271", "999999"]) {
+    assert.equal(isCanonicalSessionCode(code), true, code);
+  }
+  for (const code of [
+    "12345",
+    "1234567",
+    "12345678",
+    "123456789",
+    "abcdef",
+    "12 3456",
+    "１２３４５６",
+  ]) {
+    assert.equal(isCanonicalSessionCode(code), false, code);
+  }
 });
 
-test("session code collisions retry with a bounded attempt count", async () => {
-  const generated = ["00000001", "00000002"];
-  const attempted: string[] = [];
-  const result = await withSessionCodeCollisionRetry(
-    async (code) => {
-      attempted.push(code);
-      if (attempted.length === 1) {
-        throw { code: "23505", constraint: "events_session_code_idx" };
-      }
-      return code;
-    },
-    isSessionCodeUniqueViolation,
-    { attempts: 2, generate: () => generated.shift() ?? "99999999" },
-  );
-
-  assert.equal(result, "00000002");
-  assert.deepEqual(attempted, ["00000001", "00000002"]);
-});
-
-test("session code retry propagates the final collision", async () => {
-  await assert.rejects(
-    withSessionCodeCollisionRetry(
-      async () => {
-        throw { code: "23505", constraint_name: "events_session_code_idx" };
-      },
-      isSessionCodeUniqueViolation,
-      { attempts: 2, generate: () => "00000001" },
-    ),
-    (error: unknown) => isSessionCodeUniqueViolation(error),
-  );
+test("session code normalization trims only external whitespace", () => {
+  assert.equal(normalizeSessionCode("  004271  "), "004271");
+  assert.equal(normalizeSessionCode("00 4271"), "00 4271");
+  assert.equal(normalizeSessionCode("00-4271"), "00-4271");
 });
 
 test("schema stores one required canonical code per event", () => {

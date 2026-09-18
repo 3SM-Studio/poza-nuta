@@ -26,7 +26,7 @@ const presentations = {
   invalid: {
     icon: CircleAlertIcon,
     title: "Nieprawidłowy kod sesji",
-    description: "Sprawdź ośmiocyfrowy kod i spróbuj ponownie.",
+    description: "Sprawdź 6-cyfrowy kod i spróbuj ponownie.",
     variant: "destructive",
   },
   scheduled: {

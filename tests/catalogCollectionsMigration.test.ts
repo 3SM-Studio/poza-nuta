@@ -22,8 +22,9 @@ type Snapshot = {
 };
 
 test("0026 snapshot adds only global catalog collection objects", () => {
-  assert.deepEqual(journal.entries.at(-1), {
-    ...journal.entries.at(-1),
+  const entry = journal.entries.find(({ idx }) => idx === 26);
+  assert.deepEqual(entry, {
+    ...entry,
     idx: 26,
     tag: "0026_hesitant_quasimodo",
   });

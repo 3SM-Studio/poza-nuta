@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +18,7 @@ import {
 } from "@/lib/participant-nickname";
 import styles from "./public.module.css";
 import { joinSession, SessionClientError } from "./session-api";
+import { PublicJoinHero } from "./public-join-hero";
 
 export function ParticipantJoinGate({
   sessionToken,
@@ -55,18 +55,11 @@ export function ParticipantJoinGate({
 
   return (
     <section className={`${styles.sessionJoinGradient} min-h-dvh overflow-hidden text-foreground`} aria-labelledby="participant-join-title">
-      <div className="grid min-h-[53dvh] content-center justify-items-center gap-2 px-6 pt-[max(2rem,env(safe-area-inset-top))] pb-40 text-center">
-        <Image
-          alt="Poza Nutą"
-          className="h-auto w-[min(12.5rem,42vw)] drop-shadow-[0_1rem_2rem_oklch(0_0_0_/_28%)]"
-          height={1254}
-          priority
-          src="/brand/poza_nuta_logo-white.png"
-          width={1254}
-        />
-        <p className="mt-3 text-sm font-bold tracking-[0.04em] uppercase">Dołączasz do karaoke</p>
-        <h1 className="max-w-[22rem] text-[clamp(1.5rem,7vw,2.25rem)] font-extrabold leading-[1.08] tracking-[-0.045em]" id="participant-join-title">{eventName ?? "Sesja karaoke"}</h1>
-      </div>
+      <PublicJoinHero
+        eyebrow="Dołączasz do karaoke"
+        title={eventName ?? "Sesja karaoke"}
+        titleId="participant-join-title"
+      />
 
       <Drawer dismissible={false} open>
         <DrawerContent

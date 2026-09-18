@@ -31,11 +31,20 @@ const activeEvent = {
   closedAt: null,
 };
 
-test("session codes require exactly eight digits and preserve leading zero", () => {
-  assert.equal(isValidSessionCodeFormat("01234567"), true);
-  assert.equal(isValidSessionCodeFormat("1234567"), false);
-  assert.equal(isValidSessionCodeFormat("1234-5678"), false);
-  assert.equal(isValidSessionCodeFormat("abcdefgh"), false);
+test("session lookup accepts exactly six ASCII digits", () => {
+  for (const code of ["000000", "004271", "999999"]) {
+    assert.equal(isValidSessionCodeFormat(code), true, code);
+  }
+  for (const code of [
+    "12345",
+    "1234567",
+    "12345678",
+    "123456789",
+    "12 3456",
+    "abcdefgh",
+  ]) {
+    assert.equal(isValidSessionCodeFormat(code), false, code);
+  }
 });
 
 test("session access uses one effective lifecycle contract", () => {
@@ -391,7 +400,7 @@ test("session entry form normalizes paste and preserves a leading zero", () => {
   assert.match(form, /inputMode="numeric"/);
 });
 
-test("session rate limiting is bounded by scope", () => {
+test("process-local session rate limiting remains bounded defense-in-depth", () => {
   resetSessionRateLimitForTests();
   const attempts = Array.from({ length: 12 }, () =>
     consumeSessionRateLimit({ scope: "page", key: "example", now: 1_000 }),

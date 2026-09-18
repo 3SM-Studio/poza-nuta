@@ -30,8 +30,8 @@ wyklucza podstawowy flow karaoke: „nie wiem jeszcze, co zaśpiewać”.
 - `GET /api/s/[token]/songs/browse` — bounded, keyset-paginated catalog API;
 - `GET /api/s/[token]/songs/discovery` — lekkie metadane kategorii i cech.
 
-Wszystkie route'y używają canonical `publicToken`; legacy session code pozostaje
-wyłącznie na istniejących ścieżkach compatibility.
+Wszystkie route'y używają canonical `publicToken`; sześciocyfrowy kod sesji
+pozostaje wyłącznie aliasem do dołączania przez istniejące ścieżki.
 
 ## API
 

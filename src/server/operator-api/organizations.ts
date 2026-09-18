@@ -42,13 +42,13 @@ import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-life
 import { parseDashboardEventIdentifier } from "../../lib/dashboard-event-identifier";
 import { withEventSessionIdentityRetry } from "../../lib/event-session-identity";
 import { isEventSessionIdentityUniqueViolation } from "../../lib/event-session-identity-db-error";
-import { withSessionCodeCollisionRetry } from "../../lib/session-code";
 import { isSessionCodeUniqueViolation } from "../../lib/session-code-db-error";
 import {
   insertEventSessionIdentity,
   lockEventSessionIdentity,
   publishEventSessionInvalidation,
 } from "../event-session-identity-store";
+import { withSessionCodeCollisionRetry } from "../session-code";
 import { OperatorApiError } from "./errors";
 import type {
   CreateDashboardEventInput,

@@ -131,7 +131,7 @@ function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
       <CardHeader>
         <CardTitle>Ogólny kod wejścia</CardTitle>
         <CardDescription>
-          Uczestnik trafia na stronę dołączania i sam wpisuje ośmiocyfrowy kod
+          Uczestnik trafia na stronę dołączania i sam wpisuje 6-cyfrowy kod
           właściwego wydarzenia.
         </CardDescription>
       </CardHeader>
