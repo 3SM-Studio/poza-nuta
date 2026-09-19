@@ -34,6 +34,7 @@ next-env.d.ts
 .auth/
 test-results/
 playwright-report/
+.artifacts/
 
 # Local archives
 poza-nuta*.zip

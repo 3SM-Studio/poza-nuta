@@ -28,6 +28,7 @@ test("the public session visual fixture is dynamic and production-gated", () => 
   assert.match(source, /"queue-desktop"/);
   assert.match(source, /"queue-desktop-long"/);
   assert.match(source, /"queue-desktop-empty"/);
+  assert.match(source, /"queue-hidden-titles"/);
   assert.match(source, /"search-results"/);
   assert.match(source, /"search-loading"/);
   assert.match(source, /"search-empty"/);
@@ -36,4 +37,9 @@ test("the public session visual fixture is dynamic and production-gated", () => 
   assert.match(source, /"song-details-error"/);
   assert.match(source, /"artwork-gallery"/);
   assert.match(source, /"song-details-loading"/);
+  assert.match(source, /"join-invalid"/);
+  assert.match(source, /"scheduled"/);
+  assert.match(source, /"cancelled"/);
+  assert.match(source, /"invalid-session"/);
+  assert.match(source, /"capabilities-none"/);
 });

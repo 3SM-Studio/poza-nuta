@@ -2,163 +2,84 @@
 
 import { CircleAlert, ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
-import { cn } from "@/lib/utils";
-import { PublicJoinHero } from "./public-join-hero";
-import styles from "./public.module.css";
+import { PublicSessionEntryShell } from "./public-session-entry-shell";
+import { resolveJoinCodeClient, type JoinCodeResolution } from "./join-code-api";
 import { SessionCodeForm } from "./session-code-form";
 
-const JOIN_TRANSITION_MS = 180;
+export type JoinCodeError = "invalid" | "rate-limited" | "unavailable";
 
-export function JoinCodeGate({ joinError }: { joinError?: string }) {
+export function JoinCodeGate({ joinError, resolveCode = resolveJoinCodeClient }: {
+  joinError?: string;
+  resolveCode?: (code: string, signal?: AbortSignal) => Promise<JoinCodeResolution>;
+}) {
   const router = useRouter();
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const isDesktop = useDesktopLayout();
+  const [activeError, setActiveError] = useState<JoinCodeError | null>(normalizeJoinError(joinError));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const controllerRef = useRef<AbortController | null>(null);
 
-  const continueToCode = useCallback(
-    async (code: string) => {
-      setIsTransitioning(true);
-      const transitionDelay = window.matchMedia("(prefers-reduced-motion: reduce)")
-        .matches
-        ? 0
-        : JOIN_TRANSITION_MS;
+  useEffect(() => () => controllerRef.current?.abort(), []);
 
-      await new Promise<void>((resolve) => {
-        window.setTimeout(() => {
-          router.push(`/join/${code}`);
-          resolve();
-        }, transitionDelay);
-      });
-    },
-    [router],
-  );
+  async function continueToCode(code: string) {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setActiveError(null);
+    setIsSubmitting(true);
+
+    try {
+      const result = await resolveCode(code, controller.signal);
+      if (controller.signal.aborted) return;
+      if (result.status === "resolved") {
+        router.push(result.location);
+        return;
+      }
+      setActiveError(result.error);
+    } catch (error) {
+      if (controller.signal.aborted || isAbortError(error)) return;
+      setActiveError("unavailable");
+    } finally {
+      if (!controller.signal.aborted) setIsSubmitting(false);
+    }
+  }
 
   return (
-    <main
-      className={`${styles.sessionJoinGradient} relative min-h-dvh overflow-hidden text-foreground`}
-      aria-labelledby="join-code-title"
-    >
-      <PublicJoinHero
-        eyebrow="Dołącz do karaoke"
-        title="Wpisz kod wydarzenia"
-        titleId="join-code-title"
-      />
-
-      <section
-        className={cn(
-          "absolute top-[48dvh] right-0 left-0 z-10 mx-auto hidden w-[min(calc(100%-4rem),40rem)] rounded-2xl border border-border bg-popover text-foreground shadow-[0_1.5rem_3rem_oklch(0_0_0_/_18%)] transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none sm:block",
-          isTransitioning &&
-            "pointer-events-none translate-y-6 opacity-0 motion-reduce:translate-y-0",
-        )}
-        aria-labelledby="join-code-panel-title"
-      >
-        <h2
-          className="px-8 pt-5 text-center text-2xl font-extrabold tracking-[-0.035em]"
-          id="join-code-panel-title"
-        >
-          Kod wydarzenia
-        </h2>
-        <JoinCodePanelBody
-          isSubmitting={isTransitioning}
-          joinError={joinError}
+    <PublicSessionEntryShell eyebrow="Dołącz do karaoke" title="Wpisz kod wydarzenia" titleId="join-code-title">
+      <div className="px-6 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-8 sm:py-7">
+        <h2 className="text-center text-xl font-extrabold tracking-[-0.03em] sm:text-2xl">Kod wydarzenia</h2>
+        <p className="mt-1.5 mb-5 text-center text-sm text-muted-foreground">Kod znajdziesz na ekranie lub przy stoliku.</p>
+        <SessionCodeForm
+          externalErrorId={activeError ? "session-code-resolution-error" : undefined}
+          isSubmitting={isSubmitting}
+          onCodeChange={() => setActiveError(null)}
           onSubmitCode={continueToCode}
         />
-      </section>
-
-      {!isDesktop ? (
-        <Drawer dismissible={false} open>
-          <DrawerContent
-            className={cn(
-              "border-border bg-popover text-foreground transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none sm:hidden",
-              isTransitioning &&
-                "pointer-events-none translate-y-[calc(100%+1.5rem)] opacity-0 motion-reduce:translate-y-0",
-            )}
-            overlayClassName="!bg-black/10 !backdrop-blur-none sm:hidden"
-          >
-            <DrawerHeader className="px-6 pt-2 pb-0 text-center">
-              <DrawerTitle className="text-xl font-extrabold tracking-[-0.035em]">
-                Kod wydarzenia
-              </DrawerTitle>
-            </DrawerHeader>
-            <JoinCodePanelBody
-              isSubmitting={isTransitioning}
-              joinError={joinError}
-              onSubmitCode={continueToCode}
-            />
-          </DrawerContent>
-        </Drawer>
-      ) : null}
-    </main>
+        {activeError ? <JoinErrorAlert kind={activeError} /> : null}
+      </div>
+    </PublicSessionEntryShell>
   );
 }
 
-function JoinCodePanelBody({
-  isSubmitting,
-  joinError,
-  onSubmitCode,
-}: {
-  isSubmitting: boolean;
-  joinError?: string;
-  onSubmitCode: (code: string) => Promise<void>;
-}) {
-  return (
-    <div className="px-6 pt-1 pb-[calc(1.1rem+env(safe-area-inset-bottom))] sm:px-8 sm:pt-2 sm:pb-8">
-      <p className="mb-4 text-center text-sm text-muted-foreground sm:mb-5">
-        Kod znajdziesz na ekranie lub przy stoliku.
-      </p>
-      <SessionCodeForm
-        isSubmitting={isSubmitting}
-        onSubmitCode={onSubmitCode}
-      />
-      {joinError ? <JoinErrorAlert kind={joinError} /> : null}
-    </div>
-  );
+function normalizeJoinError(value?: string): JoinCodeError | null {
+  return value === "invalid" || value === "rate-limited" || value === "unavailable" ? value : null;
 }
 
-function useDesktopLayout() {
-  const [isDesktop, setIsDesktop] = useState(false);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 640px)");
-    const updateLayout = () => setIsDesktop(mediaQuery.matches);
-
-    updateLayout();
-    mediaQuery.addEventListener("change", updateLayout);
-    return () => mediaQuery.removeEventListener("change", updateLayout);
-  }, []);
-
-  return isDesktop;
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
-function JoinErrorAlert({ kind }: { kind: string }) {
+function JoinErrorAlert({ kind }: { kind: JoinCodeError }) {
   const limited = kind === "rate-limited";
   const unavailable = kind === "unavailable";
   const Icon = limited ? ShieldAlert : CircleAlert;
-
   return (
-    <Alert className="mt-4 text-left" variant={limited ? "destructive" : "default"}>
+    <Alert className="mt-4 text-left" id="session-code-resolution-error" variant={limited || unavailable ? "destructive" : "default"}>
       <Icon aria-hidden="true" />
-      <AlertTitle>
-        {limited
-          ? "Zbyt wiele prób"
-          : unavailable
-            ? "Kod jest chwilowo niedostępny"
-            : "Kod jest nieaktywny"}
-      </AlertTitle>
+      <AlertTitle>{limited ? "Zbyt wiele prób" : unavailable ? "Nie możemy teraz sprawdzić kodu" : "Nie znaleźliśmy aktywnego wydarzenia"}</AlertTitle>
       <AlertDescription>
-        {limited
-          ? "Odczekaj chwilę przed kolejną próbą."
-          : unavailable
-            ? "Spróbuj ponownie za chwilę."
-            : "Sprawdź kod albo poproś organizatora o aktualny."}
+        {limited ? "Odczekaj chwilę, a potem spróbuj ponownie." : unavailable ? "Kod pozostał wpisany. Spróbuj ponownie za chwilę." : "Sprawdź cyfry lub poproś organizatora o aktualny kod."}
       </AlertDescription>
     </Alert>
   );

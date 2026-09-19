@@ -50,6 +50,7 @@ import {
   normalizePublicSearchTerm,
 } from "./validation";
 import { usePublicQueueRealtime } from "./use-public-queue-realtime";
+import styles from "./public.module.css";
 
 export function SessionRequestPage({
   sessionToken,
@@ -108,8 +109,7 @@ export function SessionRequestPage({
   const enteredSearchFromSessionRef = useRef(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
   const searchScrollPositionRef = useRef<{ main: number; page: number } | null>(null);
-  const lastPathnameRef = useRef(pathname);
-  const hasClientNavigationRef = useRef(false);
+  const routeProvenanceRef = useRef({ href: `${pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`, hasSessionPredecessor: false });
   const capabilities = getSessionCapabilityState(event);
   const canSubmitSongRequests = capabilities.canSubmitSongRequests;
   const canViewPublicQueue = capabilities.canViewPublicQueue;
@@ -118,7 +118,7 @@ export function SessionRequestPage({
   const routeSearchInput = isSearchRoute ? searchParams.get("q") ?? "" : "";
   const routeSearchQuery = normalizePublicSearchTerm(routeSearchInput);
   const routeHref = `${pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
-  const isSearchActive = normalizedSearchTerm.length > 0;
+  const isSearchActive = canSearchPublicSongs(normalizedSearchTerm);
   const catalogView = useMemo(
     () =>
       getSessionCatalogRoute({
@@ -133,11 +133,14 @@ export function SessionRequestPage({
   const displayedCatalogView = isSearchRoute ? catalogViewBeforeSearchRef.current : catalogView;
 
   useEffect(() => {
-    if (pathname !== lastPathnameRef.current) {
-      hasClientNavigationRef.current = true;
-      lastPathnameRef.current = pathname;
-    }
-  }, [pathname]);
+    if (routeHref === routeProvenanceRef.current.href) return;
+    const sessionRoot = `/s/${encodeURIComponent(sessionToken)}`;
+    const previousPath = routeProvenanceRef.current.href.split("?")[0];
+    routeProvenanceRef.current = {
+      href: routeHref,
+      hasSessionPredecessor: previousPath === sessionRoot || previousPath.startsWith(`${sessionRoot}/`),
+    };
+  }, [routeHref, sessionToken]);
 
   useEffect(() => {
     if (catalogView.kind !== "catalog" || !catalogView.canonicalHref) return;
@@ -628,7 +631,7 @@ export function SessionRequestPage({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground lg:h-dvh lg:min-h-0 lg:overflow-hidden">
+    <div className={`${styles.publicSessionTheme} flex min-h-dvh flex-col bg-background text-foreground xl:h-dvh xl:min-h-0 xl:overflow-hidden`} data-public-session-theme="dark">
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <SessionShellHeader
@@ -647,11 +650,14 @@ export function SessionRequestPage({
             }}
             onSearchCompositionEnd={handleSearchCompositionEnd}
             onOpenQueue={openQueue}
+            queueButtonLabel={canViewPublicQueue ? "Otwórz kolejkę" : "Otwórz moje zgłoszenia"}
             searchTerm={searchTerm}
+            showProfile={Boolean(participantDisplayName)}
             showQueue={canViewPublicQueue || Boolean(participantDisplayName)}
+            showSearch={canSubmitSongRequests}
           />
-          <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0" ref={mainScrollRef}>
-            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
+          <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] xl:overflow-y-auto xl:overscroll-contain xl:pb-0" ref={mainScrollRef}>
+            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 xl:max-w-6xl">
       {capabilities.allSessionFeaturesDisabled ? (
         <section className="mb-7">
           <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">Sesja wydarzenia</h2>
@@ -666,11 +672,11 @@ export function SessionRequestPage({
               <SessionDiscoveryHome discovery={discovery} onSongSelect={selectSong} sessionToken={sessionToken} />
             ) : null}
             {displayedCatalogView.kind === "genres" && discovery ? (
-              <SessionCatalogGenres genres={discovery.genres} onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, hasClientNavigationRef.current)} sessionToken={sessionToken} />
+              <SessionCatalogGenres genres={discovery.genres} onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, routeProvenanceRef.current.hasSessionPredecessor)} sessionToken={sessionToken} />
             ) : null}
             {displayedCatalogView.kind === "collections" ? (
               <SessionCatalogCollections
-                onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, hasClientNavigationRef.current)}
+                onBack={() => navigateBack(router, `/s/${encodeURIComponent(sessionToken)}`, routeProvenanceRef.current.hasSessionPredecessor)}
                 section={displayedCatalogView.section}
                 sessionToken={sessionToken}
               />
@@ -678,14 +684,14 @@ export function SessionRequestPage({
             {displayedCatalogView.kind === "playlist" && displayedCatalogView.filterKey ? (
               <CatalogCollectionSongList
                 filterKey={displayedCatalogView.filterKey}
-                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, hasClientNavigationRef.current)}
+                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, routeProvenanceRef.current.hasSessionPredecessor)}
                 onSongSelect={selectSong}
                 sessionToken={sessionToken}
               />
             ) : null}
             {displayedCatalogView.kind === "playlist" && !displayedCatalogView.filterKey ? (
               <CatalogCollectionUnavailable
-                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, hasClientNavigationRef.current)}
+                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, routeProvenanceRef.current.hasSessionPredecessor)}
               />
             ) : null}
             {displayedCatalogView.kind === "catalog" ? (
@@ -693,7 +699,7 @@ export function SessionRequestPage({
                 backLabel={displayedCatalogView.backLabel}
                 heading={displayedCatalogView.heading}
                 input={displayedCatalogView.input}
-                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, hasClientNavigationRef.current)}
+                onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, routeProvenanceRef.current.hasSessionPredecessor)}
                 onSongSelect={selectSong}
                 sessionToken={sessionToken}
               />
@@ -718,7 +724,6 @@ export function SessionRequestPage({
       {canViewPublicQueue || participantDisplayName ? (
         <SessionQueuePanel
           message={queueMessage}
-          onOpen={openQueue}
           onOpenChange={handleQueueOpenChange}
           onRefresh={() => void refreshQueue()}
           cancellingRequestId={cancellingRequestId}
@@ -732,6 +737,7 @@ export function SessionRequestPage({
           open={isQueueOpen}
           queue={queue}
           refreshing={isRefreshingQueue}
+          showPublicQueue={canViewPublicQueue}
         />
       ) : null}
       </div>

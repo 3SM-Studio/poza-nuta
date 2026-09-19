@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Poza Nutą",
-  description: "Nowa aplikacja Poza Nutą",
+  description: "Poza Nutą — dołącz do karaoke, wybierz piosenkę i obserwuj kolejkę na żywo.",
 };
 
 type RootLayoutProps = Readonly<{

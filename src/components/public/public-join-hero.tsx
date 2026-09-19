@@ -10,7 +10,7 @@ export function PublicJoinHero({
   titleId: string;
 }) {
   return (
-    <div className="grid min-h-[53dvh] content-center justify-items-center gap-2 px-6 pt-[max(2rem,env(safe-area-inset-top))] pb-40 text-center [@media(max-height:35rem)]:min-h-[44dvh] [@media(max-height:35rem)]:pt-4 [@media(max-height:35rem)]:pb-52 sm:min-h-[48dvh] sm:px-8 sm:pt-[max(2.5rem,env(safe-area-inset-top))] sm:pb-12">
+    <div className="grid min-h-[20rem] flex-1 content-center justify-items-center gap-2 px-6 py-[max(2rem,env(safe-area-inset-top))] text-center [@media(max-height:35rem)]:min-h-[15rem] [@media(max-height:35rem)]:py-4 sm:min-h-[22rem] sm:px-8 sm:py-[max(2.5rem,env(safe-area-inset-top))]">
       <Image
         alt="Poza Nutą"
         className="h-auto w-[min(12.5rem,42vw)] drop-shadow-[0_1rem_2rem_oklch(0_0_0_/_28%)] [@media(max-height:35rem)]:w-28 sm:w-[13.5rem]"

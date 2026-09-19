@@ -89,7 +89,7 @@ export function SessionQueueList({
                     <p className="mt-0.5 truncate text-sm text-muted-foreground">Tytuł ukryty publicznie</p>
                   </>
                 )}
-                {item.singerName.trim() ? (
+                {queue.showSongTitles && item.singerName.trim() ? (
                   <p className="mt-1 truncate text-sm font-medium text-muted-foreground">
                     Śpiewa: {item.singerName}
                   </p>

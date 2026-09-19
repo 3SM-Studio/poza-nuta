@@ -41,7 +41,6 @@ function QueuePanelHarness({
   return (
     <SessionQueuePanel
       message={null}
-      onOpen={vi.fn()}
       onOpenChange={setOpen}
       onRefresh={vi.fn()}
       open={open}
@@ -120,5 +119,24 @@ describe("SessionQueuePanel", () => {
     const desktopPanel = screen.getByRole("complementary", { name: "Kolejka sesji" });
     expect(within(desktopPanel).getAllByText("Dancing Queen")).toHaveLength(1);
     expect(within(desktopPanel).getAllByText("#30")).toHaveLength(1);
+  });
+
+  it("shows only My requests when public queue access is disabled", () => {
+    render(
+      <SessionQueuePanel
+        message={null}
+        onOpenChange={vi.fn()}
+        onRefresh={vi.fn()}
+        open={false}
+        participantDisplayName="Ola"
+        participantRequests={[]}
+        queue={null}
+        refreshing={false}
+        showPublicQueue={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Otwórz moje zgłoszenia" })).toHaveTextContent("Moje zgłoszenia");
+    expect(screen.queryByRole("tab", { name: "Kolejka" })).not.toBeInTheDocument();
+    expect(screen.getByText("Nie masz jeszcze zgłoszeń w tej sesji.")).toBeVisible();
   });
 });

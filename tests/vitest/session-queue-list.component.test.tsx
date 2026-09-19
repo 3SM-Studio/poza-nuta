@@ -76,4 +76,12 @@ describe("SessionQueueList", () => {
 
     expect(screen.getByText("2 utwory w kolejce")).toBeVisible();
   });
+
+  it("does not repeat the singer line when titles are hidden", () => {
+    render(<SessionQueueList message={null} onRefresh={vi.fn()} queue={{ ...queueWithCurrent, showSongTitles: false }} refreshing={false} />);
+    expect(screen.getAllByText("Ola")).toHaveLength(1);
+    expect(screen.getAllByText("Maks")).toHaveLength(1);
+    expect(screen.queryByText("Śpiewa: Ola")).not.toBeInTheDocument();
+    expect(screen.queryByText("Śpiewa: Maks")).not.toBeInTheDocument();
+  });
 });

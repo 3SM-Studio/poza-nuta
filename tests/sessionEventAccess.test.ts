@@ -340,20 +340,22 @@ test("canonical session layout and code resolver provide safe states", () => {
     "src/server/session-api/code-resolver-response.ts",
     "utf8",
   );
-  const alert = readFileSync(
-    "src/components/public/session-state-alert.tsx",
+  const lifecycle = readFileSync(
+    "src/components/public/public-session-lifecycle.tsx",
     "utf8",
   );
   assert.match(page, /consumeSessionRequestRateLimit/);
   assert.match(page, /rate_limited/);
-  assert.match(page, /SessionStateAlert/);
+  assert.match(page, /PublicSessionLifecycle/);
+  assert.match(page, /canReopenEvent/);
+  assert.match(page, /cancelled/);
   assert.match(page, /notFound\(\)/);
   assert.match(resolver, /status: 307/);
   assert.match(resolver, /no-store/);
-  assert.match(alert, /Sesja jeszcze się nie rozpoczęła/);
-  assert.match(alert, /Sesja została zakończona/);
-  assert.match(alert, /Nieprawidłowy kod sesji/);
-  assert.doesNotMatch(alert, /wygasł/);
+  assert.match(lifecycle, /Jesteś we właściwym miejscu/);
+  assert.match(lifecycle, /Karaoke dobiegło końca/);
+  assert.match(lifecycle, /Wydarzenie zostało odwołane/);
+  assert.match(lifecycle, /Ta sesja nie jest dostępna/);
 });
 
 test("song discovery does not burst concurrent catalog queries", () => {

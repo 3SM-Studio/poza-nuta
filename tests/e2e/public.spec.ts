@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { getOptionalE2ESessionCode } from "./e2e-env";
+import {
+  getOptionalConfiguredE2ESessionCode,
+  getOptionalE2ESessionCode,
+} from "./e2e-env";
 
 test.describe("public smoke", () => {
   test("sign-up page renders without dashboard auth", async ({ page }) => {
@@ -116,12 +119,27 @@ test.describe("public smoke", () => {
   });
 
   test("session route loads without dashboard auth", async ({ page }) => {
+    const configuredCode = getOptionalConfiguredE2ESessionCode();
     const code = getOptionalE2ESessionCode();
 
     await page.goto(`/session/${encodeURIComponent(code)}`);
 
     await expect(page.locator("main")).toBeVisible();
-    await expect(page.locator("main")).toContainText(/Link sesji|Wybierz piosenkę/);
+    if (configuredCode) {
+      await expect(page.locator("main")).toContainText(/Link sesji|Wybierz piosenkę/);
+      return;
+    }
+
+    await expect(page).toHaveURL(/\/join\?joinError=invalid$/);
+    await expect(page.getByText("Nie znaleźliśmy aktywnego wydarzenia")).toBeVisible();
+    await expect(page.getByLabel("Sześciocyfrowy kod sesji")).toBeEditable();
+  });
+
+  test("invalid canonical session token keeps branded recovery", async ({ page }) => {
+    await page.goto("/s/invalid-public-token");
+
+    await expect(page.getByRole("heading", { name: "Ta sesja nie jest dostępna" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Wpisz kod wydarzenia" })).toHaveAttribute("href", "/join");
   });
 });
 

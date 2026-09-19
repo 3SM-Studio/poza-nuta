@@ -671,6 +671,37 @@
     linear-gradient(145deg, oklch(0.57 0.23 340), oklch(0.36 0.19 309) 59%, oklch(0.17 0.07 286));
 }
 
+.publicSessionTheme {
+  color-scheme: dark;
+  --background: oklch(0.095 0.006 286);
+  --foreground: oklch(0.985 0.008 255);
+  --card: oklch(0.145 0.012 286);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.17 0.014 286);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.72 0.25 350);
+  --primary-hover: oklch(0.76 0.22 350);
+  --primary-strong: oklch(0.67 0.28 350);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.18 0.018 286);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.22 0.02 286);
+  --muted-foreground: oklch(0.72 0.025 260);
+  --accent: oklch(0.24 0.08 350);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.69 0.2 19);
+  --border: oklch(0.29 0.024 270);
+  --input: var(--border);
+  --ring: var(--primary);
+  --surface-1: var(--card);
+  --surface-2: var(--secondary);
+  --surface-3: var(--muted);
+  --text-secondary: oklch(0.79 0.022 260);
+  --text-muted: var(--muted-foreground);
+  --accent-soft: var(--accent);
+  --accent-soft-border: oklch(0.42 0.12 350);
+}
+
 .currentQueueSongSurface {
   background:
     radial-gradient(circle at 88% 0%, oklch(0.88 0.2 335 / 35%), transparent 12rem),

@@ -14,9 +14,29 @@ import { SessionShellHeader } from "./session-shell-header";
 import { SongDetailsDrawer } from "./song-details-drawer";
 import { SessionSongArtwork } from "./session-song-artwork";
 import { formatSongSource } from "./validation";
+import { JoinCodeGate } from "./join-code-gate";
+import { PublicSessionLifecycle } from "./public-session-lifecycle";
+import { SessionRequestPage } from "./session-request-page";
+import { SessionStateAlert } from "./session-state-alert";
 
 export type PublicSessionVisualFixtureState =
   | "pre-join"
+  | "participant-join"
+  | "join-initial"
+  | "join-invalid"
+  | "join-rate-limited"
+  | "join-unavailable"
+  | "scheduled"
+  | "closed"
+  | "closed-reopenable"
+  | "cancelled"
+  | "invalid-session"
+  | "service-unavailable"
+  | "page-rate-limited"
+  | "capabilities-both"
+  | "capabilities-requests-only"
+  | "capabilities-queue-only"
+  | "capabilities-none"
   | "main"
   | "discovery"
   | "discovery-loading"
@@ -33,6 +53,7 @@ export type PublicSessionVisualFixtureState =
   | "queue-desktop"
   | "queue-desktop-long"
   | "queue-desktop-empty"
+  | "queue-hidden-titles"
   | "search-results"
   | "search-loading"
   | "search-empty"
@@ -50,6 +71,7 @@ export type PublicSessionVisualFixtureState =
   | "catalog-duets"
   | "catalog-empty"
   | "live-search-loading"
+  | "instrumented-search"
   | "queue-my-requests"
   | "queue-my-requests-empty"
   | "long-song-details"
@@ -262,7 +284,7 @@ export function PublicSessionVisualFixture({
 }: {
   state: PublicSessionVisualFixtureState;
 }) {
-  if (state === "pre-join") {
+  if (state === "pre-join" || state === "participant-join") {
     return (
       <main className="min-h-dvh bg-background text-foreground">
         <ParticipantJoinGate
@@ -273,8 +295,43 @@ export function PublicSessionVisualFixture({
     );
   }
 
+  if (state.startsWith("join-")) {
+    const joinError = state === "join-invalid" ? "invalid" : state === "join-rate-limited" ? "rate-limited" : state === "join-unavailable" ? "unavailable" : undefined;
+    return <JoinCodeGate joinError={joinError} resolveCode={() => new Promise(() => undefined)} />;
+  }
+
+  if (["scheduled", "closed", "closed-reopenable", "cancelled", "invalid-session", "service-unavailable", "page-rate-limited"].includes(state)) {
+    const kind = state === "invalid-session" ? "invalid" : state === "service-unavailable" ? "service_unavailable" : state === "page-rate-limited" ? "rate_limited" : state === "scheduled" ? "scheduled" : state === "cancelled" ? "cancelled" : "closed";
+    return <PublicSessionLifecycle
+      event={state === "invalid-session" || state === "service-unavailable" || state === "page-rate-limited" ? undefined : { name: "Noc Mikrofonów · Mokotów", venue: "Klub Fala", startsAt: "2026-09-20T18:00:00.000Z" }}
+      kind={kind}
+      reopenable={state === "closed-reopenable"}
+    />;
+  }
+
   if (state === "artwork-gallery") {
     return <ArtworkGallery />;
+  }
+
+  if (state === "instrumented-search") {
+    return (
+      <SessionRequestPage
+        discovery={fixtureDiscovery}
+        event={{
+          name: "Noc Mikrofonów · Mokotów",
+          venue: "Klub Fala",
+          startsAt: "2026-09-19T16:00:00.000Z",
+          endsAt: "2026-09-20T02:00:00.000Z",
+          status: "active",
+          publicQueueEnabled: false,
+          songRequestsEnabled: true,
+          publicShowSongTitles: true,
+          autoCloseAt: "2026-09-20T02:00:00.000Z",
+          closedAt: null,
+        }}
+        sessionToken="visual-fixture-session-token"
+      />
+    );
   }
 
   return <ParticipantSessionFixture initialState={state} />;
@@ -317,6 +374,9 @@ function ParticipantSessionFixture({
   );
   const [isProfileOpen, setIsProfileOpen] = useState(initialState === "profile");
   const [nickname, setNickname] = useState("Ola");
+  const requestsEnabled = initialState !== "capabilities-queue-only" && initialState !== "capabilities-none";
+  const queueEnabled = initialState !== "capabilities-requests-only" && initialState !== "capabilities-none";
+  const hasParticipant = initialState !== "capabilities-none";
   const isDiscoveryFixture = [
     "main",
     "discovery",
@@ -332,6 +392,9 @@ function ParticipantSessionFixture({
     "queue-desktop",
     "queue-desktop-long",
     "queue-desktop-empty",
+    "queue-hidden-titles",
+    "capabilities-both",
+    "capabilities-requests-only",
   ].includes(initialState);
   const isSearchFixture = [
     "search-results",
@@ -366,7 +429,9 @@ function ParticipantSessionFixture({
   const [isAddingSong, setIsAddingSong] = useState(isSongDetailsSubmitting);
   const detailsAlert =
     initialState === "song-details-error" ? "duplicate_request" : null;
-  const fixtureQueueState = ["queue-mobile-empty", "queue-desktop-empty"].includes(initialState)
+  const fixtureQueueState = initialState === "queue-hidden-titles"
+    ? { ...fixtureQueueCurrent, showSongTitles: false }
+    : ["queue-mobile-empty", "queue-desktop-empty"].includes(initialState)
     ? fixtureQueueEmpty
     : ["queue-mobile-long", "queue-desktop-long"].includes(initialState)
       ? fixtureQueueLong
@@ -385,7 +450,7 @@ function ParticipantSessionFixture({
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <div className="flex min-h-dvh flex-col lg:h-dvh lg:min-h-0 lg:overflow-hidden">
+      <div className="flex min-h-dvh flex-col xl:h-dvh xl:min-h-0 xl:overflow-hidden">
         <div className="flex min-h-0 flex-1">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <SessionShellHeader
@@ -399,13 +464,20 @@ function ParticipantSessionFixture({
                 setIsSongDetailsOpen(false);
                 setIsQueueOpen(true);
               }}
+              queueButtonLabel={queueEnabled ? "Otwórz kolejkę" : "Otwórz moje zgłoszenia"}
               searchTerm={searchTerm}
-              showQueue
+              showProfile={hasParticipant}
+              showQueue={queueEnabled || hasParticipant}
+              showSearch={requestsEnabled}
             />
 
-            <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:overscroll-contain lg:pb-0">
-              <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:max-w-6xl">
-          {initialState === "catalog-genres" ? (
+            <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] xl:overflow-y-auto xl:overscroll-contain xl:pb-0">
+              <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 xl:max-w-6xl">
+          {!requestsEnabled && !queueEnabled ? (
+            <section className="mx-auto max-w-xl"><h2 className="mb-3 text-2xl font-extrabold tracking-[-0.03em]">Sesja wydarzenia</h2><SessionStateAlert kind="queue_disabled" /></section>
+          ) : !requestsEnabled && queueEnabled ? (
+            <section className="mx-auto max-w-xl text-center"><h2 className="text-2xl font-extrabold tracking-[-0.03em]">Publiczna kolejka jest dostępna</h2><p className="mt-2 text-sm text-muted-foreground">Otwórz kolejkę na dole ekranu, aby zobaczyć kto śpiewa.</p></section>
+          ) : initialState === "catalog-genres" ? (
             <SessionCatalogGenres genres={fixtureDiscovery.genres} onBack={() => undefined} sessionToken="visual-fixture-session-token" />
           ) : initialState.startsWith("catalog-") ? (
             <CatalogSongList
@@ -475,22 +547,19 @@ function ParticipantSessionFixture({
               </div>
             </main>
           </div>
-        <SessionQueuePanel
+        {queueEnabled || hasParticipant ? <SessionQueuePanel
           message={null}
-          onOpen={() => {
-            setIsSongDetailsOpen(false);
-            setIsQueueOpen(true);
-          }}
           onOpenChange={setIsQueueOpen}
           onRefresh={() => undefined}
           open={isQueueOpen}
           queue={fixtureQueueState}
           refreshing={false}
-          defaultTab={initialState === "queue-my-requests" || initialState === "queue-my-requests-empty" ? "mine" : "queue"}
-          participantDisplayName="Ola"
+          defaultTab={initialState === "queue-my-requests" || initialState === "queue-my-requests-empty" || !queueEnabled ? "mine" : "queue"}
+          participantDisplayName={hasParticipant ? "Ola" : undefined}
           participantRequests={initialState === "queue-my-requests-empty" ? [] : fixtureParticipantRequests}
           participantRequestsMessage={null}
-        />
+          showPublicQueue={queueEnabled}
+        /> : null}
         </div>
 
         <SongDetailsDrawer
@@ -502,7 +571,7 @@ function ParticipantSessionFixture({
           song={selectedSong}
         />
 
-        <ParticipantProfileDrawer
+        {hasParticipant ? <ParticipantProfileDrawer
           error={null}
           isOpen={isProfileOpen}
           isSaving={false}
@@ -510,7 +579,7 @@ function ParticipantSessionFixture({
           onSubmit={handleRename}
           onValueChange={setNickname}
           value={nickname}
-        />
+        /> : null}
       </div>
     </div>
   );

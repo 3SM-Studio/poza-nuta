@@ -12,6 +12,8 @@ const redirectHeaders = {
 };
 
 export async function resolveJoinCodeResponse(request: Request, code: string) {
+  const wantsJson = request.headers.get("accept")?.includes("application/json") ?? false;
+
   try {
     requireSessionApiRateLimit(request);
     const result = await traceServerStep(
@@ -20,18 +22,31 @@ export async function resolveJoinCodeResponse(request: Request, code: string) {
       () => resolveJoinCode(code),
     );
 
-    return temporaryNoStoreRedirect(
-      result.status === "resolved"
-        ? `/s/${result.publicToken}`
-        : "/join?joinError=invalid",
-    );
-  } catch (error) {
-    if (error instanceof PublicApiError && error.status === 429) {
-      return temporaryNoStoreRedirect("/join?joinError=rate-limited");
+    if (result.status === "resolved") {
+      const location = `/s/${result.publicToken}`;
+      return wantsJson
+        ? noStoreJson({ status: "resolved", location }, 200)
+        : temporaryNoStoreRedirect(location);
     }
 
-    return temporaryNoStoreRedirect("/join?joinError=unavailable");
+    return wantsJson
+      ? noStoreJson({ status: "error", error: "invalid" }, 404)
+      : temporaryNoStoreRedirect("/join?joinError=invalid");
+  } catch (error) {
+    if (error instanceof PublicApiError && error.status === 429) {
+      return wantsJson
+        ? noStoreJson({ status: "error", error: "rate-limited" }, 429)
+        : temporaryNoStoreRedirect("/join?joinError=rate-limited");
+    }
+
+    return wantsJson
+      ? noStoreJson({ status: "error", error: "unavailable" }, 503)
+      : temporaryNoStoreRedirect("/join?joinError=unavailable");
   }
+}
+
+function noStoreJson(body: object, status: number) {
+  return Response.json(body, { status, headers: redirectHeaders });
 }
 
 function temporaryNoStoreRedirect(location: string) {

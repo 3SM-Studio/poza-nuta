@@ -350,11 +350,18 @@ describe("session request feedback", () => {
 
   it("waits 250 ms before searching and never queries a one-character term", async () => {
     vi.useFakeTimers();
-    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    render(
+      <SessionRequestPage
+        discovery={{ genres: [], languages: [], features: { duetCount: 0, hitCount: 0, plusCount: 0 } }}
+        sessionToken="AbCdEfGhIjKlMnOpQrStUv"
+        event={event}
+      />,
+    );
 
     const searchbox = screen.getByRole("searchbox");
     fireEvent.change(searchbox, { target: { value: "A" } });
-    expect(screen.getByText("Wpisz co najmniej 2 znaki.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Kolekcje" })).toBeVisible();
+    expect(screen.queryByText("Wpisz co najmniej 2 znaki.")).not.toBeInTheDocument();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
@@ -372,6 +379,36 @@ describe("session request feedback", () => {
     expect(searchSongs).toHaveBeenCalledWith(
       "AbCdEfGhIjKlMnOpQrStUv",
       "AB",
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("coalesces realistic Lady Gaga typing into one search request", async () => {
+    vi.useFakeTimers();
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    const searchbox = screen.getByRole("searchbox");
+    let value = "";
+    for (const character of "Lady Gaga") {
+      value += character;
+      fireEvent.change(searchbox, { target: { value } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(40);
+      });
+    }
+
+    expect(searchSongs).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(209);
+    });
+    expect(searchSongs).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(searchSongs).toHaveBeenCalledOnce();
+    expect(searchSongs).toHaveBeenCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv",
+      "Lady Gaga",
       expect.any(AbortSignal),
     );
   });
@@ -905,8 +942,7 @@ describe("session request feedback", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Dodano zgłoszenie", {
       description: "Operator musi je zatwierdzić.",
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Moje 1" }));
-    expect(await screen.findByText("Moje zgłoszenia")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Moje zgłoszenia" })).toBeVisible();
     expect(await screen.findByText("Test Song")).toBeVisible();
     expect(screen.queryByText("Twoje ostatnie zgłoszenie")).not.toBeInTheDocument();
     expect(getParticipantRequests).toHaveBeenCalledTimes(2);
@@ -974,7 +1010,6 @@ describe("session request feedback", () => {
       expect(screen.queryByRole("dialog", { name: "Zmień swój nick" })).toBeNull(),
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Moje 1" }));
     fireEvent.click(await screen.findByRole("button", { name: "Anuluj" }));
     getParticipantRequests.mockResolvedValue({
       items: [{ ...item, status: "skipped" }],
@@ -1070,7 +1105,6 @@ describe("session request feedback", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("tab", { name: "Moje 2" }));
     const firstRequest = await screen.findByText("First Song");
     const firstArticle = firstRequest.closest("article")!;
     const secondRequest = await screen.findByText("Second Song");

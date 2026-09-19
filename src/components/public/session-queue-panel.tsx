@@ -7,6 +7,7 @@ import {
   Drawer,
   DrawerClose,
   DrawerContent,
+  DrawerDescription,
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
@@ -15,16 +16,16 @@ import { SessionQueueList } from "./session-queue-list";
 import { SessionSongArtwork } from "./session-song-artwork";
 import { SessionParticipantRequests } from "./session-participant-requests";
 import type { ParticipantRequest } from "./session-api";
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 type SessionQueuePanelProps = {
   message: string | null;
-  onOpen: () => void;
   onOpenChange: (open: boolean) => void;
   onRefresh: () => void;
   open: boolean;
   queue: PublicQueueResponse | null;
   refreshing: boolean;
+  showPublicQueue?: boolean;
   participantRequests?: ParticipantRequest[] | null;
   participantRequestsMessage?: string | null;
   participantDisplayName?: string;
@@ -39,12 +40,12 @@ type SessionQueuePanelProps = {
 /** One queue state, presented as a desktop panel and a mobile expanding bar. */
 export function SessionQueuePanel({
   message,
-  onOpen,
   onOpenChange,
   onRefresh,
   open,
   queue,
   refreshing,
+  showPublicQueue = true,
   participantRequests = null,
   participantRequestsMessage = null,
   participantDisplayName,
@@ -55,13 +56,28 @@ export function SessionQueuePanel({
   onCancelDialogRequestIdChange = () => undefined,
   defaultTab = "queue",
 }: SessionQueuePanelProps) {
-  const [activeTab, setActiveTab] = useState<"queue" | "mine">(defaultTab);
+  const [activeTab, setActiveTab] = useState<"queue" | "mine">(showPublicQueue ? defaultTab : "mine");
   const hasParticipant = Boolean(participantDisplayName);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1280px)");
+    const closeMobileDrawer = () => {
+      if (window.innerWidth >= 1280 && open) onOpenChange(false);
+    };
+    closeMobileDrawer();
+    desktop.addEventListener("change", closeMobileDrawer);
+    window.addEventListener("resize", closeMobileDrawer);
+    return () => {
+      desktop.removeEventListener("change", closeMobileDrawer);
+      window.removeEventListener("resize", closeMobileDrawer);
+    };
+  }, [onOpenChange, open]);
+
   return (
     <>
       <aside
-        aria-label="Kolejka sesji"
-        className="hidden min-h-0 w-[clamp(22.5rem,30vw,27.5rem)] shrink-0 border-l border-border bg-secondary/35 lg:flex lg:flex-col"
+        aria-label={showPublicQueue ? "Kolejka sesji" : "Moje zgłoszenia"}
+        className="hidden min-h-0 w-[clamp(22.5rem,30vw,27.5rem)] shrink-0 border-l border-border bg-secondary/35 xl:flex xl:flex-col"
       >
         <div
           className="session-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-7"
@@ -84,6 +100,7 @@ export function SessionQueuePanel({
             participantRequestsMessage={participantRequestsMessage}
             queue={queue}
             refreshing={refreshing}
+            showPublicQueue={showPublicQueue}
           />
         </div>
       </aside>
@@ -91,22 +108,24 @@ export function SessionQueuePanel({
       <Drawer onOpenChange={onOpenChange} open={open}>
         <DrawerTrigger asChild>
           <button
-            aria-label="Otwórz kolejkę"
-            className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex min-h-16 items-center gap-3 rounded-2xl border border-border bg-popover px-3 text-left text-foreground shadow-[var(--shadow-panel)] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/35 lg:hidden motion-reduce:transform-none motion-reduce:transition-none"
-            onClick={onOpen}
+            aria-label={showPublicQueue ? "Otwórz kolejkę" : "Otwórz moje zgłoszenia"}
+            className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex min-h-16 items-center gap-3 rounded-2xl border border-border bg-popover px-3 text-left text-foreground shadow-[var(--shadow-panel)] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/35 xl:hidden motion-reduce:transform-none motion-reduce:transition-none"
             type="button"
           >
-            <CollapsedQueueSummary queue={queue} />
+            {showPublicQueue ? <CollapsedQueueSummary queue={queue} /> : <CollapsedParticipantSummary requests={participantRequests} />}
             <ChevronUp aria-hidden="true" className="ml-auto size-5 shrink-0 text-muted-foreground" />
           </button>
         </DrawerTrigger>
 
         <DrawerContent
-          className="h-[calc(100dvh-0.5rem)] max-h-none border-x-0 border-t border-border bg-popover text-foreground lg:hidden"
-          overlayClassName="bg-black/25 lg:hidden"
+          className="h-[calc(100dvh-0.5rem)] max-h-none border-x-0 border-t border-border bg-popover text-foreground xl:hidden"
+          overlayClassName="bg-black/25 xl:hidden"
         >
           <div className="flex min-h-0 flex-1 flex-col">
-            <DrawerTitle className="sr-only">Kolejka</DrawerTitle>
+            <DrawerTitle className="sr-only">{showPublicQueue ? "Kolejka" : "Moje zgłoszenia"}</DrawerTitle>
+            <DrawerDescription className="sr-only">
+              {showPublicQueue ? "Kolejka wydarzenia i Twoje zgłoszenia." : "Twoje zgłoszenia do tej sesji."}
+            </DrawerDescription>
             <div className="flex shrink-0 justify-end px-4 pb-1">
               <DrawerClose asChild>
                 <Button
@@ -138,6 +157,7 @@ export function SessionQueuePanel({
                 participantRequestsMessage={participantRequestsMessage}
                 queue={queue}
                 refreshing={refreshing}
+                showPublicQueue={showPublicQueue}
               />
             </div>
           </div>
@@ -164,6 +184,7 @@ function QueuePanelContents({
   participantRequestsMessage,
   queue,
   refreshing,
+  showPublicQueue,
 }: {
   activeTab: "queue" | "mine";
   cancellingRequestId: string | null;
@@ -181,6 +202,7 @@ function QueuePanelContents({
   participantRequestsMessage: string | null;
   queue: PublicQueueResponse | null;
   refreshing: boolean;
+  showPublicQueue: boolean;
 }) {
   const panelId = `${idPrefix}-session-queue-panel`;
   const queueTabId = `${idPrefix}-session-queue-tab`;
@@ -199,17 +221,28 @@ function QueuePanelContents({
 
   return (
     <div aria-labelledby={activeTab === "queue" ? queueTabId : mineTabId} id={panelId} role="tabpanel">
-      {hasParticipant ? (
+      {hasParticipant && showPublicQueue ? (
         <div aria-label="Widok kolejki" className="mb-5 grid grid-cols-2 rounded-xl bg-muted p-1" ref={tabListRef} role="tablist">
           <button aria-controls={panelId} aria-selected={activeTab === "queue"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "queue" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={queueTabId} onClick={() => onTabChange("queue")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "queue" ? 0 : -1} type="button">Kolejka</button>
           <button aria-controls={panelId} aria-selected={activeTab === "mine"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "mine" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={mineTabId} onClick={() => onTabChange("mine")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "mine" ? 0 : -1} type="button">Moje{participantRequests ? ` ${participantRequests.length}` : ""}</button>
         </div>
       ) : null}
-      {activeTab === "queue" ? (
+      {activeTab === "queue" && showPublicQueue ? (
         <SessionQueueList className="max-w-none" message={message} onRefresh={onRefresh} ownSingerName={ownSingerName} queue={queue} refreshing={refreshing} />
       ) : (
         <SessionParticipantRequests cancellingRequestId={cancellingRequestId} cancelDialogRequestId={cancelDialogRequestId} message={participantRequestsMessage} onCancel={onCancel} onCancelDialogRequestIdChange={onCancelDialogRequestIdChange} onRefresh={onParticipantRefresh} requests={participantRequests} />
       )}
+    </div>
+  );
+}
+
+function CollapsedParticipantSummary({ requests }: { requests: ParticipantRequest[] | null }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-base font-extrabold tracking-[-0.02em]">Moje zgłoszenia</p>
+      <p className="mt-0.5 truncate text-sm text-muted-foreground">
+        {requests === null ? "Wczytywanie…" : requests.length === 0 ? "Brak aktywnych zgłoszeń" : `${requests.length} aktywne`}
+      </p>
     </div>
   );
 }

@@ -4,9 +4,10 @@ import { notFound } from "next/navigation";
 
 import { ParticipantJoinGate } from "@/components/public/participant-join-gate";
 import { SessionRequestPage } from "@/components/public/session-request-page";
-import { SessionStateAlert } from "@/components/public/session-state-alert";
+import { PublicSessionLifecycle } from "@/components/public/public-session-lifecycle";
 import type { SessionEvent } from "@/components/public/session-api";
 import { canUseSessionPublicQueue, canUseSessionSongRequests } from "@/lib/session-capabilities";
+import { canReopenEvent } from "@/lib/event-session-lifecycle";
 import { consumeSessionRequestRateLimit } from "@/server/session-api/rate-limit";
 import { PARTICIPANT_CREDENTIAL_COOKIE } from "@/server/session-api/participant-credential";
 import { getPublicSessionPageData, type PublicSessionEvent } from "@/server/session-api/service";
@@ -47,14 +48,15 @@ export default async function PublicSessionLayout({
   if (access.status === "invalid") notFound();
 
   if (access.status !== "active") {
-    return (
-      <main className="min-h-dvh bg-background text-foreground">
-        <section className="mx-auto w-full max-w-lg px-4 pt-[max(2rem,env(safe-area-inset-top))] sm:px-8">
-          <h2 className="mb-3 text-xl font-bold tracking-[-0.035em]">Sesja karaoke</h2>
-          <SessionStateAlert kind={access.status} />
-        </section>
-      </main>
-    );
+    if (access.status === "rate_limited" || access.status === "service_unavailable") {
+      return <PublicSessionLifecycle kind={access.status} />;
+    }
+
+    return <PublicSessionLifecycle
+      event={{ name: access.event.name, venue: access.event.venue, startsAt: access.event.startsAt.toISOString() }}
+      kind={access.status === "scheduled" ? "scheduled" : access.event.status === "cancelled" ? "cancelled" : "closed"}
+      reopenable={access.status === "closed" && canReopenEvent(access.event)}
+    />;
   }
 
   const canUseSession = canUseSessionSongRequests(access.event) || canUseSessionPublicQueue(access.event);

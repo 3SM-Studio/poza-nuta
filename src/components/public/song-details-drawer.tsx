@@ -34,7 +34,7 @@ export function SongDetailsDrawer({
 
   return (
     <Drawer onOpenChange={onOpenChange} open={isOpen}>
-      <DrawerContent className="max-h-[82dvh] border-border bg-popover text-foreground sm:mx-auto sm:max-w-2xl">
+      <DrawerContent className="max-h-[82dvh] border-border bg-popover text-foreground sm:inset-x-auto sm:left-[max(2rem,calc(50%-20rem))] sm:w-[min(calc(100%-4rem),40rem)] sm:rounded-t-2xl sm:border-x">
         <DrawerHeader className="relative flex-row items-start gap-4 px-6 pt-5 pb-4 text-left">
           <SessionSongArtwork className="size-16" song={song} />
           <div className="min-w-0 pt-0.5">

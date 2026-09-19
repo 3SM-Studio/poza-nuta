@@ -45,6 +45,20 @@ export default defineConfig({
       },
     },
     {
+      name: "public-session-chromium",
+      testMatch: /public-session-flow\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+      },
+    },
+    {
+      name: "public-session-webkit",
+      testMatch: /public-session-flow\.spec\.ts/,
+      use: {
+        ...devices["Desktop Safari"],
+      },
+    },
+    {
       name: "dashboard",
       testMatch: /dashboard\.spec\.ts/,
       dependencies: ["dashboard-auth-setup"],

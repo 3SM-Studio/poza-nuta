@@ -27,11 +27,15 @@ import {
 
 export function SessionCodeForm({
   destinationBasePath = "/join",
+  externalErrorId,
   isSubmitting: externallySubmitting = false,
+  onCodeChange,
   onSubmitCode,
 }: {
   destinationBasePath?: "/join";
+  externalErrorId?: string;
   isSubmitting?: boolean;
+  onCodeChange?: (code: string) => void;
   onSubmitCode?: (code: string) => Promise<void> | void;
 }) {
   const router = useRouter();
@@ -48,6 +52,7 @@ export function SessionCodeForm({
     if (!/^[0-9]{0,6}$/.test(normalized)) return;
     setCode(normalized);
     if (message) setMessage(null);
+    onCodeChange?.(normalized);
   }
 
   function pasteCode(event: ClipboardEvent<HTMLDivElement>) {
@@ -59,6 +64,7 @@ export function SessionCodeForm({
     if (!isCanonicalSessionCode(normalized)) {
       setCode("");
       setMessage("Wpisz dokładnie 6 cyfr kodu sesji.");
+      onCodeChange?.("");
       return;
     }
 
@@ -104,6 +110,7 @@ export function SessionCodeForm({
         </Label>
         <div className="w-fit" onPasteCapture={pasteCode}>
           <InputOTP
+            className="text-base"
             id="session-code"
             aria-label="Sześciocyfrowy kod sesji"
             value={code}
@@ -117,9 +124,11 @@ export function SessionCodeForm({
             aria-describedby={
               message
                 ? "session-code-description session-code-error"
-                : "session-code-description"
+                : externalErrorId
+                  ? `session-code-description ${externalErrorId}`
+                  : "session-code-description"
             }
-            aria-invalid={Boolean(message)}
+            aria-invalid={Boolean(message || externalErrorId)}
             aria-busy={isPending}
             autoFocus
             containerClassName="justify-center"
@@ -129,7 +138,7 @@ export function SessionCodeForm({
                 <InputOTPSlot
                   key={index}
                   index={index}
-                  aria-invalid={Boolean(message)}
+                  aria-invalid={Boolean(message || externalErrorId)}
                   className="size-11 text-lg sm:size-14 sm:text-2xl"
                 />
               ))}
@@ -140,7 +149,7 @@ export function SessionCodeForm({
                 <InputOTPSlot
                   key={index}
                   index={index}
-                  aria-invalid={Boolean(message)}
+                  aria-invalid={Boolean(message || externalErrorId)}
                   className="size-11 text-lg sm:size-14 sm:text-2xl"
                 />
               ))}

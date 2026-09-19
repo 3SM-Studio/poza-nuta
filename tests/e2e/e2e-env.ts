@@ -5,7 +5,7 @@ dotenv.config();
 
 export const E2E_AUTH_STATE_PATH = ".auth/operator.json";
 export const E2E_DASHBOARD_AUTH_STATUS_PATH = ".auth/dashboard-status.json";
-export const DEFAULT_E2E_BASE_URL = "http://127.0.0.1:3000";
+export const DEFAULT_E2E_BASE_URL = "http://localhost:3000";
 
 export type DashboardAuthSetupStatus =
   | {

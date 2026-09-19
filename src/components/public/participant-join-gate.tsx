@@ -4,21 +4,15 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import {
+  getParticipantNicknameLength,
   isParticipantNicknameLengthValid,
   normalizeParticipantNickname,
   PARTICIPANT_NICKNAME_MAX_LENGTH,
 } from "@/lib/participant-nickname";
-import styles from "./public.module.css";
 import { joinSession, SessionClientError } from "./session-api";
-import { PublicJoinHero } from "./public-join-hero";
+import { PublicSessionEntryShell } from "./public-session-entry-shell";
 
 export function ParticipantJoinGate({
   sessionToken,
@@ -53,23 +47,16 @@ export function ParticipantJoinGate({
     }
   }
 
-  return (
-    <section className={`${styles.sessionJoinGradient} min-h-dvh overflow-hidden text-foreground`} aria-labelledby="participant-join-title">
-      <PublicJoinHero
-        eyebrow="Dołączasz do karaoke"
-        title={eventName ?? "Sesja karaoke"}
-        titleId="participant-join-title"
-      />
+  const normalizedLength = getParticipantNicknameLength(
+    normalizeParticipantNickname(displayName).displayName,
+  );
 
-      <Drawer dismissible={false} open>
-        <DrawerContent
-          className="border-border bg-popover text-foreground"
-          overlayClassName="!bg-black/10 !backdrop-blur-none"
-        >
-          <DrawerHeader className="px-6 pt-2 pb-0 text-center">
-            <DrawerTitle className="text-xl font-extrabold tracking-[-0.035em]">Jak mamy Cię podpisać?</DrawerTitle>
-          </DrawerHeader>
-          <form className="grid gap-1.5 px-6 pt-1 pb-[calc(1.1rem+env(safe-area-inset-bottom))]" onSubmit={handleSubmit}>
+  return (
+    <PublicSessionEntryShell eyebrow="Dołączasz do karaoke" title={eventName ?? "Sesja karaoke"} titleId="participant-join-title">
+      <div className="px-6 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-8 sm:py-7">
+        <h2 className="text-center text-xl font-extrabold tracking-[-0.03em] sm:text-2xl">Jak mamy Cię podpisać?</h2>
+        <p className="mt-1.5 mb-5 text-center text-sm text-muted-foreground">Ta nazwa będzie widoczna w kolejce wydarzenia.</p>
+          <form className="grid gap-1.5" onSubmit={handleSubmit}>
             <label className="sr-only" htmlFor="participant-display-name">
               Imię lub ksywka
             </label>
@@ -89,9 +76,10 @@ export function ParticipantJoinGate({
               autoFocus
               className="h-[3.2rem] border-border bg-secondary text-base"
               placeholder="Twój nick"
+              style={{ fontSize: "1rem" }}
             />
             <span className="text-right text-xs text-muted-foreground">
-              {Array.from(displayName).length}/{PARTICIPANT_NICKNAME_MAX_LENGTH}
+              {normalizedLength}/{PARTICIPANT_NICKNAME_MAX_LENGTH}
             </span>
             {error ? (
               <p className="text-sm text-destructive" id="participant-display-name-error" role="alert">
@@ -102,9 +90,8 @@ export function ParticipantJoinGate({
               {isSubmitting ? "Dołączam…" : "Dołącz"}
             </Button>
           </form>
-        </DrawerContent>
-      </Drawer>
-    </section>
+      </div>
+    </PublicSessionEntryShell>
   );
 }
 

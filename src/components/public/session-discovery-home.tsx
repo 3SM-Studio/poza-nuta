@@ -223,7 +223,7 @@ function DiscoverySection({
         {moreHref && moreLabel ? (
           <Link
             aria-label={moreLabel}
-            className="shrink-0 text-sm font-bold text-primary transition-colors hover:text-primary-hover focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-primary transition-colors hover:text-primary-hover focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             href={moreHref}
             prefetch={false}
           >

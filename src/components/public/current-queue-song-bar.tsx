@@ -34,7 +34,7 @@ export function CurrentQueueSongBar({
         <p className="truncate text-sm text-primary-foreground/80">
           {hasSongDetails ? item.artist : "Tytuł ukryty publicznie"}
         </p>
-        {singerName ? (
+        {hasSongDetails && singerName ? (
           <p className="mt-1 truncate text-sm font-medium text-primary-foreground/90">
             Śpiewa: {singerName}
           </p>

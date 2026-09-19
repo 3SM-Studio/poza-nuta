@@ -160,6 +160,10 @@ body {
   margin: 0;
 }
 
+.cn-input-otp input[data-input-otp] {
+  font-size: 16px !important;
+}
+
 .session-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--sidebar-foreground) 20%, transparent) transparent;

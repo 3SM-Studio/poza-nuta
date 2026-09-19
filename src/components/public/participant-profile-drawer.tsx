@@ -39,7 +39,7 @@ export function ParticipantProfileDrawer({
 }: ParticipantProfileDrawerProps) {
   return (
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
-      <DrawerContent className="border-border bg-popover text-foreground">
+      <DrawerContent className="border-border bg-popover text-foreground sm:inset-x-auto sm:left-[max(2rem,calc(50%-16rem))] sm:w-[min(calc(100%-4rem),32rem)] sm:rounded-t-2xl sm:border-x">
         <DrawerHeader className="relative px-6 pt-2 pb-1 text-center">
           <DrawerTitle className="text-xl font-extrabold tracking-[-0.035em]">Zmień swój nick</DrawerTitle>
           <DrawerClose asChild>
@@ -61,11 +61,14 @@ export function ParticipantProfileDrawer({
           <Input
             id="participant-display-name"
             autoComplete="nickname"
+            autoFocus
             aria-describedby={error ? "participant-rename-error" : undefined}
             aria-invalid={Boolean(error)}
             className="h-[3.2rem] border-border bg-secondary text-base"
             disabled={isSaving}
+            enterKeyHint="done"
             onChange={(event) => onValueChange(event.target.value)}
+            style={{ fontSize: "1rem" }}
             value={value}
           />
           <span className="text-right text-xs text-muted-foreground">
