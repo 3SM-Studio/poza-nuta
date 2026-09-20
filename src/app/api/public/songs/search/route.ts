@@ -4,23 +4,26 @@ import {
   validationErrorResponse,
 } from "../../../../../server/public-api/responses";
 import { searchPublicSongs } from "../../../../../server/public-api/service";
-import { validateSearchQuery } from "../../../../../server/public-api/validation";
+import { validateSongSearchRequest } from "../../../../../server/public-api/validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const validation = validateSearchQuery(url.searchParams.get("q"));
+  const validation = validateSongSearchRequest(url.searchParams);
 
   if (!validation.success) {
     return validationErrorResponse(validation.issues);
   }
 
   try {
-    const songs = await searchPublicSongs(validation.data);
+    const page = await searchPublicSongs(
+      validation.data.query,
+      validation.data.cursor,
+    );
 
-    return jsonResponse({ items: songs });
+    return jsonResponse(page);
   } catch (error) {
     return publicApiErrorResponse(error);
   }

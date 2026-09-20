@@ -123,6 +123,119 @@ test.describe("public participant flow", () => {
     await expect(page.locator('[data-slot="drawer-content"]')).not.toBeVisible();
     await expect.poll(() => page.evaluate(() => ({ overflow: document.body.style.overflow, pointerEvents: document.body.style.pointerEvents, inert: document.querySelectorAll("[inert]").length }))).toEqual({ overflow: "", pointerEvents: "", inert: 0 });
   });
+
+  test("participant search preserves input behavior while rendering relevance order", async ({ page }) => {
+    const queries: string[] = [];
+    const pokerFace = {
+      id: 101,
+      source: "ising" as const,
+      title: "Poker Face",
+      artist: "Lady Gaga",
+      durationSeconds: 237,
+      isDuet: false,
+      isExplicit: false,
+      isPlus: false,
+      isHit: true,
+    };
+    const weakMatch = {
+      ...pokerFace,
+      id: 102,
+      source: "karafun" as const,
+      title: "Poker Night",
+      artist: "The Faces",
+    };
+
+    await page.route("**/api/s/visual-fixture-session-token/songs/search?*", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const query = requestUrl.searchParams.get("q") ?? "";
+      const cursor = requestUrl.searchParams.get("cursor");
+      queries.push(query);
+
+      if (query === "slow query" || (query === "paged slow" && cursor)) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+
+      const items = query === "fast query"
+        ? [{ ...pokerFace, id: 103, title: "Fast Result" }]
+        : query === "paged query" && cursor
+          ? [{ ...pokerFace, id: 104, title: "Second Page Result" }]
+          : query === "paged query" || query === "paged slow"
+            ? [{ ...pokerFace, id: 105, title: "First Page Result" }]
+        : query.toLocaleLowerCase().includes("poker") || query.toLocaleLowerCase().includes("ladi")
+          ? [pokerFace, weakMatch]
+          : [];
+      const nextCursor = (query === "paged query" || query === "paged slow") && !cursor
+        ? "fixture-next-cursor"
+        : null;
+
+      await route.fulfill({ json: { items, nextCursor } }).catch(() => undefined);
+    });
+
+    await page.goto(`${fixturePath}?screen=instrumented-search`);
+    const searchbox = page.getByRole("searchbox");
+    await searchbox.click();
+    await expect(searchbox).toBeFocused();
+
+    await searchbox.fill("A");
+    await page.waitForTimeout(350);
+    expect(queries).toEqual([]);
+    await expect(page.getByRole("heading", { name: "Kolekcje" })).toBeVisible();
+
+    await searchbox.pressSequentially("B", { delay: 20 });
+    await expect.poll(() => queries).toEqual(["AB"]);
+
+    await searchbox.fill("");
+    const beforeRapidTyping = queries.length;
+    await searchbox.fill("Lady Gaga");
+    await expect.poll(() => queries.length).toBe(beforeRapidTyping + 1);
+    expect(queries.at(-1)).toBe("Lady Gaga");
+
+    await searchbox.press("Space");
+    await expect(searchbox).toHaveValue("Lady Gaga ");
+    await page.waitForTimeout(300);
+    expect(queries.at(-1)).toBe("Lady Gaga");
+    await searchbox.press("Backspace");
+    await expect(searchbox).toHaveValue("Lady Gaga");
+    await expect(searchbox).toBeFocused();
+
+    await searchbox.fill("Poker Face Lady Gaga");
+    await expect(page.getByRole("button", { name: /Poker Face/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Poker Face/ })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /Poker Night/ })).toHaveCount(1);
+    expect(await page.locator("ul button").first().innerText()).toContain("Poker Face");
+
+    await searchbox.fill("Ladi Gaga");
+    await expect.poll(() => queries.at(-1)).toBe("Ladi Gaga");
+    await expect(page.locator("ul button").first()).toContainText("Poker Face");
+
+    await searchbox.fill("slow query");
+    await expect.poll(() => queries.at(-1)).toBe("slow query");
+    await searchbox.fill("fast query");
+    await expect(page.getByText("Fast Result")).toBeVisible();
+    await page.waitForTimeout(700);
+    await expect(page.getByText("Fast Result")).toBeVisible();
+
+    await searchbox.fill("paged query");
+    await expect(page.getByText("First Page Result")).toBeVisible();
+    await page.getByRole("button", { name: "Pokaż więcej" }).click();
+    await expect(page.getByText("Second Page Result")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pokaż więcej" })).toHaveCount(0);
+    await expect(searchbox).toBeFocused();
+
+    await searchbox.fill("paged slow");
+    await expect(page.getByText("First Page Result")).toBeVisible();
+    await page.getByRole("button", { name: "Pokaż więcej" }).click();
+    await searchbox.fill("fast query");
+    await expect(page.getByText("Fast Result")).toBeVisible();
+    await page.waitForTimeout(700);
+    await expect(page.getByText("Second Page Result")).toHaveCount(0);
+    await expect(searchbox).toBeFocused();
+
+    await searchbox.fill("");
+    await expect(searchbox).toHaveValue("");
+    await expect(page.getByRole("heading", { name: "Kolekcje" })).toBeVisible();
+    await expect(searchbox).toBeFocused();
+  });
 });
 
 async function hasHorizontalOverflow(page: import("@playwright/test").Page) {

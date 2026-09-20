@@ -1,3 +1,9 @@
+import { normalizeSongSearchQuery } from "../../lib/song-search.ts";
+import {
+  decodeSongSearchCursor,
+  type SongSearchCursor,
+} from "../../lib/song-search-cursor.ts";
+
 export const MAX_NOTE_LENGTH = 300;
 export const MAX_SEARCH_QUERY_LENGTH = 100;
 export const MIN_SEARCH_QUERY_LENGTH = 2;
@@ -32,19 +38,44 @@ export function validateSearchQuery(
     };
   }
 
+  const normalizedQuery = normalizeSearchQuery(query);
+
   return {
     success: true,
-    data: normalizeSearchQuery(query),
+    data: normalizedQuery.length >= MIN_SEARCH_QUERY_LENGTH ? normalizedQuery : null,
+  };
+}
+
+export function validateSongSearchRequest(
+  searchParams: URLSearchParams,
+): ValidationResult<{ query: string | null; cursor: SongSearchCursor | null }> {
+  const queryValidation = validateSearchQuery(searchParams.get("q"));
+  if (!queryValidation.success) return queryValidation;
+
+  const cursorInput = searchParams.get("cursor");
+  if (cursorInput === null || cursorInput === "") {
+    return {
+      success: true,
+      data: { query: queryValidation.data, cursor: null },
+    };
+  }
+
+  const cursor = queryValidation.data
+    ? decodeSongSearchCursor(cursorInput, queryValidation.data)
+    : null;
+  if (!cursor) {
+    return {
+      success: false,
+      issues: [{ field: "cursor", message: "cursor is invalid." }],
+    };
+  }
+
+  return {
+    success: true,
+    data: { query: queryValidation.data, cursor },
   };
 }
 
 export function normalizeSearchQuery(input: string) {
-  return input
-    .normalize("NFKD")
-    .replace(/\p{Mark}/gu, "")
-    .toLocaleLowerCase("pl-PL")
-    .replace(/ł/g, "l")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeSongSearchQuery(input);
 }

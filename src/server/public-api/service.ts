@@ -13,7 +13,7 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { events, songs } from "../../db/schema";
+import { events } from "../../db/schema";
 import { getDb } from "../db";
 import { isValidEventSlug } from "../../lib/event-slug";
 import {
@@ -26,9 +26,9 @@ import {
 import { toPublicEventContract } from "../../lib/public-event-contract";
 import { traceServerStep } from "../runtime-diagnostics";
 import { traceDbOperation } from "../db-telemetry";
+import { searchCatalogSongs } from "../song-search";
+import type { SongSearchCursor } from "../../lib/song-search-cursor";
 import { PublicApiError } from "./errors";
-
-export const PUBLIC_SONG_SEARCH_LIMIT = 20;
 
 const publicEventSelection = {
   id: events.id,
@@ -130,29 +130,11 @@ export async function getPublicEventBySlug(slug: string, routeName?: string) {
   return toPublicEventContract(event);
 }
 
-export async function searchPublicSongs(query: string | null) {
-  if (query === null) {
-    return [];
-  }
-
-  const pattern = `%${escapeLikePattern(query)}%`;
-
-  return getDb()
-    .select({
-      id: songs.id,
-      source: songs.source,
-      title: songs.title,
-      artist: songs.artist,
-      durationSeconds: songs.durationSeconds,
-      isDuet: songs.isDuet,
-      isExplicit: songs.isExplicit,
-      isPlus: songs.isPlus,
-      isHit: songs.isHit,
-    })
-    .from(songs)
-    .where(ilike(songs.searchText, pattern))
-    .orderBy(songs.normalizedArtist, songs.normalizedTitle, songs.id)
-    .limit(PUBLIC_SONG_SEARCH_LIMIT);
+export async function searchPublicSongs(
+  query: string | null,
+  cursor: SongSearchCursor | null = null,
+) {
+  return searchCatalogSongs(query, cursor);
 }
 
 function escapeLikePattern(input: string) {

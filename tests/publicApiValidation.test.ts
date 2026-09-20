@@ -9,7 +9,9 @@ import {
   MAX_SEARCH_QUERY_LENGTH,
   normalizeSearchQuery,
   validateSearchQuery,
+  validateSongSearchRequest,
 } from "../src/server/public-api/validation.ts";
+import { encodeSongSearchCursor } from "../src/lib/song-search-cursor.ts";
 
 test("validateSearchQuery returns no query for short public searches", () => {
   assert.deepEqual(validateSearchQuery(" a "), {
@@ -26,6 +28,35 @@ test("validateSearchQuery rejects excessively long queries", () => {
 
 test("normalizeSearchQuery normalizes case, diacritics and whitespace", () => {
   assert.equal(normalizeSearchQuery("  ŻÓŁĆ   Queen  "), "zolc queen");
+});
+
+test("song search cursor is query-bound and rejects malformed continuation", () => {
+  const cursor = encodeSongSearchCursor({
+    version: 1,
+    query: "lady gaga",
+    relevanceTier: 750,
+    fuzzyRelevance: 0.75,
+    normalizedArtist: "lady gaga",
+    normalizedTitle: "poker face",
+    source: "ising",
+    id: 11,
+  });
+
+  assert.equal(
+    validateSongSearchRequest(new URLSearchParams({ q: "Lady Gaga", cursor }))
+      .success,
+    true,
+  );
+  assert.equal(
+    validateSongSearchRequest(new URLSearchParams({ q: "Queen", cursor }))
+      .success,
+    false,
+  );
+  assert.equal(
+    validateSongSearchRequest(new URLSearchParams({ q: "Lady Gaga", cursor: "broken" }))
+      .success,
+    false,
+  );
 });
 
 test("public queue exposes only approved and now statuses", () => {

@@ -7,11 +7,14 @@ import { SessionSongRow } from "./session-song-row";
 
 type SessionSearchResultsProps = {
   isLoading: boolean;
+  isLoadingMore?: boolean;
   message: string | null;
   query: string;
   songs: PublicSong[];
   onBack: () => void;
   onSongSelect: (song: PublicSong) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
   heading?: string;
   backLabel?: string;
   emptyMessage?: string;
@@ -19,14 +22,17 @@ type SessionSearchResultsProps = {
 
 export function SessionSearchResults({
   isLoading,
+  isLoadingMore = false,
   message,
   query,
   songs,
   onBack,
   onSongSelect,
+  onLoadMore,
+  hasMore = false,
   heading = `„${query}”`,
   backLabel = "Wróć do katalogu",
-  emptyMessage = "Nie znaleziono pasujących piosenek.",
+  emptyMessage = "Brak wyników. Spróbuj wpisać tytuł i wykonawcę.",
 }: SessionSearchResultsProps) {
   const hasSearchState = isLoading || message !== null || songs.length > 0;
   if (!hasSearchState) return null;
@@ -72,13 +78,32 @@ export function SessionSearchResults({
         </p>
       ) : null}
       {songs.length > 0 ? (
-        <ul className="border-t border-border">
-          {songs.map((song) => (
-            <li key={song.id}>
-              <SessionSongRow song={song} onSelect={onSongSelect} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="border-t border-border">
+            {songs.map((song) => (
+              <li key={song.id}>
+                <SessionSongRow song={song} onSelect={onSongSelect} />
+              </li>
+            ))}
+          </ul>
+          {hasMore && onLoadMore ? (
+            <div className="flex justify-center pt-4">
+              <Button
+                disabled={isLoadingMore}
+                onClick={() => {
+                  onLoadMore();
+                  document.getElementById("session-song-search")?.focus({
+                    preventScroll: true,
+                  });
+                }}
+                type="button"
+                variant="outline"
+              >
+                {isLoadingMore ? "Wczytywanie…" : "Pokaż więcej"}
+              </Button>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </section>
   );

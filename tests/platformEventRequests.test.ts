@@ -172,12 +172,16 @@ test("public song search is global catalog search without active event selection
   );
   const searchSource = serviceSource.slice(searchStart, searchEnd);
 
-  assert.match(searchSource, /\.from\(songs\)/);
-  assert.match(searchSource, /ilike\(songs\.searchText, pattern\)/);
+  assert.match(searchSource, /return searchCatalogSongs\(query, cursor\)/);
   assert.doesNotMatch(searchSource, /getActivePublicEvent/);
   assert.doesNotMatch(searchSource, /DEFAULT_WORKSPACE_HANDLE/);
   assert.doesNotMatch(searchSource, /isActivePublicEvent/);
   assert.doesNotMatch(searchSource, /from\(events\)/);
+
+  const songSearchSource = readFileSync("src/server/song-search.ts", "utf8");
+  assert.match(songSearchSource, /from songs s/);
+  assert.match(songSearchSource, /fuzzy_candidates as materialized/);
+  assert.match(songSearchSource, /SONG_SEARCH_RESULT_LIMIT = 50/);
 });
 
 test("public event page is informational and does not render a request form", () => {

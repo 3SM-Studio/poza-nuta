@@ -11,6 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionRequestPage } from "@/components/public/session-request-page";
+import type { PublicSong } from "@/components/public/api";
 import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 
 const {
@@ -133,6 +134,10 @@ const song = {
   isHit: false,
 };
 
+function searchPage(items: PublicSong[], nextCursor: string | null = null) {
+  return { items, nextCursor };
+}
+
 describe("session request feedback", () => {
   beforeEach(() => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
@@ -159,7 +164,7 @@ describe("session request feedback", () => {
       showSongTitles: true,
       items: [],
     });
-    searchSongs.mockResolvedValue([song]);
+    searchSongs.mockResolvedValue(searchPage([song]));
     browseSongs.mockResolvedValue({ items: [song], nextCursor: null });
     getParticipantRequests.mockResolvedValue({ items: [] });
   });
@@ -309,7 +314,7 @@ describe("session request feedback", () => {
   });
 
   it("opens song details from a result and renders only available metadata", async () => {
-    searchSongs.mockResolvedValueOnce([{ ...song, durationSeconds: 215 }]);
+    searchSongs.mockResolvedValueOnce(searchPage([{ ...song, durationSeconds: 215 }]));
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
     await openSongDetails();
@@ -323,7 +328,7 @@ describe("session request feedback", () => {
   it("renders an accessible fallback artwork and truncation-safe long result title", async () => {
     const longTitle =
       "Thank You for the Music (Live at Wembley Arena, London, 1979)";
-    searchSongs.mockResolvedValueOnce([{ ...song, title: longTitle }]);
+    searchSongs.mockResolvedValueOnce(searchPage([{ ...song, title: longTitle }]));
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Music" } });
@@ -336,7 +341,7 @@ describe("session request feedback", () => {
   });
 
   it("renders search loading before a pending result response resolves", async () => {
-    const search = deferred<typeof song[]>();
+    const search = deferred<ReturnType<typeof searchPage>>();
     searchSongs.mockReturnValueOnce(search.promise);
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
@@ -344,7 +349,7 @@ describe("session request feedback", () => {
     fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
 
     expect(await screen.findByLabelText("Wczytywanie wyników")).toBeVisible();
-    search.resolve([song]);
+    search.resolve(searchPage([song]));
     expect(await screen.findByRole("button", { name: /Test Song/ })).toBeVisible();
   });
 
@@ -501,8 +506,8 @@ describe("session request feedback", () => {
 
   it("keeps useful results visible until the newest search resolves and ignores URL echo", async () => {
     vi.useFakeTimers();
-    const next = deferred<Array<typeof song>>();
-    searchSongs.mockResolvedValueOnce([song]).mockReturnValueOnce(next.promise);
+    const next = deferred<ReturnType<typeof searchPage>>();
+    searchSongs.mockResolvedValueOnce(searchPage([song])).mockReturnValueOnce(next.promise);
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
     navigationState.searchParams = new URLSearchParams("q=AB");
     window.history.replaceState(null, "", `${navigationState.pathname}?q=AB`);
@@ -522,7 +527,7 @@ describe("session request feedback", () => {
     expect(searchSongs).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("searchbox")).toHaveValue("ABC");
 
-    await act(async () => { next.resolve([{ ...song, title: "Newest Song" }]); await next.promise; });
+    await act(async () => { next.resolve(searchPage([{ ...song, title: "Newest Song" }])); await next.promise; });
     expect(screen.getByText("Newest Song")).toBeVisible();
     expect(screen.queryByText("Test Song")).not.toBeInTheDocument();
   });
@@ -750,8 +755,8 @@ describe("session request feedback", () => {
 
   it("aborts an obsolete live search and ignores its late response", async () => {
     vi.useFakeTimers();
-    const first = deferred<Array<typeof song>>();
-    const second = deferred<Array<typeof song>>();
+    const first = deferred<ReturnType<typeof searchPage>>();
+    const second = deferred<ReturnType<typeof searchPage>>();
     searchSongs
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
@@ -770,11 +775,11 @@ describe("session request feedback", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
     await act(async () => {
-      second.resolve([{ ...song, title: "Newest Song" }]);
+      second.resolve(searchPage([{ ...song, title: "Newest Song" }]));
       await second.promise;
     });
     await act(async () => {
-      first.resolve([{ ...song, title: "Obsolete Song" }]);
+      first.resolve(searchPage([{ ...song, title: "Obsolete Song" }]));
       await first.promise;
     });
     expect(screen.getByText("Newest Song")).toBeVisible();
@@ -782,8 +787,8 @@ describe("session request feedback", () => {
   });
 
   it("does not replace newer results with an obsolete request error", async () => {
-    const first = deferred<Array<typeof song>>();
-    const second = deferred<Array<typeof song>>();
+    const first = deferred<ReturnType<typeof searchPage>>();
+    const second = deferred<ReturnType<typeof searchPage>>();
     searchSongs.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
     const searchbox = screen.getByRole("searchbox");
@@ -794,14 +799,14 @@ describe("session request feedback", () => {
     fireEvent.submit(searchbox.closest("form")!);
     expect(oldSignal.aborted).toBe(true);
 
-    await act(async () => { second.resolve([{ ...song, title: "Newest Song" }]); await second.promise; });
+    await act(async () => { second.resolve(searchPage([{ ...song, title: "Newest Song" }])); await second.promise; });
     await act(async () => { first.reject(new Error("obsolete")); await first.promise.catch(() => undefined); });
     expect(screen.getByText("Newest Song")).toBeVisible();
     expect(screen.queryByText("Nie udało się wyszukać piosenek. Spróbuj ponownie.")).not.toBeInTheDocument();
   });
 
   it("clears immediately, aborts a pending request, and restores Discovery", async () => {
-    const pending = deferred<Array<typeof song>>();
+    const pending = deferred<ReturnType<typeof searchPage>>();
     searchSongs.mockReturnValueOnce(pending.promise);
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
     navigationState.searchParams = new URLSearchParams("q=AB");
@@ -821,18 +826,81 @@ describe("session request feedback", () => {
     expect(signal.aborted).toBe(true);
     expect(window.location.pathname).toBe("/s/AbCdEfGhIjKlMnOpQrStUv");
     expect(screen.getByRole("heading", { name: "Kolekcje" })).toBeVisible();
-    await act(async () => { pending.resolve([song]); await pending.promise; });
+    await act(async () => { pending.resolve(searchPage([song])); await pending.promise; });
     expect(screen.queryByRole("heading", { name: "„AB”" })).not.toBeInTheDocument();
   });
 
   it("renders a calm no-results state", async () => {
-    searchSongs.mockResolvedValueOnce([]);
+    searchSongs.mockResolvedValueOnce(searchPage([]));
     render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
 
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "xyz" } });
     fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
 
-    expect(await screen.findByText("Nie znaleziono pasujących piosenek.")).toBeVisible();
+    expect(
+      await screen.findByText("Brak wyników. Spróbuj wpisać tytuł i wykonawcę."),
+    ).toBeVisible();
+  });
+
+  it("appends a bounded search page once, deduplicates rows, and preserves input focus", async () => {
+    const secondSong = { ...song, id: 12, title: "Second Song" };
+    const nextPage = deferred<ReturnType<typeof searchPage>>();
+    searchSongs
+      .mockResolvedValueOnce(searchPage([song], "cursor-1"))
+      .mockReturnValueOnce(nextPage.promise);
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "Test" } });
+    fireEvent.submit(searchbox.closest("form")!);
+    const loadMore = await screen.findByRole("button", { name: "Pokaż więcej" });
+
+    fireEvent.click(loadMore);
+    fireEvent.click(loadMore);
+    expect(searchSongs).toHaveBeenCalledTimes(2);
+    expect(searchSongs).toHaveBeenLastCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUv",
+      "Test",
+      expect.any(AbortSignal),
+      "cursor-1",
+    );
+    expect(searchbox).toHaveFocus();
+
+    await act(async () => {
+      nextPage.resolve(searchPage([song, secondSong]));
+      await nextPage.promise;
+    });
+
+    expect(screen.getAllByRole("button", { name: /Test Song/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /Second Song/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Pokaż więcej" })).not.toBeInTheDocument();
+    expect(searchbox).toHaveFocus();
+  });
+
+  it("aborts a pending continuation when the query changes and ignores its rows", async () => {
+    const nextPage = deferred<ReturnType<typeof searchPage>>();
+    searchSongs
+      .mockResolvedValueOnce(searchPage([song], "cursor-1"))
+      .mockReturnValueOnce(nextPage.promise)
+      .mockResolvedValueOnce(searchPage([{ ...song, id: 13, title: "New Query Song" }]));
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "Test" } });
+    fireEvent.submit(searchbox.closest("form")!);
+    fireEvent.click(await screen.findByRole("button", { name: "Pokaż więcej" }));
+    const continuationSignal = searchSongs.mock.calls[1]?.[2] as AbortSignal;
+
+    fireEvent.change(searchbox, { target: { value: "New query" } });
+    expect(continuationSignal.aborted).toBe(true);
+    fireEvent.submit(searchbox.closest("form")!);
+    expect(await screen.findByText("New Query Song")).toBeVisible();
+
+    await act(async () => {
+      nextPage.resolve(searchPage([{ ...song, id: 14, title: "Stale Page Song" }]));
+      await nextPage.promise;
+    });
+    expect(screen.queryByText("Stale Page Song")).not.toBeInTheDocument();
   });
 
   it("disables the drawer CTA while a request is being submitted", async () => {

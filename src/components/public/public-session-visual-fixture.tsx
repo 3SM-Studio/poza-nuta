@@ -532,7 +532,7 @@ function ParticipantSessionFixture({
             <SessionSearchResults
               isLoading={isSearchLoading}
               message={
-                isSearchEmpty ? "Nie znaleziono pasujących piosenek." : null
+                isSearchEmpty ? "Brak wyników. Spróbuj wpisać tytuł i wykonawcę." : null
               }
               onBack={() => setSearchTerm("")}
               onSongSelect={(song) => {

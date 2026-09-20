@@ -96,12 +96,18 @@ export class PublicClientError extends Error {
   }
 }
 
-export async function searchPublicSongs(query: string) {
-  const response = await requestJson<{ items: PublicSong[] }>(
-    `/api/public/songs/search?q=${encodeURIComponent(query)}`,
+export async function searchPublicSongs(query: string, cursor?: string) {
+  const searchParams = new URLSearchParams({ q: query });
+  if (cursor) searchParams.set("cursor", cursor);
+
+  const response = await requestJson<{
+    items: PublicSong[];
+    nextCursor?: string | null;
+  }>(
+    `/api/public/songs/search?${searchParams.toString()}`,
   );
 
-  return response.items;
+  return { items: response.items, nextCursor: response.nextCursor ?? null };
 }
 
 export async function getDashboardEntryStatus() {

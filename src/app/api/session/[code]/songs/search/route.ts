@@ -3,7 +3,7 @@ import {
   publicApiErrorResponse,
   validationErrorResponse,
 } from "../../../../../../server/public-api/responses";
-import { validateSearchQuery } from "../../../../../../server/public-api/validation";
+import { validateSongSearchRequest } from "../../../../../../server/public-api/validation";
 import { searchSessionSongs } from "../../../../../../server/session-api/service";
 import { requireSessionApiRateLimit } from "../../../../../../server/session-api/rate-limit";
 
@@ -15,7 +15,7 @@ export async function GET(
   context: { params: Promise<{ code: string }> },
 ) {
   const url = new URL(request.url);
-  const validation = validateSearchQuery(url.searchParams.get("q"));
+  const validation = validateSongSearchRequest(url.searchParams);
 
   if (!validation.success) {
     return validationErrorResponse(validation.issues);
@@ -24,9 +24,13 @@ export async function GET(
   try {
     requireSessionApiRateLimit(request);
     const { code } = await context.params;
-    const songs = await searchSessionSongs(code, validation.data);
+    const page = await searchSessionSongs(
+      code,
+      validation.data.query,
+      validation.data.cursor,
+    );
 
-    return jsonResponse({ items: songs });
+    return jsonResponse(page);
   } catch (error) {
     return publicApiErrorResponse(error);
   }

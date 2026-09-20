@@ -75,13 +75,20 @@ export async function searchSessionSongs(
   publicToken: string,
   query: string,
   signal?: AbortSignal,
+  cursor?: string,
 ) {
-  const response = await requestJson<{ items: PublicSong[] }>(
-    `/api/s/${encodeURIComponent(publicToken)}/songs/search?q=${encodeURIComponent(query)}`,
+  const searchParams = new URLSearchParams({ q: query });
+  if (cursor) searchParams.set("cursor", cursor);
+
+  const response = await requestJson<{
+    items: PublicSong[];
+    nextCursor?: string | null;
+  }>(
+    `/api/s/${encodeURIComponent(publicToken)}/songs/search?${searchParams.toString()}`,
     { signal },
   );
 
-  return response.items;
+  return { items: response.items, nextCursor: response.nextCursor ?? null };
 }
 
 export function getSessionSongDiscovery(

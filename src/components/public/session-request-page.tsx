@@ -70,9 +70,11 @@ export function SessionRequestPage({
     pathname.endsWith("/search") ? searchParams.get("q") ?? "" : "",
   );
   const [searchResults, setSearchResults] = useState<PublicSong[]>([]);
+  const [searchNextCursor, setSearchNextCursor] = useState<string | null>(null);
   const [selectedSong, setSelectedSong] = useState<PublicSong | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [submitAlert, setSubmitAlert] =
     useState<SessionStateAlertKind | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -360,8 +362,10 @@ export function SessionRequestPage({
 
     if (!canSearchPublicSongs(query)) {
       setSearchResults([]);
+      setSearchNextCursor(null);
       setSearchMessage(query ? "Wpisz co najmniej 2 znaki." : null);
       setIsSearching(false);
+      setIsLoadingMore(false);
       return;
     }
 
@@ -370,10 +374,11 @@ export function SessionRequestPage({
     setSubmitAlert(null);
 
     try {
-      const songs = await searchSessionSongs(sessionToken, query, controller.signal);
+      const page = await searchSessionSongs(sessionToken, query, controller.signal);
       if (controller.signal.aborted || requestVersion !== searchVersionRef.current) return;
-      setSearchResults(songs);
-      setSearchMessage(songs.length === 0 ? "Nie znaleziono pasujących piosenek." : null);
+      setSearchResults(page.items);
+      setSearchNextCursor(page.nextCursor);
+      setSearchMessage(page.items.length === 0 ? "Brak wyników. Spróbuj wpisać tytuł i wykonawcę." : null);
     } catch (caughtError) {
       if (controller.signal.aborted || isAbortError(caughtError) || requestVersion !== searchVersionRef.current) return;
       setSearchMessage("Nie udało się wyszukać piosenek. Spróbuj ponownie.");
@@ -381,6 +386,59 @@ export function SessionRequestPage({
       if (!controller.signal.aborted && requestVersion === searchVersionRef.current) setIsSearching(false);
     }
   }, [sessionToken]);
+
+  const loadMoreSearchResults = useCallback(async () => {
+    const cursor = searchNextCursor;
+    const query = normalizePublicSearchTerm(searchTerm);
+    if (!cursor || !canSearchPublicSongs(query) || isLoadingMore) return;
+
+    searchControllerRef.current?.abort();
+    const controller = new AbortController();
+    searchControllerRef.current = controller;
+    const requestVersion = searchVersionRef.current;
+    setIsLoadingMore(true);
+
+    try {
+      const page = await searchSessionSongs(
+        sessionToken,
+        query,
+        controller.signal,
+        cursor,
+      );
+      if (
+        controller.signal.aborted ||
+        requestVersion !== searchVersionRef.current ||
+        query !== effectiveSearchQueryRef.current
+      ) {
+        return;
+      }
+
+      setSearchResults((current) => {
+        const currentIds = new Set(current.map((song) => song.id));
+        return [
+          ...current,
+          ...page.items.filter((song) => !currentIds.has(song.id)),
+        ];
+      });
+      setSearchNextCursor(page.nextCursor);
+    } catch (caughtError) {
+      if (
+        controller.signal.aborted ||
+        isAbortError(caughtError) ||
+        requestVersion !== searchVersionRef.current
+      ) {
+        return;
+      }
+      setSearchMessage("Nie udało się wczytać kolejnych wyników. Spróbuj ponownie.");
+    } finally {
+      if (
+        !controller.signal.aborted &&
+        requestVersion === searchVersionRef.current
+      ) {
+        setIsLoadingMore(false);
+      }
+    }
+  }, [isLoadingMore, searchNextCursor, searchTerm, sessionToken]);
 
   const navigateToSearch = useCallback((query: string) => {
     const href = `/s/${encodeURIComponent(sessionToken)}/search?${new URLSearchParams({ q: query }).toString()}`;
@@ -487,6 +545,8 @@ export function SessionRequestPage({
     searchDebounceRef.current = null;
     searchControllerRef.current?.abort();
     searchVersionRef.current += 1;
+    setSearchNextCursor(null);
+    setIsLoadingMore(false);
     lastDispatchedSearchQueryRef.current = null;
     if (!canSearchPublicSongs(query)) {
       setSearchResults([]);
@@ -535,8 +595,10 @@ export function SessionRequestPage({
     effectiveSearchQueryRef.current = "";
     setSearchTerm(rawValue);
     setSearchResults([]);
+    setSearchNextCursor(null);
     setSearchMessage(null);
     setIsSearching(false);
+    setIsLoadingMore(false);
     setSelectedSong(null);
     setIsSongDetailsOpen(false);
     setSubmitAlert(null);
@@ -707,9 +769,12 @@ export function SessionRequestPage({
           </div>
           {isSearchActive ? (
             <SessionSearchResults
+              hasMore={searchNextCursor !== null}
               isLoading={isSearching}
+              isLoadingMore={isLoadingMore}
               message={searchMessage}
               onBack={() => clearSearchResults()}
+              onLoadMore={() => void loadMoreSearchResults()}
               onSongSelect={selectSong}
                query={normalizedSearchTerm}
               songs={searchResults}

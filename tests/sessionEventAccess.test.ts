@@ -332,6 +332,14 @@ test("session API remains anonymous, identity-scoped and rate limited", () => {
   assert.match(legacyMutation, /legacyGoneResponse/);
   assert.match(legacyMutation, /SESSION_REQUEST_ENDPOINT_GONE/);
   assert.doesNotMatch(legacyMutation, /request\.json|createSessionRequest/);
+
+  const serviceSource = readFileSync("src/server/session-api/service.ts", "utf8");
+  const searchStart = serviceSource.indexOf("function searchSongs");
+  const searchEnd = serviceSource.indexOf("async function listSongDiscoveryCategories");
+  assert.match(
+    serviceSource.slice(searchStart, searchEnd),
+    /return searchCatalogSongs\(query, cursor\)/,
+  );
 });
 
 test("canonical session layout and code resolver provide safe states", () => {

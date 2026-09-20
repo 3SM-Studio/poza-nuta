@@ -1,4 +1,7 @@
 import type { KaraFunCsvRow } from "./karafun-csv";
+import { normalizeSongSearchText } from "../lib/song-search.ts";
+
+export { normalizeSongSearchText } from "../lib/song-search.ts";
 
 export type KaraFunSongPayload = {
   source: "karafun";
@@ -74,17 +77,6 @@ export function mapKaraFunRowToSong(
     createdAt: checkedAt,
     updatedAt: checkedAt,
   };
-}
-
-export function normalizeSongSearchText(input: string) {
-  return input
-    .toLocaleLowerCase("pl-PL")
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/ł/g, "l")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function splitList(value: string) {

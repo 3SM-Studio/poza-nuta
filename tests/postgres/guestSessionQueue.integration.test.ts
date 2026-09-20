@@ -80,7 +80,7 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
       fixture.sessionCode,
       "evidence",
     );
-    assert.equal(searchResults.length, 1);
+    assert.equal(searchResults.items.length, 1);
 
     const joinedGuest = await sessionService.joinPublicSession(
       fixture.publicToken,

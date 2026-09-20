@@ -52,7 +52,8 @@ import {
   ACTIVE_PUBLIC_REQUEST_STATUSES,
   PUBLIC_QUEUE_VISIBLE_STATUSES,
 } from "../public-api/queue-policy";
-import { PUBLIC_SONG_SEARCH_LIMIT } from "../public-api/service";
+import { searchCatalogSongs } from "../song-search";
+import type { SongSearchCursor } from "../../lib/song-search-cursor";
 import {
   generateParticipantCredential,
   hashParticipantCredential,
@@ -321,19 +322,21 @@ export async function getPublicSessionEvent(publicToken: string) {
 export async function searchSessionSongs(
   code: string,
   query: string | null,
+  cursor: SongSearchCursor | null = null,
 ) {
   await requireSongRequestSession({ kind: "code", value: code });
 
-  return searchSongs(query);
+  return searchSongs(query, cursor);
 }
 
 export async function searchPublicSessionSongs(
   publicToken: string,
   query: string | null,
+  cursor: SongSearchCursor | null = null,
 ) {
   await requireSongRequestSession({ kind: "token", value: publicToken });
 
-  return searchSongs(query);
+  return searchSongs(query, cursor);
 }
 
 export async function getPublicSessionSongDiscovery(
@@ -699,30 +702,8 @@ function invalidCatalogCollectionCursorError() {
   );
 }
 
-function searchSongs(query: string | null) {
-
-  if (query === null) {
-    return [];
-  }
-
-  const pattern = `%${escapeLikePattern(query)}%`;
-
-  return getDb()
-    .select({
-      id: songs.id,
-      source: songs.source,
-      title: songs.title,
-      artist: songs.artist,
-      durationSeconds: songs.durationSeconds,
-      isDuet: songs.isDuet,
-      isExplicit: songs.isExplicit,
-      isPlus: songs.isPlus,
-      isHit: songs.isHit,
-    })
-    .from(songs)
-    .where(ilike(songs.searchText, pattern))
-    .orderBy(songs.normalizedArtist, songs.normalizedTitle, songs.id)
-    .limit(PUBLIC_SONG_SEARCH_LIMIT);
+function searchSongs(query: string | null, cursor: SongSearchCursor | null) {
+  return searchCatalogSongs(query, cursor);
 }
 
 async function listSongDiscoveryCategories(
