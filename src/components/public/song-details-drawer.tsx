@@ -1,4 +1,7 @@
+"use client";
+
 import { Clock3, X } from "lucide-react";
+import { useRef } from "react";
 
 import { SessionStateAlert, type SessionStateAlertKind } from "@/components/public/session-state-alert";
 import { Button } from "@/components/ui/button";
@@ -30,11 +33,27 @@ export function SongDetailsDrawer({
   onOpenChange,
   onSubmit,
 }: SongDetailsDrawerProps) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   if (!song) return null;
 
   return (
     <Drawer onOpenChange={onOpenChange} open={isOpen}>
-      <DrawerContent className="max-h-[82dvh] border-border bg-popover text-foreground sm:inset-x-auto sm:left-[max(2rem,calc(50%-20rem))] sm:w-[min(calc(100%-4rem),40rem)] sm:rounded-t-2xl sm:border-x">
+      <DrawerContent
+        className="max-h-[82dvh] border-border bg-popover text-foreground data-[vaul-drawer-direction=bottom]:sm:left-[max(2rem,calc(50%-20rem))] data-[vaul-drawer-direction=bottom]:sm:right-auto data-[vaul-drawer-direction=bottom]:sm:w-[min(calc(100%-4rem),40rem)] sm:rounded-t-2xl sm:border-x"
+        onCloseAutoFocus={(event) => {
+          const returnFocusTarget = returnFocusRef.current;
+          returnFocusRef.current = null;
+          if (!returnFocusTarget?.isConnected) return;
+          event.preventDefault();
+          returnFocusTarget.focus({ preventScroll: true });
+        }}
+        onOpenAutoFocus={() => {
+          returnFocusRef.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+        }}
+      >
         <DrawerHeader className="relative flex-row items-start gap-4 px-6 pt-5 pb-4 text-left">
           <SessionSongArtwork className="size-16" song={song} />
           <div className="min-w-0 pt-0.5">

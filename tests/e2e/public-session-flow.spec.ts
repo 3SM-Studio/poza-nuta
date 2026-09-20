@@ -19,6 +19,15 @@ const responsiveSpotChecks = [
   { width: 1366, height: 768 },
   { width: 1920, height: 1080 },
 ];
+const songDetailsViewports = [
+  { width: 390, height: 844, mode: "mobile" as const },
+  { width: 430, height: 932, mode: "mobile" as const },
+  { width: 768, height: 1024, mode: "centered" as const },
+  { width: 1024, height: 768, mode: "centered" as const },
+  { width: 1280, height: 800, mode: "centered" as const },
+  { width: 1440, height: 900, mode: "centered" as const },
+  { width: 1920, height: 1080, mode: "centered" as const },
+];
 const lifecycleStates = [
   "scheduled",
   "closed",
@@ -122,6 +131,52 @@ test.describe("public participant flow", () => {
     await expect(page.getByRole("complementary", { name: "Kolejka sesji" })).toBeVisible();
     await expect(page.locator('[data-slot="drawer-content"]')).not.toBeVisible();
     await expect.poll(() => page.evaluate(() => ({ overflow: document.body.style.overflow, pointerEvents: document.body.style.pointerEvents, inert: document.querySelectorAll("[inert]").length }))).toEqual({ overflow: "", pointerEvents: "", inert: 0 });
+  });
+
+  test("song details drawer preserves responsive geometry and interactions across entry points", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    for (const viewport of songDetailsViewports) {
+      await page.setViewportSize(viewport);
+      await page.goto(`${fixturePath}?screen=song-details`);
+      await assertSongDetailsGeometry(page, viewport.width, viewport.height, viewport.mode);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    for (const state of ["search-results", "discovery", "catalog-hits"] as const) {
+      await page.goto(`${fixturePath}?screen=${state}`);
+      const trigger = page.getByRole("button", { name: /Dancing Queen/ }).first();
+      await trigger.focus();
+      await trigger.press("Enter");
+      await assertSongDetailsGeometry(page, 1280, 800, "centered");
+      const drawer = page.locator('[data-slot="drawer-content"]');
+      await expect(drawer.getByRole("heading", { name: "Dancing Queen" })).toBeVisible();
+      await expect(drawer.getByText("ABBA", { exact: true })).toBeVisible();
+      await expect(drawer.getByText("KaraFun", { exact: true })).toBeVisible();
+      await expect(drawer.getByText("3:51", { exact: true })).toBeVisible();
+      await expect(drawer.getByRole("button", { name: "Dodaj do kolejki" })).toBeVisible();
+
+      await page.getByRole("button", { name: "Zamknij szczegóły utworu" }).click();
+      await expect(page.locator('[data-slot="drawer-content"]')).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await assertDrawerCleanup(page);
+    }
+
+    await page.goto(`${fixturePath}?screen=search-results`);
+    const nextTrigger = page.getByRole("button", { name: /Mamma Mia/ }).first();
+    await nextTrigger.focus();
+    await nextTrigger.press("Enter");
+    await expect(page.getByRole("heading", { name: "Mamma Mia" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator('[data-slot="drawer-content"]')).toBeHidden();
+    await expect(nextTrigger).toBeFocused();
+    await assertDrawerCleanup(page);
+
+    await page.goto(`${fixturePath}?screen=long-song-details`);
+    const title = page.locator('[data-slot="drawer-title"]');
+    await expect(title).toBeVisible();
+    await expect(title).toHaveCSS("text-overflow", "ellipsis");
+    expect(await hasHorizontalOverflow(page)).toBe(false);
   });
 
   test("participant search preserves input behavior while rendering relevance order", async ({ page }) => {
@@ -240,6 +295,49 @@ test.describe("public participant flow", () => {
 
 async function hasHorizontalOverflow(page: import("@playwright/test").Page) {
   return page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+}
+
+async function assertSongDetailsGeometry(
+  page: import("@playwright/test").Page,
+  viewportWidth: number,
+  viewportHeight: number,
+  mode: "mobile" | "centered",
+) {
+  const drawer = page.locator('[data-slot="drawer-content"]');
+  const overlay = page.locator('[data-slot="drawer-overlay"]');
+  await expect(drawer).toBeVisible();
+  await expect(overlay).toBeVisible();
+
+  const drawerBox = await drawer.boundingBox();
+  const overlayBox = await overlay.boundingBox();
+  expect(drawerBox).not.toBeNull();
+  expect(overlayBox).not.toBeNull();
+  if (!drawerBox || !overlayBox) return;
+
+  expect(overlayBox.x).toBeCloseTo(0, 0);
+  expect(overlayBox.y).toBeCloseTo(0, 0);
+  expect(overlayBox.width).toBeCloseTo(viewportWidth, 0);
+  expect(overlayBox.height).toBeCloseTo(viewportHeight, 0);
+  expect(await hasHorizontalOverflow(page)).toBe(false);
+
+  if (mode === "mobile") {
+    expect(drawerBox.x).toBeCloseTo(0, 0);
+    expect(drawerBox.width).toBeCloseTo(viewportWidth, 0);
+    return;
+  }
+
+  expect(drawerBox.x).toBeGreaterThan(0);
+  expect(drawerBox.width).toBeLessThanOrEqual(641);
+  expect(Math.abs(drawerBox.x + drawerBox.width / 2 - viewportWidth / 2)).toBeLessThanOrEqual(2);
+}
+
+async function assertDrawerCleanup(page: import("@playwright/test").Page) {
+  await expect.poll(() => page.evaluate(() => ({
+    overflow: document.body.style.overflow,
+    pointerEvents: document.body.style.pointerEvents,
+    inert: document.querySelectorAll("[inert]").length,
+    overlay: document.querySelectorAll('[data-slot="drawer-overlay"]').length,
+  }))).toEqual({ overflow: "", pointerEvents: "", inert: 0, overlay: 0 });
 }
 
 async function typeSessionCode(
