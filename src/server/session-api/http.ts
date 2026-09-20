@@ -4,9 +4,12 @@ import type { NextRequest } from "next/server";
 
 import {
   CanonicalSiteOriginConfigurationError,
-  parseCanonicalSiteOrigin,
 } from "../../lib/canonical-site-origin.ts";
 import { PublicApiError } from "../public-api/errors.ts";
+import {
+  isParticipantMutationRequestOriginAllowed,
+  resolveParticipantMutationAllowedOrigins,
+} from "./participant-mutation-origin.ts";
 
 export function requireParticipantMutationRequest(request: NextRequest) {
   const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
@@ -18,21 +21,18 @@ export function requireParticipantMutationRequest(request: NextRequest) {
     );
   }
 
-  const expectedOrigin = getPublicSiteOrigin();
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host")?.toLowerCase();
-
-  try {
-    if (
-      origin &&
-      new URL(origin).origin === expectedOrigin &&
-      new URL(request.url).origin === expectedOrigin &&
-      host === new URL(expectedOrigin).host.toLowerCase()
-    ) {
-      return;
-    }
-  } catch {
-    // Return the same safe failure for malformed or mismatched inputs.
+  const allowedOrigins = getParticipantMutationAllowedOrigins();
+  if (
+    isParticipantMutationRequestOriginAllowed(
+      {
+        origin: request.headers.get("origin"),
+        requestUrl: request.url,
+        host: request.headers.get("host"),
+      },
+      allowedOrigins,
+    )
+  ) {
+    return;
   }
 
   throw new PublicApiError(
@@ -42,9 +42,14 @@ export function requireParticipantMutationRequest(request: NextRequest) {
   );
 }
 
-function getPublicSiteOrigin() {
+function getParticipantMutationAllowedOrigins() {
   try {
-    return parseCanonicalSiteOrigin(process.env.SITE_URL);
+    return resolveParticipantMutationAllowedOrigins({
+      SITE_URL: process.env.SITE_URL,
+      VERCEL_ENV: process.env.VERCEL_ENV,
+      VERCEL_URL: process.env.VERCEL_URL,
+      VERCEL_BRANCH_URL: process.env.VERCEL_BRANCH_URL,
+    });
   } catch (error) {
     if (!(error instanceof CanonicalSiteOriginConfigurationError)) throw error;
   }
