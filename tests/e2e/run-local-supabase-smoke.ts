@@ -4,9 +4,14 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import postgres from "postgres";
+import { cleanToolEnvironment, localApplicationEnvironment } from "../../scripts/isolated-environment.ts";
+import { assertLocalDatabaseTarget, assertLocalE2ETarget } from "../../src/lib/local-target.ts";
+import { assertNoCloudEnvironmentFiles } from "../../scripts/local-environment-files.ts";
+
+assertNoCloudEnvironmentFiles();
 
 const SUPABASE_CLI_VERSION = "2.109.1";
-const PROJECT_ID = "pozanuta-p3-e2e";
+const PROJECT_ID = "pozanuta-stage1-e2e-isolated";
 const APP_PORT = 3105;
 const API_PORT = 55431;
 const DB_PORT = 55432;
@@ -20,6 +25,7 @@ const PLAYWRIGHT_FAILURES_DIRECTORY = join(
 );
 const LOCAL_ORIGIN = `http://localhost:${APP_PORT}`;
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
+const optimizedBuild = process.env.LOCAL_E2E_OPTIMIZED === "1" || process.env.LOCAL_E2E_PERFORMANCE === "1";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const projectRoot = await mkdtemp(join(tmpdir(), "pozanuta-p3-e2e-"));
@@ -58,6 +64,7 @@ try {
     await runSupabaseHidden(["status", "--output", "env"]),
   );
   const databaseUrl = requireStatusValue(status, "DB_URL");
+  assertLocalDatabaseTarget(databaseUrl);
   const versionClient = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
   try {
     const [engine] = await versionClient`select current_setting('server_version_num')::integer as version`;
@@ -73,9 +80,8 @@ try {
   }
 
   const localEnvironment = {
-    ...process.env,
-    DATABASE_URL: databaseUrl,
-    DIRECT_URL: databaseUrl,
+    ...localApplicationEnvironment(process.env, { databaseUrl, apiUrl: API_ORIGIN, publishableKey, secretKey, origin: LOCAL_ORIGIN }),
+    NODE_ENV: optimizedBuild ? "production" as const : "development" as const,
     E2E_BASE_URL: LOCAL_ORIGIN,
     LOCAL_E2E_APP_PORT: String(APP_PORT),
     LOCAL_E2E_DATABASE_URL: databaseUrl,
@@ -84,10 +90,19 @@ try {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
     NEXT_PUBLIC_SUPABASE_URL: API_ORIGIN,
     SITE_URL: LOCAL_ORIGIN,
+    LOCAL_E2E_TRACE: process.env.LOCAL_E2E_TRACE === "on" ? "on" : "off",
+    LOCAL_E2E_PERFORMANCE: process.env.LOCAL_E2E_PERFORMANCE === "1" ? "1" : "0",
+    LOCAL_E2E_OPTIMIZED: optimizedBuild ? "1" : "0",
   };
+  assertLocalE2ETarget(localEnvironment);
 
   console.log("[local-e2e] Applying repository migrations to the isolated database.");
   await runVisible("pnpm.cmd", ["db:migrate"], localEnvironment);
+
+  if (optimizedBuild) {
+    console.log("[local-e2e] Building optimized application for isolated browser verification.");
+    await runVisible(process.execPath, ["node_modules/next/dist/bin/next", "build"], localEnvironment);
+  }
 
   console.log("[local-e2e] Running authenticated and public Playwright smoke.");
   await runPlaywright(localEnvironment);
@@ -114,7 +129,9 @@ async function runPlaywright(environment: NodeJS.ProcessEnv) {
     "node_modules\\.bin\\playwright.cmd",
     [
       "test",
-      "--config=playwright.local-supabase.config.ts",
+      process.env.LOCAL_E2E_PERFORMANCE === "1"
+        ? "--config=playwright.queue-performance.config.ts"
+        : "--config=playwright.local-supabase.config.ts",
       "--workers=1",
       ...(grep ? ["--grep", grep] : []),
     ],
@@ -122,6 +139,9 @@ async function runPlaywright(environment: NodeJS.ProcessEnv) {
   );
 
   if (result.exitCode === 0) {
+    if (process.env.LOCAL_E2E_TRACE === "on") {
+      console.log(`[local-e2e] Trace retained at ${await retainPlaywrightFailureArtifacts()}`);
+    }
     process.stdout.write(result.stdout);
     process.stderr.write(result.stderr);
     return;
@@ -233,7 +253,7 @@ async function runSupabaseHidden(args: string[], allowFailure = false) {
       "--yes",
       ...args,
     ],
-    process.env,
+    cleanToolEnvironment(process.env),
   );
 
   if (result.exitCode !== 0 && !allowFailure) {

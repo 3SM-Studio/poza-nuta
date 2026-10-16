@@ -6,7 +6,9 @@ import {
   encodeSongSearchCursor,
   type SongSearchCursor,
 } from "../lib/song-search-cursor";
-import { tokenizeSongSearchQuery } from "../lib/song-search";
+import { tokenizeLegacySongSearchQuery } from "../lib/song-search";
+import { isUnicodeSongSearchEnabled } from "../lib/song-search-engine";
+import { searchUnicodeCatalogSongs } from "./song-search-unicode";
 import { getDb } from "./db";
 
 export const SONG_SEARCH_RESULT_LIMIT = 50;
@@ -15,7 +17,7 @@ export const SONG_SEARCH_FUZZY_CANDIDATE_LIMIT = 200;
 export const SONG_SEARCH_FUZZY_FILL_THRESHOLD = 100;
 export const SONG_SEARCH_FUZZY_THRESHOLD = 0.5;
 
-type SongSearchRow = {
+export type SongSearchRow = {
   id: number;
   source: "ising" | "karafun" | "manual";
   title: string;
@@ -48,14 +50,15 @@ export async function searchCatalogSongs(
   query: string | null,
   cursor: SongSearchCursor | null = null,
 ): Promise<SongSearchPage> {
+  if (isUnicodeSongSearchEnabled()) return searchUnicodeCatalogSongs(query, cursor);
   if (query === null || query.length < 2) {
     return { items: [], nextCursor: null };
   }
 
-  const tokens = tokenizeSongSearchQuery(query);
+  const tokens = tokenizeLegacySongSearchQuery(query);
   const phrasePattern = containsPattern(query);
   const tokenPredicate = allTokensMatch(tokens);
-  const cursorPredicate = afterCursor(cursor);
+  const cursorPredicate = afterSongSearchCursor(cursor);
 
   return getDb().transaction(async (transaction) => {
     await transaction.execute(
@@ -176,7 +179,7 @@ export async function searchCatalogSongs(
   });
 }
 
-function toSongSearchPage(rows: SongSearchRow[], query: string): SongSearchPage {
+export function toSongSearchPage(rows: SongSearchRow[], query: string, version: 1 | 2 = 1): SongSearchPage {
   const normalizedRows = rows.map((row) => ({ ...row, id: Number(row.id) }));
   const hasNextPage = normalizedRows.length > SONG_SEARCH_RESULT_LIMIT;
   const pageRows = normalizedRows.slice(0, SONG_SEARCH_RESULT_LIMIT);
@@ -197,7 +200,7 @@ function toSongSearchPage(rows: SongSearchRow[], query: string): SongSearchPage 
     nextCursor:
       hasNextPage && lastRow
         ? encodeSongSearchCursor({
-            version: 1,
+            version,
             query,
             relevanceTier: lastRow.relevanceTier,
             fuzzyRelevance: lastRow.fuzzyRelevance,
@@ -231,7 +234,7 @@ function identityTokenMatch(tokens: readonly string[]) {
   );
 }
 
-function afterCursor(cursor: SongSearchCursor | null): SQL {
+export function afterSongSearchCursor(cursor: SongSearchCursor | null): SQL {
   if (!cursor) return sql`true`;
 
   return sql`(

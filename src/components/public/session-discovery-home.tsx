@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import Link from "next/link";
 import {
   Disc3,
@@ -67,6 +69,8 @@ export function SessionDiscoveryHome({
   forceLoading = false,
   forceMinimal = false,
 }: SessionDiscoveryHomeProps) {
+  const tx = useUiText();
+
   const enabledSections = useMemo(
     () => getEnabledSongSections(discovery),
     [discovery],
@@ -121,15 +125,15 @@ export function SessionDiscoveryHome({
 
   return (
     <div className="space-y-8 pb-2 sm:space-y-10">
-      <h1 className="sr-only">Odkrywaj muzykę</h1>
-      <DiscoverySection title="Kolekcje">
+      <h1 className="sr-only">{tx("Odkrywaj muzykę")}</h1>
+      <DiscoverySection title={tx("Kolekcje")}>
         <CatalogCollectionNavigation sessionToken={sessionToken} />
       </DiscoverySection>
       {hasGenres ? (
         <DiscoverySection
-          title="Gatunki"
+          title={tx("Gatunki")}
           moreHref={buildCatalogHref(sessionToken, "genres")}
-          moreLabel="Zobacz wszystkie gatunki"
+          moreLabel={tx("Zobacz wszystkie gatunki")}
         >
           <GenreCarousel
             genres={discovery.genres}
@@ -143,21 +147,20 @@ export function SessionDiscoveryHome({
         return (
           <DiscoverySection
             key={section.key}
-            title={section.title}
+            title={tx(section.title)}
             moreHref={buildCatalogHref(sessionToken, "catalog", section.input)}
-            moreLabel={`Zobacz więcej: ${section.title}`}
+            moreLabel={tx("Zobacz więcej: {v0}", {v0: tx(section.title)})}
           >
             {forceLoading || state?.status === "loading" || !state ? (
-              <SongCarouselSkeleton title={section.title} />
+              <SongCarouselSkeleton title={tx(section.title)} />
             ) : state.status === "error" ? (
               <p className="px-0.5 text-sm text-muted-foreground" role="status">
-                Ta sekcja jest chwilowo niedostępna.
-              </p>
+                {tx("Ta sekcja jest chwilowo niedostępna.")}</p>
             ) : state.items.length > 0 ? (
               <SongCarousel
                 items={state.items}
                 onSongSelect={onSongSelect}
-                title={section.title}
+                title={tx(section.title)}
               />
             ) : null}
           </DiscoverySection>
@@ -165,14 +168,15 @@ export function SessionDiscoveryHome({
       })}
       {!hasGenres && !hasSongSection ? (
         <p className="text-sm text-muted-foreground" role="status">
-          Pozostałe sekcje katalogu są teraz puste.
-        </p>
+          {tx("Pozostałe sekcje katalogu są teraz puste.")}</p>
       ) : null}
     </div>
   );
 }
 
 function CatalogCollectionNavigation({ sessionToken }: { sessionToken: string }) {
+  const tx = useUiText();
+
   const items = [
     { path: "top", title: "Top", icon: Trophy },
     { path: "playlists", title: "Playlisty", icon: ListMusic },
@@ -183,7 +187,7 @@ function CatalogCollectionNavigation({ sessionToken }: { sessionToken: string })
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       {items.map(({ path, title, icon: Icon }, index) => (
         <Link
-          aria-label={`Otwórz katalog: ${title}`}
+          aria-label={tx("Otwórz katalog: {v0}", {v0: tx(title)})}
           className={`group relative flex min-h-28 overflow-hidden rounded-xl bg-gradient-to-br ${CARD_GRADIENTS[index]} p-4 text-primary-foreground shadow-[0_12px_28px_oklch(0_0_0_/_24%)] transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/60`}
           href={`/s/${encodeURIComponent(sessionToken)}/catalog/${path}`}
           key={path}
@@ -192,7 +196,7 @@ function CatalogCollectionNavigation({ sessionToken }: { sessionToken: string })
           <span className="absolute inset-0 bg-[radial-gradient(circle_at_78%_18%,oklch(1_0_0_/_24%),transparent_24%),linear-gradient(to_top,oklch(0_0_0_/_74%),transparent_72%)]" />
           <Icon aria-hidden="true" className="relative size-6 opacity-90" />
           <span className="relative mt-auto text-base font-extrabold tracking-[-0.025em]">
-            {title}
+            {tx(title)}
           </span>
         </Link>
       ))}
@@ -211,6 +215,8 @@ function DiscoverySection({
   moreLabel?: string;
   children: React.ReactNode;
 }) {
+  const tx = useUiText();
+
   return (
     <section aria-labelledby={`discovery-${slugify(title)}`}>
       <div className="mb-3 flex items-baseline justify-between gap-4 px-0.5">
@@ -227,8 +233,7 @@ function DiscoverySection({
             href={moreHref}
             prefetch={false}
           >
-            Więcej
-          </Link>
+            {tx("Więcej")}</Link>
         ) : null}
       </div>
       {children}
@@ -243,8 +248,10 @@ function GenreCarousel({
   genres: SessionSongDiscovery["genres"];
   sessionToken: string;
 }) {
+  const tx = useUiText();
+
   return (
-    <Carousel aria-label="Karuzela gatunków" opts={{ dragFree: true }}>
+    <Carousel aria-label={tx("Karuzela gatunków")} opts={{ dragFree: true }}>
       <CarouselContent>
         {genres.slice(0, 12).map((genre, index) => (
           <CarouselItem
@@ -257,7 +264,7 @@ function GenreCarousel({
               }
               icon={index % 2 === 0 ? Disc3 : Sparkles}
               index={index}
-              subtitle={`${genre.count} piosenek`}
+              subtitle={tx.count("catalogSong", genre.count)}
               title={genre.label}
             />
           </CarouselItem>
@@ -278,8 +285,10 @@ function SongCarousel({
   onSongSelect: (song: PublicSong) => void;
   title: string;
 }) {
+  const tx = useUiText();
+
   return (
-    <Carousel aria-label={`Karuzela: ${title}`} opts={{ dragFree: true }}>
+    <Carousel aria-label={tx("Karuzela: {v0}", {v0: tx(title)})} opts={{ dragFree: true }}>
       <CarouselContent>
         {items.map((song) => (
           <CarouselItem
@@ -369,8 +378,10 @@ function SongDiscoveryCard({
 }
 
 function SongCarouselSkeleton({ title }: { title: string }) {
+  const tx = useUiText();
+
   return (
-    <div aria-label={`Wczytywanie sekcji ${title}`} className="flex gap-3 overflow-hidden">
+    <div aria-label={tx("Wczytywanie sekcji {v0}", {v0: tx(title)})} className="flex gap-3 overflow-hidden">
       {Array.from({ length: 3 }, (_, index) => (
         <Skeleton
           className="aspect-square w-[42%] shrink-0 rounded-xl sm:w-[30%] md:w-1/4 xl:w-1/5"
@@ -382,22 +393,21 @@ function SongCarouselSkeleton({ title }: { title: string }) {
 }
 
 function DiscoveryMinimalState({ sessionToken }: { sessionToken: string }) {
+  const tx = useUiText();
+
   return (
     <section className="rounded-xl bg-secondary px-4 py-5" aria-labelledby="discovery-minimal-title">
       <Heart aria-hidden="true" className="mb-3 size-6 text-primary" />
       <h2 className="text-xl font-extrabold tracking-[-0.035em]" id="discovery-minimal-title">
-        Odkrywaj katalog
-      </h2>
+        {tx("Odkrywaj katalog")}</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Wybierz utwór, który chcesz zaśpiewać.
-      </p>
+        {tx("Wybierz utwór, który chcesz zaśpiewać.")}</p>
       <Link
         className="mt-4 inline-flex text-sm font-bold text-primary underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         href={buildCatalogHref(sessionToken, "genres")}
         prefetch={false}
       >
-        Przeglądaj piosenki
-      </Link>
+        {tx("Przeglądaj piosenki")}</Link>
     </section>
   );
 }

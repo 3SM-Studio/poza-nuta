@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
 import postgres from "postgres";
+import { assertLocalE2ETarget } from "../../src/lib/local-target.ts";
 
 export const LOCAL_E2E_ROCK_SONG_COUNT = 32;
 
@@ -52,12 +53,14 @@ export type LocalSupabaseFixture = {
     }[]
   >;
   resetQueue(): Promise<void>;
+  seedDragQueue(count?: number): Promise<void>;
   readParticipantPresence(displayName: string): Promise<{ memberId: number; liveConnections: number; connections: number }>;
   readParticipantCredentialCount(displayName: string): Promise<number>;
   cleanup(): Promise<void>;
 };
 
 export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture> {
+  assertLocalE2ETarget(process.env);
   const databaseUrl = requireEnvironment("LOCAL_E2E_DATABASE_URL");
   const supabaseUrl = requireEnvironment("NEXT_PUBLIC_SUPABASE_URL");
   const secretKey = requireEnvironment("LOCAL_E2E_SUPABASE_SECRET_KEY");
@@ -590,6 +593,22 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       `;
     }
 
+    async function seedDragQueue(count = 6) {
+      await sql.begin(async tx => {
+        const [event] = await tx`select id from public.events where public_id=${eventPublicId}::uuid`;
+        // This helper is only reachable from this randomly-owned disposable E2E fixture.
+        await tx`delete from public.song_requests where event_id=${event.id}`;
+        for (let index = 1; index <= count; index++) {
+          await tx`insert into public.song_requests(event_id,song_id,singer_name,display_name,status,position,requested_by,note)
+            values(${event.id},${songIds[0]},${`Drag ${index}`},${`Drag ${index}`},'approved',${index},'operator',
+            ${index === 2 ? "Dłuższa notatka sprawdza rzeczywistą wysokość karty. ".repeat(12) : null})`;
+        }
+        await tx`insert into public.song_requests(event_id,song_id,singer_name,display_name,status,position,requested_by)
+          values(${event.id},${songIds[0]},'Drag Pending','Drag Pending','pending',0,'operator'),
+          (${event.id},${songIds[0]},'Drag Now','Drag Now','now',0,'operator')`;
+      });
+    }
+
     async function cleanup() {
       try {
         // Only this isolated fixture's event. Linking rows intentionally retain
@@ -660,6 +679,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       readParticipantPresence,
       readParticipantCredentialCount,
       resetQueue,
+      seedDragQueue,
       cleanup,
     };
   } catch (error) {

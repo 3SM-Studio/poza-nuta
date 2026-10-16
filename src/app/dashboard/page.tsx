@@ -1,3 +1,4 @@
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -20,9 +21,12 @@ import {
   traceServerStepSync,
 } from "../../server/runtime-diagnostics";
 
-export const metadata: Metadata = {
-  title: "Dashboard | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Dashboard | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 

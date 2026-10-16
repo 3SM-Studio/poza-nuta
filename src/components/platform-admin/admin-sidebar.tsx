@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { DatabaseIcon, LayoutDashboardIcon } from "lucide-react";
 
 import { AppSidebar } from "@/components/app-shell/app-sidebar";
@@ -62,18 +64,20 @@ export function AdminSidebar({
   actor: AdminActorViewModel;
   pathname: string;
 }) {
+  const tx = useUiText();
+
   return (
     <AppSidebar
-      ariaLabel="Nawigacja administratora"
+      ariaLabel={tx("Nawigacja administratora")}
       homeHref="/admin"
-      contextLabel="Administracja"
+      contextLabel={tx("Administracja")}
       groups={getAdminNavigationGroups(actor.role)}
       pathname={pathname}
       managementTheme
       user={{
         displayName: actor.displayName,
         initials: actor.initials,
-        roleLabel: roleLabels[actor.role],
+        roleLabel: tx(roleLabels[actor.role]),
         canAccessAdmin: true,
       }}
     />

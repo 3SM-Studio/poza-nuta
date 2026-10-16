@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -48,6 +50,8 @@ export function AdminImportsPanel({
   startWrite,
   cancelJob,
 }: AdminImportsPanelProps) {
+  const tx = useUiText();
+
   const router = useRouter();
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -82,16 +86,16 @@ export function AdminImportsPanel({
     try {
       const result = await operation();
       if (result.kind === "error") {
-        toast.error("Operacja nieudana", { description: result.message });
+        toast.error(tx("Operacja nieudana"), { description: tx(result.message) });
       } else {
-        toast.success("Gotowe", { description: result.message });
+        toast.success(tx("Gotowe"), { description: tx(result.message) });
       }
       if (key === "write") setWriteConfirmationOpen(false);
       if (key.startsWith("cancel:")) setCancelConfirmationJob(null);
       startRefreshTransition(() => router.refresh());
     } catch {
-      toast.error("Operacja nieudana", {
-        description: "Nie udało się wykonać operacji. Spróbuj ponownie.",
+      toast.error(tx("Operacja nieudana"), {
+        description: tx("Nie udało się wykonać operacji. Spróbuj ponownie."),
       });
     } finally {
       setActiveAction(null);
@@ -124,12 +128,12 @@ export function AdminImportsPanel({
       link.click();
       link.remove();
       URL.revokeObjectURL(downloadUrl);
-      toast.success("Eksport gotowy", {
-        description: "Pobrano pełną bibliotekę utworów w formacie XLSX.",
+      toast.success(tx("Eksport gotowy"), {
+        description: tx("Pobrano pełną bibliotekę utworów w formacie XLSX."),
       });
     } catch {
-      toast.error("Eksport nieudany", {
-        description: "Nie udało się pobrać biblioteki. Spróbuj ponownie.",
+      toast.error(tx("Eksport nieudany"), {
+        description: tx("Nie udało się pobrać biblioteki. Spróbuj ponownie."),
       });
     } finally {
       setIsExporting(false);
@@ -144,17 +148,15 @@ export function AdminImportsPanel({
   return (
     <div className="grid gap-6">
       <header className="grid gap-1">
-        <p className="m-0 text-sm font-medium text-primary">Katalog</p>
+        <p className="m-0 text-sm font-medium text-primary">{tx("Katalog")}</p>
         <h1 className="m-0 text-2xl font-semibold tracking-normal sm:text-3xl">
-          Importy
-        </h1>
+          {tx("Importy")}</h1>
         <p className="m-0 max-w-3xl text-sm text-muted-foreground sm:text-base">
-          Uruchamiaj zadania iSing i obserwuj postęp procesu importu.
-        </p>
+          {tx("Uruchamiaj zadania iSing i obserwuj postęp procesu importu.")}</p>
       </header>
 
       <section
-        aria-label="Akcje katalogu"
+        aria-label={tx("Akcje katalogu")}
         className="flex flex-col gap-3 border-y border-border py-4 sm:flex-row sm:items-center"
       >
         <div className="flex flex-wrap gap-2">
@@ -169,7 +171,7 @@ export function AdminImportsPanel({
             ) : (
               <SearchCheckIcon aria-hidden="true" />
             )}
-            {activeAction === "dry-run" ? "Dodawanie…" : "Sprawdź iSing"}
+            {activeAction === "dry-run" ? tx("Dodawanie…") : tx("Sprawdź iSing")}
           </Button>
           <Button
             type="button"
@@ -178,8 +180,7 @@ export function AdminImportsPanel({
             aria-haspopup="dialog"
           >
             <PlayIcon aria-hidden="true" />
-            Importuj iSing
-          </Button>
+            {tx("Importuj iSing")}</Button>
           <Button
             type="button"
             variant="outline"
@@ -191,7 +192,7 @@ export function AdminImportsPanel({
             ) : (
               <DownloadIcon aria-hidden="true" />
             )}
-            {isExporting ? "Eksportowanie…" : "Eksportuj XLSX"}
+            {isExporting ? tx("Eksportowanie…") : tx("Eksportuj XLSX")}
           </Button>
         </div>
         <Button
@@ -205,36 +206,32 @@ export function AdminImportsPanel({
             className={isRefreshing ? "animate-spin" : undefined}
             aria-hidden="true"
           />
-          {isRefreshing ? "Odświeżanie…" : "Odśwież"}
+          {isRefreshing ? tx("Odświeżanie…") : tx("Odśwież")}
         </Button>
       </section>
 
       {!data.capabilities.canStartISing ? (
         <p className="m-0 text-sm text-muted-foreground">
-          Masz dostęp tylko do odczytu historii importów.
-        </p>
+          {tx("Masz dostęp tylko do odczytu historii importów.")}</p>
       ) : hasActiveISingJob ? (
         <p className="m-0 text-sm text-muted-foreground">
-          Nowy import iSing będzie dostępny po zakończeniu aktywnego joba.
-        </p>
+          {tx("Nowy import iSing będzie dostępny po zakończeniu aktywnego joba.")}</p>
       ) : null}
 
       <section aria-labelledby="recent-import-jobs" className="grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="recent-import-jobs" className="m-0 text-lg font-semibold">
-            Ostatnie zadania
-          </h2>
+            {tx("Ostatnie zadania")}</h2>
           {hasActiveJob ? (
-            <Badge variant="default">Automatyczne odświeżanie</Badge>
+            <Badge variant="default">{tx("Automatyczne odświeżanie")}</Badge>
           ) : (
-            <Badge variant="secondary">Brak aktywnego zadania</Badge>
+            <Badge variant="secondary">{tx("Brak aktywnego zadania")}</Badge>
           )}
         </div>
 
         {data.jobs.length === 0 ? (
           <div className="border-t border-border py-10 text-center text-sm text-muted-foreground">
-            Historia importów jest pusta.
-          </div>
+            {tx("Historia importów jest pusta.")}</div>
         ) : (
           <div className="divide-y divide-border border-y border-border">
             {data.jobs.map((job) => (
@@ -259,16 +256,13 @@ export function AdminImportsPanel({
       >
         <AlertDialogContent data-management-theme="true">
           <AlertDialogHeader>
-            <AlertDialogTitle>Uruchomić zapis iSing?</AlertDialogTitle>
+            <AlertDialogTitle>{tx("Uruchomić zapis iSing?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Worker zaktualizuje katalog przez bezpieczny upsert. Istniejące
-              piosenki nie będą usuwane.
-            </AlertDialogDescription>
+              {tx("Worker zaktualizuje katalog przez bezpieczny upsert. Istniejące piosenki nie będą usuwane.")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={activeAction === "write"}>
-              Wróć
-            </AlertDialogCancel>
+              {tx("Wróć")}</AlertDialogCancel>
             <Button
               type="button"
               onClick={() => void runMutation("write", startWrite)}
@@ -279,7 +273,7 @@ export function AdminImportsPanel({
               ) : (
                 <PlayIcon aria-hidden="true" />
               )}
-              {activeAction === "write" ? "Dodawanie…" : "Tak, importuj"}
+              {activeAction === "write" ? tx("Dodawanie…") : tx("Tak, importuj")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -295,19 +289,16 @@ export function AdminImportsPanel({
       >
         <AlertDialogContent data-management-theme="true">
           <AlertDialogHeader>
-            <AlertDialogTitle>Anulować job importu?</AlertDialogTitle>
+            <AlertDialogTitle>{tx("Anulować job importu?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {cancelConfirmationJob?.status === "queued"
-                ? "Job oczekujący zostanie anulowany przed uruchomieniem."
-                : "Worker otrzyma żądanie bezpiecznego anulowania po bieżącym batchu."}
+              {cancelConfirmationJob?.status === "queued" ? tx("Job oczekujący zostanie anulowany przed uruchomieniem.") : tx("Worker otrzyma żądanie bezpiecznego anulowania po bieżącym batchu.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel
               disabled={activeAction?.startsWith("cancel:") ?? false}
             >
-              Wróć
-            </AlertDialogCancel>
+              {tx("Wróć")}</AlertDialogCancel>
             <Button
               type="button"
               variant="destructive"
@@ -323,9 +314,7 @@ export function AdminImportsPanel({
               ) : (
                 <BanIcon aria-hidden="true" />
               )}
-              {activeAction?.startsWith("cancel:")
-                ? "Anulowanie…"
-                : "Tak, anuluj"}
+              {activeAction?.startsWith("cancel:") ? tx("Anulowanie…") : tx("Tak, anuluj")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -347,6 +336,8 @@ function ImportJobRow({
   actionsDisabled: boolean;
   onCancel: () => void;
 }) {
+  const tx = useUiText();
+
   const active = job.status === "queued" || job.status === "running";
   const progress = getImportJobProgress(job.totalCount, job.processedCount);
 
@@ -356,7 +347,7 @@ function ImportJobRow({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="m-0 text-base font-semibold">
-              {sourceLabel(job.source)} · {modeLabel(job.mode)}
+              {sourceLabel(job.source)} · {tx(modeLabel(job.mode))}
             </h3>
             <StatusBadge
               status={job.status}
@@ -364,8 +355,8 @@ function ImportJobRow({
             />
           </div>
           <p className="mt-1 mb-0 text-sm text-muted-foreground">
-            Inicjator: {initiatorLabel(job.initiatorKind)} · utworzono{" "}
-            {formatDateTime(job.createdAt)}
+            {tx("Inicjator: ")}{tx(initiatorLabel(job.initiatorKind))} {tx(" · utworzono")}{" "}
+            {tx.date(job.createdAt)}
           </p>
         </div>
         {active ? (
@@ -386,7 +377,7 @@ function ImportJobRow({
             ) : (
               <BanIcon aria-hidden="true" />
             )}
-            {isCancelling ? "Anulowanie…" : "Anuluj"}
+            {isCancelling ? tx("Anulowanie…") : tx("Anuluj")}
           </Button>
         ) : null}
       </div>
@@ -394,25 +385,25 @@ function ImportJobRow({
       {active ? <ImportProgress progress={progress} /> : null}
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
-        <Metric label="Łącznie" value={job.totalCount ?? "—"} />
-        <Metric label="Przetworzone" value={job.processedCount} />
+        <Metric label={tx("Łącznie")} value={job.totalCount ?? "—"} />
+        <Metric label={tx("Przetworzone")} value={job.processedCount} />
         <Metric
-          label={job.mode === "dry_run" ? "Poprawne" : "Zaimportowane"}
+          label={job.mode === "dry_run" ? tx("Poprawne") : tx("Zaimportowane")}
           value={job.importedCount}
         />
-        <Metric label="Pominięte" value={job.skippedCount} />
-        <Metric label="Błędy" value={job.errorCount ?? "—"} />
+        <Metric label={tx("Pominięte")} value={job.skippedCount} />
+        <Metric label={tx("Błędy")} value={job.errorCount ?? "—"} />
         <Metric
-          label="Zakończono"
-          value={job.terminalAt ? formatDateTime(job.terminalAt) : "—"}
+          label={tx("Zakończono")}
+          value={job.terminalAt ? tx.date(job.terminalAt) : "—"}
         />
       </dl>
 
       <dl className="grid gap-2 text-sm sm:grid-cols-2">
-        <Metric label="Start" value={formatDateTime(job.startedAt)} />
+        <Metric label={tx("Start")} value={tx.date(job.startedAt)} />
         <Metric
-          label="Żądanie anulowania"
-          value={formatDateTime(job.cancellationRequestedAt)}
+          label={tx("Żądanie anulowania")}
+          value={tx.date(job.cancellationRequestedAt)}
         />
       </dl>
 
@@ -420,7 +411,7 @@ function ImportJobRow({
         <Alert variant="destructive">
           <AlertTitle>{job.safeErrorCode ?? "IMPORT_FAILED"}</AlertTitle>
           <AlertDescription>
-            {job.safeErrorSummary ?? "Import zakończył się bezpiecznym błędem."}
+            {tx(job.safeErrorSummary) || tx("Import zakończył się bezpiecznym błędem.")}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -433,25 +424,26 @@ function ImportProgress({
 }: {
   progress: ReturnType<typeof getImportJobProgress>;
 }) {
+  const tx = useUiText();
+
   if (progress.kind === "unknown") {
     return (
       <p className="m-0 text-sm text-muted-foreground" role="status">
-        Przetworzono {progress.processedCount}; suma nie jest jeszcze znana.
-      </p>
+        {tx("Przetworzono ")}{progress.processedCount}{tx("; suma nie jest jeszcze znana.")}</p>
     );
   }
 
   return (
     <div className="grid gap-1.5">
       <div className="flex justify-between gap-3 text-sm">
-        <span>Postęp</span>
+        <span>{tx("Postęp")}</span>
         <span className="tabular-nums">
           {progress.processedCount}/{progress.totalCount} · {progress.percent}%
         </span>
       </div>
       <div
         role="progressbar"
-        aria-label="Postęp importu"
+        aria-label={tx("Postęp importu")}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={progress.percent}
@@ -473,6 +465,8 @@ function StatusBadge({
   status: ImportJobViewModel["status"];
   cancellationRequestedAt: string | null;
 }) {
+  const tx = useUiText();
+
   const presentation = getImportJobStatusPresentation(
     status,
     cancellationRequestedAt,
@@ -484,13 +478,13 @@ function StatusBadge({
       variant="outline"
       className={presentation.className}
       data-status-tone={presentation.tone}
-      aria-label={`Status: ${presentation.label}`}
+      aria-label={tx("Status: {v0}", {v0: tx(presentation.label)})}
     >
       <Icon
         className={status === "running" ? "animate-spin" : undefined}
         aria-hidden="true"
       />
-      {presentation.label}
+      {tx(presentation.label)}
     </Badge>
   );
 }
@@ -504,14 +498,6 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("pl-PL", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Europe/Warsaw",
-  }).format(new Date(value));
-}
 
 function sourceLabel(source: ImportJobViewModel["source"]) {
   return source === "ising" ? "iSing" : "KaraFun";

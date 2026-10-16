@@ -1,9 +1,12 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+import { localizeUiRecord } from "@/i18n/text";
+
 import { Ban, CalendarClock, CircleAlert, Clock3, MapPin, RotateCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { PublicSessionEntryShell } from "./public-session-entry-shell";
@@ -54,6 +57,9 @@ export function PublicSessionLifecycle({ event, kind, reopenable = false }: {
   kind: PublicSessionLifecycleKind;
   reopenable?: boolean;
 }) {
+  const tx = useUiText();
+  const copy = localizeUiRecord(getI18nRecord_copy(), tx);
+
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
   const presentation = copy[kind];
@@ -75,12 +81,12 @@ export function PublicSessionLifecycle({ event, kind, reopenable = false }: {
     };
   }, [event, kind, router]);
 
-  const startLabel = useMemo(() => event ? formatStart(event.startsAt) : null, [event]);
+  const startLabel = event ? tx.date(event.startsAt) : null;
   const countdown = kind === "scheduled" && event ? formatCountdown(new Date(event.startsAt).getTime() - now) : null;
-  const title = event?.name ?? (kind === "invalid" ? "Nieprawidłowy link" : "Sesja karaoke");
+  const title = event?.name ?? (kind === "invalid" ? tx("Nieprawidłowy link") : tx("Sesja karaoke"));
 
   return (
-    <PublicSessionEntryShell eyebrow={kind === "scheduled" ? "Nadchodzące karaoke" : "Poza Nutą Karaoke"} title={title} titleId="session-lifecycle-title">
+    <PublicSessionEntryShell eyebrow={kind === "scheduled" ? tx("Nadchodzące karaoke") : "Poza Nutą Karaoke"} title={title} titleId="session-lifecycle-title">
       <div className="px-6 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-center sm:px-8 sm:py-8">
         <Icon aria-hidden="true" className="mx-auto size-9 text-primary" strokeWidth={1.8} />
         <h2 className="mt-3 text-balance text-2xl font-extrabold tracking-[-0.03em]">{presentation.heading}</h2>
@@ -91,42 +97,35 @@ export function PublicSessionLifecycle({ event, kind, reopenable = false }: {
             {event.venue ? (
               <div className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-x-3">
                 <MapPin aria-hidden="true" className="row-span-2 size-5 shrink-0 text-primary" />
-                <dt className="min-w-0 text-xs text-muted-foreground">Miejsce</dt>
+                <dt className="min-w-0 text-xs text-muted-foreground">{tx("Miejsce")}</dt>
                 <dd className="min-w-0 truncate text-sm font-bold">{event.venue}</dd>
               </div>
             ) : null}
             {startLabel ? (
               <div className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-x-3">
                 <CalendarClock aria-hidden="true" className="row-span-2 size-5 shrink-0 text-primary" />
-                <dt className="min-w-0 text-xs text-muted-foreground">Start</dt>
+                <dt className="min-w-0 text-xs text-muted-foreground">{tx("Start")}</dt>
                 <dd className="min-w-0 text-sm font-bold">{startLabel}</dd>
               </div>
             ) : null}
           </dl>
         ) : null}
 
-        {countdown ? <p className="mt-4 text-sm font-bold text-primary" role="status">{countdown}</p> : null}
-        {reopenable ? <p className="mt-4 text-sm text-muted-foreground">Organizator może jeszcze wznowić tę sesję przez krótki czas.</p> : null}
+        {countdown ? <p className="mt-4 text-sm font-bold text-primary" role="status">{tx(countdown)}</p> : null}
+        {reopenable ? <p className="mt-4 text-sm text-muted-foreground">{tx("Organizator może jeszcze wznowić tę sesję przez krótki czas.")}</p> : null}
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {(kind === "scheduled" || kind === "rate_limited" || kind === "service_unavailable") ? (
             <Button className="h-12 rounded-full font-extrabold text-slate-950 sm:order-2" onClick={() => router.refresh()} type="button">
-              <RotateCw aria-hidden="true" /> Spróbuj ponownie
-            </Button>
+              <RotateCw aria-hidden="true" /> {tx(" Spróbuj ponownie")}</Button>
           ) : null}
           <Button asChild className="h-12 rounded-full font-extrabold" variant={(kind === "scheduled" || kind === "rate_limited" || kind === "service_unavailable") ? "outline" : "default"}>
-            <Link href="/join">Wpisz kod wydarzenia</Link>
+            <Link href="/join">{tx("Wpisz kod wydarzenia")}</Link>
           </Button>
         </div>
       </div>
     </PublicSessionEntryShell>
   );
-}
-
-function formatStart(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function formatCountdown(remainingMs: number) {
@@ -137,3 +136,5 @@ function formatCountdown(remainingMs: number) {
   const rest = minutes % 60;
   return rest ? `Start za ${hours} godz. ${rest} min` : `Start za ${hours} godz.`;
 }
+
+function getI18nRecord_copy() { return copy; }

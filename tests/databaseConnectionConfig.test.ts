@@ -12,6 +12,7 @@ import {
 
 const transactionPoolerUrl =
   "postgresql://postgres.example:password@aws-0-eu.pooler.supabase.com:6543/postgres";
+const localUrl = "postgresql://postgres:synthetic@127.0.0.1:55522/postgres";
 const sessionPoolerUrl =
   "postgresql://postgres.example:password@aws-0-eu.pooler.supabase.com:5432/postgres";
 
@@ -62,15 +63,15 @@ test("Vercel runtime rejects session and direct connection modes safely", () => 
 
 test("local runtime remains compatible with direct development databases", () => {
   assert.equal(
-    requireRuntimeDatabaseUrl({ DATABASE_URL: sessionPoolerUrl }),
-    sessionPoolerUrl,
+    requireRuntimeDatabaseUrl({ DATABASE_URL: localUrl }),
+    localUrl,
   );
 });
 
 test("database administration uses a dedicated connection variable", () => {
   assert.equal(
-    requireAdminDatabaseUrl({ DIRECT_URL: sessionPoolerUrl }),
-    sessionPoolerUrl,
+    requireAdminDatabaseUrl({ DIRECT_URL: localUrl }),
+    localUrl,
   );
   assert.throws(
     () => requireAdminDatabaseUrl({ DATABASE_URL: transactionPoolerUrl }),

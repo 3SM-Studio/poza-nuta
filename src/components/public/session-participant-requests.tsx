@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import { RequestStatusBadge } from "@/components/request-status-badge";
 import {
   AlertDialog,
@@ -30,25 +32,27 @@ export function SessionParticipantRequests({
   onRefresh: () => void;
   requests: ParticipantRequest[] | null;
 }) {
+  const tx = useUiText();
+
   return (
     <section aria-labelledby="participant-requests-heading">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-[-0.04em]" id="participant-requests-heading">Moje zgłoszenia</h2>
-          {requests ? <p className="mt-1 text-sm text-muted-foreground">{formatRequestCount(requests.length)}</p> : null}
+          <h2 className="text-3xl font-extrabold tracking-[-0.04em]" id="participant-requests-heading">{tx("Moje zgłoszenia")}</h2>
+          {requests ? <p className="mt-1 text-sm text-muted-foreground">{tx.count("request", requests.length)}</p> : null}
           {requests ? (
             <p className="mt-1 text-sm text-muted-foreground" role="status">
-              Aktywne zgłoszenia: {countActiveParticipantRequests(requests)}/{PARTICIPANT_ACTIVE_REQUEST_LIMIT}
+              {tx("Aktywne zgłoszenia: ")}{countActiveParticipantRequests(requests)}/{PARTICIPANT_ACTIVE_REQUEST_LIMIT}
             </p>
           ) : null}
         </div>
-        <Button onClick={onRefresh} size="sm" type="button" variant="ghost">Odśwież</Button>
+        <Button onClick={onRefresh} size="sm" type="button" variant="ghost">{tx("Odśwież")}</Button>
       </div>
-      {message ? <p className="text-sm text-destructive" role="alert">{message}</p> : null}
+      {message ? <p className="text-sm text-destructive" role="alert">{tx(message)}</p> : null}
       {requests === null ? (
-        <p className="mt-4 text-sm text-muted-foreground" role="status">Wczytywanie zgłoszeń…</p>
+        <p className="mt-4 text-sm text-muted-foreground" role="status">{tx("Wczytywanie zgłoszeń…")}</p>
       ) : requests.length === 0 ? (
-        <p className="mt-10 text-center text-sm text-muted-foreground">Nie masz jeszcze zgłoszeń w tej sesji.</p>
+        <p className="mt-10 text-center text-sm text-muted-foreground">{tx("Nie masz jeszcze zgłoszeń w tej sesji.")}</p>
       ) : (
         <div className="border-t border-border">
           {requests.map((request) => (
@@ -59,8 +63,8 @@ export function SessionParticipantRequests({
                 <p className="mt-0.5 text-sm text-muted-foreground">{request.artist}</p>
                 {request.queuePosition !== null ? (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Pozycja zgłoszenia w kolejce: #{request.queuePosition}
-                    {request.isNext ? " · Następne zaakceptowane zgłoszenie" : ""}
+                    {tx("Pozycja zgłoszenia w kolejce: #")}{request.queuePosition}
+                    {request.isNext ? tx(" · Następne zaakceptowane zgłoszenie") : ""}
                   </p>
                 ) : null}
               </div>
@@ -74,18 +78,18 @@ export function SessionParticipantRequests({
                 >
                   <AlertDialogTrigger asChild>
                     <Button disabled={cancellingRequestId !== null} size="sm" type="button" variant="outline">
-                      {cancellingRequestId === request.id ? "Anuluję…" : "Anuluj"}
+                      {cancellingRequestId === request.id ? tx("Anuluję…") : tx("Anuluj")}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Anulować zgłoszenie?</AlertDialogTitle>
-                      <AlertDialogDescription>{request.title} — {request.artist}. Tej operacji nie można cofnąć po stronie uczestnika.</AlertDialogDescription>
+                      <AlertDialogTitle>{tx("Anulować zgłoszenie?")}</AlertDialogTitle>
+                      <AlertDialogDescription>{request.title} — {request.artist}{tx(". Tej operacji nie można cofnąć po stronie uczestnika.")}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={cancellingRequestId !== null}>Wróć</AlertDialogCancel>
+                      <AlertDialogCancel disabled={cancellingRequestId !== null}>{tx("Wróć")}</AlertDialogCancel>
                       <Button disabled={cancellingRequestId !== null} onClick={() => onCancel(request.id)} type="button" variant="destructive">
-                        {cancellingRequestId === request.id ? "Anuluję…" : "Anuluj zgłoszenie"}
+                        {cancellingRequestId === request.id ? tx("Anuluję…") : tx("Anuluj zgłoszenie")}
                       </Button>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -97,10 +101,4 @@ export function SessionParticipantRequests({
       )}
     </section>
   );
-}
-
-function formatRequestCount(count: number) {
-  if (count === 1) return "1 zgłoszenie";
-  if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14)) return `${count} zgłoszenia`;
-  return `${count} zgłoszeń`;
 }

@@ -1,14 +1,17 @@
 "use client"
 
+import { useUiText } from "@/i18n/use-ui-text"
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const tx = useUiText()
   const { theme = "system" } = useTheme()
 
   return (
     <Sonner
+      containerAriaLabel={tx("Powiadomienia")}
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       icons={{
@@ -37,6 +40,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
+        closeButtonAriaLabel: tx("Zamknij powiadomienie"),
         classNames: {
           toast: "cn-toast",
         },

@@ -1,11 +1,15 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { logoutOperator, OperatorClientError } from "./api";
 
 export function UnauthorizedSignIn() {
+  const tx = useUiText();
+
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,15 +37,13 @@ export function UnauthorizedSignIn() {
 
   return (
     <>
-      <h1>Brak dostępu do dashboardu</h1>
+      <h1>{tx("Brak dostępu do dashboardu")}</h1>
       <p className={"mt-3 mb-7 leading-relaxed text-muted-foreground"}>
-        To konto jest zalogowane w Supabase, ale nie ma aktywnego dostępu
-        operatora.
-      </p>
+        {tx("To konto jest zalogowane w Supabase, ale nie ma aktywnego dostępu operatora.")}</p>
 
       {error ? (
         <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
-          {error}
+          {tx(error)}
         </p>
       ) : null}
 
@@ -51,7 +53,7 @@ export function UnauthorizedSignIn() {
         onClick={() => void handleLogout()}
         disabled={isLoggingOut}
       >
-        {isLoggingOut ? "Wylogowywanie…" : "Wyloguj"}
+        {isLoggingOut ? tx("Wylogowywanie…") : tx("Wyloguj")}
       </button>
     </>
   );

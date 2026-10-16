@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
@@ -26,9 +28,12 @@ import {
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 import { validateCreateDashboardEventInput } from "@/server/operator-api/validation";
 
-export const metadata: Metadata = {
-  title: "Nowe wydarzenie | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Nowe wydarzenie | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +46,8 @@ type NewOrganizationEventPageProps = {
 export default async function NewOrganizationEventPage({
   params,
 }: NewOrganizationEventPageProps) {
+  const tx = await getUiText();
+
   const { organizationId } = await params;
   const session = await requireOperatorSession();
   const organization = await getDashboardOrganizationForAuthUser(
@@ -59,7 +66,7 @@ export default async function NewOrganizationEventPage({
       <section className={"mx-auto w-full min-w-0 max-w-[58rem]"}>
         <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
-            <h1>Utwórz wydarzenie</h1>
+            <h1>{tx("Utwórz wydarzenie")}</h1>
             <p className={"mt-1.5 text-sm text-muted-foreground"}>{organization.name}</p>
           </div>
         </header>
@@ -67,10 +74,9 @@ export default async function NewOrganizationEventPage({
         {canCreateDashboardOrganizationEvent(organization.role) ? (
           <Card>
             <CardHeader>
-              <CardTitle>Dane wydarzenia</CardTitle>
+              <CardTitle>{tx("Dane wydarzenia")}</CardTitle>
               <CardDescription>
-                Kod sesji zostanie utworzony automatycznie razem z wydarzeniem.
-              </CardDescription>
+                {tx("Kod sesji zostanie utworzony automatycznie razem z wydarzeniem.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <CreateEventForm
@@ -82,11 +88,9 @@ export default async function NewOrganizationEventPage({
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Brak uprawnień</CardTitle>
+              <CardTitle>{tx("Brak uprawnień")}</CardTitle>
               <CardDescription>
-                Wydarzenia mogą tworzyć tylko właściciele i menedżerowie
-                organizacji.
-              </CardDescription>
+                {tx("Wydarzenia mogą tworzyć tylko właściciele i menedżerowie organizacji.")}</CardDescription>
             </CardHeader>
           </Card>
         )}

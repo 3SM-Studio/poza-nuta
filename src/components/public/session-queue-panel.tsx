@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,8 @@ export function SessionQueuePanel({
   onCancelDialogRequestIdChange = () => undefined,
   defaultTab = "queue",
 }: SessionQueuePanelProps) {
+  const tx = useUiText();
+
   const [activeTab, setActiveTab] = useState<"queue" | "mine">(showPublicQueue ? defaultTab : "mine");
   const hasParticipant = Boolean(participantDisplayName);
 
@@ -76,7 +80,7 @@ export function SessionQueuePanel({
   return (
     <>
       <aside
-        aria-label={showPublicQueue ? "Kolejka sesji" : "Moje zgłoszenia"}
+        aria-label={showPublicQueue ? tx("Kolejka sesji") : tx("Moje zgłoszenia")}
         className="hidden min-h-0 w-[clamp(22.5rem,30vw,27.5rem)] shrink-0 border-l border-border bg-secondary/35 xl:flex xl:flex-col"
       >
         <div
@@ -86,7 +90,9 @@ export function SessionQueuePanel({
           <QueuePanelContents
             activeTab={activeTab}
             cancellingRequestId={cancellingRequestId}
-            cancelDialogRequestId={cancelDialogRequestId}
+            // Both responsive views stay mounted. Only the active view may
+            // portal a modal, otherwise duplicate dialogs hide each other.
+            cancelDialogRequestId={open ? null : cancelDialogRequestId}
             hasParticipant={hasParticipant}
             idPrefix="desktop"
             message={message}
@@ -108,7 +114,7 @@ export function SessionQueuePanel({
       <Drawer onOpenChange={onOpenChange} open={open}>
         <DrawerTrigger asChild>
           <button
-            aria-label={showPublicQueue ? "Otwórz kolejkę" : "Otwórz moje zgłoszenia"}
+            aria-label={showPublicQueue ? tx("Otwórz kolejkę") : tx("Otwórz moje zgłoszenia")}
             className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex min-h-16 items-center gap-3 rounded-2xl border border-border bg-popover px-3 text-left text-foreground shadow-[var(--shadow-panel)] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/35 xl:hidden motion-reduce:transform-none motion-reduce:transition-none"
             type="button"
           >
@@ -122,14 +128,14 @@ export function SessionQueuePanel({
           overlayClassName="bg-black/25 xl:hidden"
         >
           <div className="flex min-h-0 flex-1 flex-col">
-            <DrawerTitle className="sr-only">{showPublicQueue ? "Kolejka" : "Moje zgłoszenia"}</DrawerTitle>
+            <DrawerTitle className="sr-only">{showPublicQueue ? tx("Kolejka") : tx("Moje zgłoszenia")}</DrawerTitle>
             <DrawerDescription className="sr-only">
-              {showPublicQueue ? "Kolejka wydarzenia i Twoje zgłoszenia." : "Twoje zgłoszenia do tej sesji."}
+              {showPublicQueue ? tx("Kolejka wydarzenia i Twoje zgłoszenia.") : tx("Twoje zgłoszenia do tej sesji.")}
             </DrawerDescription>
             <div className="flex shrink-0 justify-end px-4 pb-1">
               <DrawerClose asChild>
                 <Button
-                  aria-label="Zwiń kolejkę"
+                  aria-label={tx("Zwiń kolejkę")}
                   className="size-11 rounded-full"
                   size="icon"
                   type="button"
@@ -204,6 +210,8 @@ function QueuePanelContents({
   refreshing: boolean;
   showPublicQueue: boolean;
 }) {
+  const tx = useUiText();
+
   const panelId = `${idPrefix}-session-queue-panel`;
   const queueTabId = `${idPrefix}-session-queue-tab`;
   const mineTabId = `${idPrefix}-session-mine-tab`;
@@ -222,9 +230,9 @@ function QueuePanelContents({
   return (
     <div aria-labelledby={activeTab === "queue" ? queueTabId : mineTabId} id={panelId} role="tabpanel">
       {hasParticipant && showPublicQueue ? (
-        <div aria-label="Widok kolejki" className="mb-5 grid grid-cols-2 rounded-xl bg-muted p-1" ref={tabListRef} role="tablist">
-          <button aria-controls={panelId} aria-selected={activeTab === "queue"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "queue" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={queueTabId} onClick={() => onTabChange("queue")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "queue" ? 0 : -1} type="button">Kolejka</button>
-          <button aria-controls={panelId} aria-selected={activeTab === "mine"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "mine" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={mineTabId} onClick={() => onTabChange("mine")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "mine" ? 0 : -1} type="button">Moje{participantRequests ? ` ${participantRequests.length}` : ""}</button>
+        <div aria-label={tx("Widok kolejki")} className="mb-5 grid grid-cols-2 rounded-xl bg-muted p-1" ref={tabListRef} role="tablist">
+          <button aria-controls={panelId} aria-selected={activeTab === "queue"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "queue" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={queueTabId} onClick={() => onTabChange("queue")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "queue" ? 0 : -1} type="button">{tx("Kolejka")}</button>
+          <button aria-controls={panelId} aria-selected={activeTab === "mine"} className={`rounded-lg px-3 py-2 text-sm font-bold ${activeTab === "mine" ? "bg-popover text-foreground shadow-sm" : "text-muted-foreground"}`} id={mineTabId} onClick={() => onTabChange("mine")} onKeyDown={handleTabKeyDown} role="tab" tabIndex={activeTab === "mine" ? 0 : -1} type="button">{tx("Moje")}{participantRequests ? ` ${participantRequests.length}` : ""}</button>
         </div>
       ) : null}
       {activeTab === "queue" && showPublicQueue ? (
@@ -237,17 +245,21 @@ function QueuePanelContents({
 }
 
 function CollapsedParticipantSummary({ requests }: { requests: ParticipantRequest[] | null }) {
+  const tx = useUiText();
+
   return (
     <div className="min-w-0">
-      <p className="truncate text-base font-extrabold tracking-[-0.02em]">Moje zgłoszenia</p>
+      <p className="truncate text-base font-extrabold tracking-[-0.02em]">{tx("Moje zgłoszenia")}</p>
       <p className="mt-0.5 truncate text-sm text-muted-foreground">
-        {requests === null ? "Wczytywanie…" : requests.length === 0 ? "Brak aktywnych zgłoszeń" : `${requests.length} aktywne`}
+        {requests === null ? tx("Wczytywanie…") : requests.length === 0 ? tx("Brak aktywnych zgłoszeń") : tx.count("activeRequest", requests.length)}
       </p>
     </div>
   );
 }
 
 function CollapsedQueueSummary({ queue }: { queue: PublicQueueResponse | null }) {
+  const tx = useUiText();
+
   const currentItem = queue?.items.find((item) => item.status === "now");
 
   if (currentItem && queue) {
@@ -260,12 +272,12 @@ function CollapsedQueueSummary({ queue }: { queue: PublicQueueResponse | null })
       ? "Wczytywanie kolejki…"
       : itemCount === 0
         ? "Brak utworów"
-        : formatSongCount(itemCount);
+        : tx.count("song", itemCount);
 
   return (
     <div className="min-w-0">
-      <p className="truncate text-base font-extrabold tracking-[-0.02em]">Kolejka</p>
-      <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</p>
+      <p className="truncate text-base font-extrabold tracking-[-0.02em]">{tx("Kolejka")}</p>
+      <p className="mt-0.5 truncate text-sm text-muted-foreground">{tx(subtitle)}</p>
     </div>
   );
 }
@@ -277,6 +289,8 @@ function CurrentSongSummary({
   item: PublicQueueItem;
   showSongTitles: boolean;
 }) {
+  const tx = useUiText();
+
   const hasSongDetails = showSongTitles && item.title;
 
   return (
@@ -290,21 +304,9 @@ function CurrentSongSummary({
           {hasSongDetails ? item.title : item.singerName}
         </p>
         <p className="mt-0.5 truncate text-sm text-muted-foreground">
-          {hasSongDetails ? item.artist : "Tytuł ukryty publicznie"}
+          {hasSongDetails ? item.artist : tx("Tytuł ukryty publicznie")}
         </p>
       </div>
     </>
   );
-}
-
-function formatSongCount(count: number) {
-  if (count === 1) return "1 utwór";
-  if (
-    count % 10 >= 2 &&
-    count % 10 <= 4 &&
-    (count % 100 < 12 || count % 100 > 14)
-  ) {
-    return `${count} utwory`;
-  }
-  return `${count} utworów`;
 }

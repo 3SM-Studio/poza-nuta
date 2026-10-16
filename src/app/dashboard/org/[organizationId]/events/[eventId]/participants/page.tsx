@@ -1,3 +1,4 @@
+import { getUiText } from "@/i18n/server";
 import { notFound } from "next/navigation";
 import { EventParticipantsPanel } from "@/components/operator/event-participants-panel";
 import { listEventParticipants } from "@/server/operator-api/event-participants";
@@ -5,7 +6,10 @@ import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 import { getDashboardOrganizationEventForAuthUser } from "@/server/operator-api/organizations";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Uczestnicy wydarzenia | Poza Nutą" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return { title: tx("Uczestnicy wydarzenia | Poza Nutą") };
+}
 
 export default async function EventParticipantsPage({ params }: {
   params: Promise<{ organizationId: string; eventId: string }>;
@@ -17,3 +21,4 @@ export default async function EventParticipantsPage({ params }: {
   const result = await listEventParticipants({ authUserId: session.authUser.id, organizationId, eventId });
   return <EventParticipantsPanel organizationId={organizationId} eventId={eventId} initialData={{ ...result, items: result.items.map((item) => ({ ...item, joinedAt: item.joinedAt.toISOString() })) }} />;
 }
+import type { Metadata } from "next";

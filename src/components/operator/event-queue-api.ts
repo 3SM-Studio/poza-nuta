@@ -6,6 +6,7 @@ import {
 } from "@/lib/dashboard-event-queue";
 
 import { OperatorClientError, type SongSource } from "./api";
+import type { QueueDropInput } from "@/lib/queue-placement";
 
 export type DashboardEventQueueItemDto = {
   id: number;
@@ -60,6 +61,7 @@ export type DashboardEventQueueActionResponse = {
 };
 
 export type DashboardEventQueueMoveResponse = {
+  items: DashboardEventQueueItemDto[];
   moved: boolean;
   event: {
     id: number;
@@ -67,6 +69,12 @@ export type DashboardEventQueueMoveResponse = {
   };
   request: DashboardEventQueueItemDto;
 };
+
+export function placeDashboardEventQueueRequest(organizationId: string, eventId: string, requestId: number, placement: QueueDropInput) {
+  return requestJson<DashboardEventQueueActionResponse>(`${getDashboardEventQueueApiPath(organizationId, eventId)}/requests/${requestId}/placement`, {
+    method: "POST", body: JSON.stringify(placement),
+  });
+}
 
 type ApiErrorBody = {
   error?: {

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -96,6 +98,8 @@ export function CatalogCollectionSongList({
   onSongSelect: (song: PublicSongBrowseItem) => void;
   sessionToken: string;
 }) {
+  const tx = useUiText();
+
   const loadPage = useCallback(
     async (cursor: string | null, limit: number, signal: AbortSignal) => {
       const response = await browseSessionCatalogCollection(
@@ -110,10 +114,10 @@ export function CatalogCollectionSongList({
 
   return (
     <PaginatedCatalogSongList
-      backLabel="Wróć do kolekcji"
+      backLabel={tx("Wróć do kolekcji")}
       getInitialErrorMessage={getCollectionErrorMessage}
-      heading="Kolekcja"
-      loadMoreLabel="Pokaż więcej"
+      heading={tx("Kolekcja")}
+      loadMoreLabel={tx("Pokaż więcej")}
       loadPage={loadPage}
       onBack={onBack}
       onSongSelect={onSongSelect}
@@ -123,11 +127,13 @@ export function CatalogCollectionSongList({
 }
 
 export function CatalogCollectionUnavailable({ onBack }: { onBack: () => void }) {
+  const tx = useUiText();
+
   return (
     <section aria-labelledby="catalog-collection-unavailable-heading" className="mb-7">
       <div className="mb-3 flex items-center gap-2">
         <Button
-          aria-label="Wróć do kolekcji"
+          aria-label={tx("Wróć do kolekcji")}
           className="size-11 rounded-full"
           onClick={onBack}
           size="icon"
@@ -140,12 +146,10 @@ export function CatalogCollectionUnavailable({ onBack }: { onBack: () => void })
           className="text-2xl font-extrabold tracking-[-0.04em]"
           id="catalog-collection-unavailable-heading"
         >
-          Kolekcja
-        </h1>
+          {tx("Kolekcja")}</h1>
       </div>
       <p className="py-8 text-center text-sm text-muted-foreground" role="status">
-        Ta kolekcja jest nieaktywna albo nie istnieje.
-      </p>
+        {tx("Ta kolekcja jest nieaktywna albo nie istnieje.")}</p>
     </section>
   );
 }
@@ -187,6 +191,8 @@ function PaginatedCatalogSongList({
   forceLoadMoreLoading?: boolean;
   initialLoadMoreError?: string | null;
 }) {
+  const tx = useUiText();
+
   const [state, setState] = useState<CatalogState>({
     items: initialItems ?? [],
     nextCursor: initialNextCursor,
@@ -304,17 +310,15 @@ function PaginatedCatalogSongList({
       {state.status === "error" ? (
         <div className="py-4" role="alert">
           <p className="text-sm text-destructive">
-            {state.errorMessage}
+            {tx(state.errorMessage)}
           </p>
           <Button className="mt-3" onClick={loadInitial} size="sm" type="button" variant="outline">
-            Spróbuj ponownie
-          </Button>
+            {tx("Spróbuj ponownie")}</Button>
         </div>
       ) : null}
       {state.status === "ready" && state.items.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground" role="status">
-          Nie znaleziono pasujących piosenek.
-        </p>
+          {tx("Nie znaleziono pasujących piosenek.")}</p>
       ) : null}
       {state.items.length > 0 ? (
         <SongRows songs={state.items} onSongSelect={onSongSelect} />
@@ -323,11 +327,11 @@ function PaginatedCatalogSongList({
         <div className="pt-5">
           {loadMoreError ? (
             <p className="mb-3 text-sm text-destructive" role="alert">
-              {loadMoreError}
+              {tx(loadMoreError)}
             </p>
           ) : null}
           <Button disabled={isLoadingMore} onClick={loadMore} type="button" variant="outline">
-            {isLoadingMore ? "Ładowanie…" : loadMoreError ? "Spróbuj ponownie" : loadMoreLabel}
+            {isLoadingMore ? tx("Ładowanie…") : loadMoreError ? tx("Spróbuj ponownie") : loadMoreLabel}
           </Button>
         </div>
       ) : null}
@@ -365,8 +369,10 @@ export function SongRows({
 }
 
 function SongListSkeletons() {
+  const tx = useUiText();
+
   return (
-    <div aria-label="Wczytywanie katalogu" className="border-t border-border">
+    <div aria-label={tx("Wczytywanie katalogu")} className="border-t border-border">
       {Array.from({ length: 5 }, (_, index) => (
         <div className="flex min-h-[76px] items-center gap-3 border-b border-border py-2" key={index}>
           <Skeleton className="size-14 rounded-xl" />

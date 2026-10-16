@@ -1,7 +1,27 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
+
+// Component tests render the same locale boundary as RootLayout. Tests can
+// provide a nested EN provider to exercise the actual next-intl implementation.
+vi.mock("@testing-library/react", async importOriginal => {
+  const actual = await importOriginal<typeof import("@testing-library/react")>();
+  const { createElement } = await import("react");
+  const { NextIntlClientProvider } = await import("next-intl");
+  const { default: messages } = await import("../../src/i18n/messages/pl.json");
+  return {
+    ...actual,
+    render: ((ui: Parameters<typeof actual.render>[0], options?: Parameters<typeof actual.render>[1]) => {
+      const Wrapper = options?.wrapper;
+      function LocaleTestBoundary({ children }: { children: import("react").ReactNode }) {
+        return createElement(NextIntlClientProvider, { locale: "pl", messages, timeZone: "Europe/Warsaw",
+          children: Wrapper ? createElement(Wrapper, null, children) : children });
+      }
+      return actual.render(ui, { ...options, wrapper: LocaleTestBoundary });
+    }) as typeof actual.render,
+  };
+});
 
 class TestResizeObserver implements ResizeObserver {
   disconnect() {}

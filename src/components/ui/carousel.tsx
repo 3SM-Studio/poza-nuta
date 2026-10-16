@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import * as React from "react";
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
@@ -160,10 +162,12 @@ function CarouselPrevious({
   size = "icon",
   ...props
 }: React.ComponentProps<typeof Button>) {
+  const tx = useUiText();
+
   const { orientation, scrollPrev, canScrollPrev } = useCarousel();
   return (
     <Button
-      aria-label="Poprzednie elementy"
+      aria-label={tx("Poprzednie elementy")}
       className={cn(
         "absolute size-8 rounded-full shadow-md",
         orientation === "horizontal"
@@ -190,10 +194,12 @@ function CarouselNext({
   size = "icon",
   ...props
 }: React.ComponentProps<typeof Button>) {
+  const tx = useUiText();
+
   const { orientation, scrollNext, canScrollNext } = useCarousel();
   return (
     <Button
-      aria-label="Następne elementy"
+      aria-label={tx("Następne elementy")}
       className={cn(
         "absolute size-8 rounded-full shadow-md",
         orientation === "horizontal"

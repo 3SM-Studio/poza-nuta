@@ -2,6 +2,8 @@
 
 import { readFileSync } from "node:fs";
 import { renderToString } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "@/i18n/messages/pl.json";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -23,12 +25,12 @@ describe("global application theme", () => {
   });
 
   it("does not read the selected theme during server rendering", () => {
-    expect(() => renderToString(<ThemeSwitcher managementTheme />)).not.toThrow();
+    expect(() => renderToString(<NextIntlClientProvider locale="pl" messages={messages} timeZone="Europe/Warsaw"><ThemeSwitcher managementTheme /></NextIntlClientProvider>)).not.toThrow();
     expect(() =>
       renderToString(
-        <AppThemeProvider>
+        <NextIntlClientProvider locale="pl" messages={messages} timeZone="Europe/Warsaw"><AppThemeProvider>
           <Toaster />
-        </AppThemeProvider>,
+        </AppThemeProvider></NextIntlClientProvider>,
       ),
     ).not.toThrow();
   });
@@ -62,6 +64,16 @@ describe("global application theme", () => {
         );
       }
     }
+  });
+
+  it("keeps the bootstrap inert on client mounts and remounts", () => {
+    const first = renderTheme();
+    const bootstrap = first.container.querySelector("script");
+    expect(bootstrap).toHaveAttribute("type", "application/json");
+    expect(bootstrap?.textContent).toContain(APP_THEME_STORAGE_KEY);
+    first.unmount();
+    const second = renderTheme();
+    expect(second.container.querySelector("script")).toHaveAttribute("type", "application/json");
   });
 
   it("restores the saved global preference after remount", async () => {

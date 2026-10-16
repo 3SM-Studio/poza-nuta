@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useUiText } from "@/i18n/use-ui-text";
 
 import {
   SidebarGroup,
@@ -28,18 +29,19 @@ export function SidebarNavigation({
   ariaLabel: string;
   managementTheme?: boolean;
 }) {
+  const tx = useUiText();
   const { setOpenMobile } = useSidebar();
   const activeHref = getActiveNavigationHref(pathname, groups);
 
   return (
-    <nav aria-label={ariaLabel}>
+    <nav aria-label={tx(ariaLabel)}>
       {groups.map((group) => (
         <SidebarGroup
           key={group.label}
-          {...(group.ariaLabel ? { "aria-label": group.ariaLabel } : {})}
+          {...(group.ariaLabel ? { "aria-label": tx(group.ariaLabel) } : {})}
         >
           {group.hideLabel ? null : (
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupLabel>{tx(group.label)}</SidebarGroupLabel>
           )}
           <SidebarGroupContent>
             <SidebarMenu>
@@ -53,7 +55,7 @@ export function SidebarNavigation({
                       asChild
                       isActive={isActive}
                       tooltip={{
-                        children: item.label,
+                        children: tx(item.label),
                         "data-management-theme": managementTheme
                           ? "true"
                           : undefined,
@@ -65,7 +67,7 @@ export function SidebarNavigation({
                         onClick={() => setOpenMobile(false)}
                       >
                         <Icon aria-hidden="true" />
-                        <span>{item.label}</span>
+                        <span>{tx(item.label)}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -15,6 +17,8 @@ type FieldErrors = Partial<
 >;
 
 export function OperatorSignupForm() {
+  const tx = useUiText();
+
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -71,13 +75,11 @@ export function OperatorSignupForm() {
   if (success) {
     return (
       <section className={"grid gap-4 [&_h2]:text-xl [&_h2]:font-semibold [&_p]:leading-relaxed [&_p]:text-muted-foreground"} role="status">
-        <h2>Sprawdź email</h2>
+        <h2>{tx("Sprawdź email")}</h2>
         <p>
-          Konto zostało utworzone. Sprawdź skrzynkę i potwierdź adres email.
-        </p>
+          {tx("Konto zostało utworzone. Sprawdź skrzynkę i potwierdź adres email.")}</p>
         <Link className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"}`} href="/sign-in">
-          Przejdź do logowania
-        </Link>
+          {tx("Przejdź do logowania")}</Link>
       </section>
     );
   }
@@ -85,7 +87,7 @@ export function OperatorSignupForm() {
   return (
     <form className={"grid gap-4"} onSubmit={handleSubmit} noValidate>
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="signup-email">Email</label>
+        <label htmlFor="signup-email">{tx("Email")}</label>
         <input
           id="signup-email"
           name="email"
@@ -97,11 +99,11 @@ export function OperatorSignupForm() {
           required
           autoFocus
         />
-        <FieldError message={fieldErrors.email} />
+        <FieldError message={tx(fieldErrors.email)} />
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="signup-password">Hasło</label>
+        <label htmlFor="signup-password">{tx("Hasło")}</label>
         <input
           id="signup-password"
           name="password"
@@ -113,21 +115,21 @@ export function OperatorSignupForm() {
           minLength={8}
           required
         />
-        <FieldError message={fieldErrors.password} />
+        <FieldError message={tx(fieldErrors.password)} />
         <ul
           className={"mt-0.5 grid list-none gap-1 p-0 text-xs leading-snug text-muted-foreground [&_li[data-met=true]]:text-foreground"}
-          aria-label="Wymagania hasła"
+          aria-label={tx("Wymagania hasła")}
         >
           {passwordRequirements.map((requirement) => (
             <li key={requirement.id} data-met={requirement.met}>
-              {requirement.label}
+              {tx(requirement.label)}
             </li>
           ))}
         </ul>
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="signup-confirm-password">Potwierdź hasło</label>
+        <label htmlFor="signup-confirm-password">{tx("Potwierdź hasło")}</label>
         <input
           id="signup-confirm-password"
           name="confirmPassword"
@@ -139,12 +141,12 @@ export function OperatorSignupForm() {
           minLength={8}
           required
         />
-        <FieldError message={fieldErrors.confirmPassword} />
+        <FieldError message={tx(fieldErrors.confirmPassword)} />
       </div>
 
       {error ? (
         <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
-          {error}
+          {tx(error)}
         </p>
       ) : null}
 
@@ -153,24 +155,26 @@ export function OperatorSignupForm() {
         type="submit"
         disabled={isSubmitting}
       >
-        {isSubmitting ? "Tworzenie konta..." : "Załóż konto"}
+        {isSubmitting ? tx("Tworzenie konta...") : tx("Załóż konto")}
       </button>
 
       <p className={"mt-1 text-center text-sm text-muted-foreground [&_a]:font-semibold [&_a]:text-primary [&_a]:underline-offset-4 hover:[&_a]:underline"}>
-        Masz już konto? <Link href="/sign-in">Zaloguj się</Link>
+        {tx("Masz już konto? ")}<Link href="/sign-in">{tx("Zaloguj się")}</Link>
       </p>
     </form>
   );
 }
 
 function FieldError({ message }: { message?: string }) {
+  const tx = useUiText();
+
   if (!message) {
     return null;
   }
 
   return (
     <p className={"m-0 text-sm leading-snug text-destructive"} role="alert">
-      {message}
+      {tx(message)}
     </p>
   );
 }

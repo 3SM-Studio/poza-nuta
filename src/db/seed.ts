@@ -13,7 +13,7 @@ import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 import { events, workspaces } from "./schema.ts";
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 async function seed() {
   const databaseUrl = requireAdminDatabaseUrl();

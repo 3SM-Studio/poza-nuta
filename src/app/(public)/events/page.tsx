@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 
 import styles from "@/components/public/discovery.module.css";
@@ -5,10 +7,13 @@ import { PublicEventCard } from "@/components/public/event-card";
 import { EventSearchForm } from "@/components/public/event-search-form";
 import { listPublicEvents } from "@/server/public-api/service";
 
-export const metadata: Metadata = {
-  title: "Katalog karaoke | Poza Nutą",
-  description: "Przeglądaj publiczne wydarzenia karaoke w Polsce.",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Katalog karaoke | Poza Nutą"),
+  description: tx("Przeglądaj publiczne wydarzenia karaoke w Polsce."),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,8 @@ type EventsPageProps = {
 };
 
 export default async function EventsPage({ searchParams }: EventsPageProps) {
+  const tx = await getUiText();
+
   const params = await searchParams;
   const query = getFirstParam(params.q);
   const city = getFirstParam(params.city);
@@ -43,8 +50,8 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
       <main className={styles.page}>
         <div className={styles.shell}>
           <section className={styles.errorState}>
-            <h1>Nie udało się wczytać katalogu</h1>
-            <p>Odśwież stronę albo spróbuj ponownie za chwilę.</p>
+            <h1>{tx("Nie udało się wczytać katalogu")}</h1>
+            <p>{tx("Odśwież stronę albo spróbuj ponownie za chwilę.")}</p>
           </section>
         </div>
       </main>
@@ -55,11 +62,9 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
     <main className={styles.page}>
       <div className={styles.shell}>
         <section className={styles.hero}>
-          <h1>Katalog wydarzeń karaoke</h1>
+          <h1>{tx("Katalog wydarzeń karaoke")}</h1>
           <p>
-            Przeglądaj publiczne karaoke w Polsce i zawężaj wyniki po mieście,
-            dacie, statusie oraz sortowaniu.
-          </p>
+            {tx("Przeglądaj publiczne karaoke w Polsce i zawężaj wyniki po mieście, dacie, statusie oraz sortowaniu.")}</p>
           <EventSearchForm
             showDirectoryFilters
             defaultValues={{ q: query, city, date, phase, sort }}
@@ -67,11 +72,11 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
         </section>
 
         {events.length > 0 ? (
-          <section aria-label="Wyniki katalogu">
+          <section aria-label={tx("Wyniki katalogu")}>
             <div className={styles.sectionHeader}>
               <div>
-                <h2>Wyniki</h2>
-                <p>{events.length} wydarzeń w katalogu</p>
+                <h2>{tx("Wyniki")}</h2>
+                <p>{events.length} {tx(" wydarzeń w katalogu")}</p>
               </div>
             </div>
             <div className={styles.grid}>
@@ -82,8 +87,8 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
           </section>
         ) : (
           <section className={styles.emptyState}>
-            <h2>Brak pasujących wydarzeń</h2>
-            <p>Zmień filtry lub sprawdź katalog ponownie później.</p>
+            <h2>{tx("Brak pasujących wydarzeń")}</h2>
+            <p>{tx("Zmień filtry lub sprawdź katalog ponownie później.")}</p>
           </section>
         )}
       </div>

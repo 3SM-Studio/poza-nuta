@@ -1,3 +1,5 @@
+import { assertLocalDatabaseTarget } from "../lib/local-target.ts";
+
 const POSTGRES_PROTOCOLS = new Set(["postgres:", "postgresql:"]);
 const SUPABASE_TRANSACTION_POOLER_PORT = "6543";
 
@@ -35,6 +37,9 @@ export function requireRuntimeDatabaseUrl(
     );
   }
 
+  if (environment.VERCEL !== "1" || environment.NODE_ENV === "test" || environment.NODE_ENV === "development" || environment.KUNESTU_LOCAL === "1") {
+    assertLocalDatabaseTarget(databaseUrl);
+  }
   return databaseUrl;
 }
 

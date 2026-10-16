@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SessionShellHeader } from "@/components/public/session-shell-header";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 describe("SessionShellHeader", () => {
   it("keeps the existing search control inside an opaque sticky top area", () => {
     render(

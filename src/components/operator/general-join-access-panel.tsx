@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { Check, CircleAlert, Download, ExternalLink, QrCode } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -29,24 +31,22 @@ export function GeneralJoinAccessPanel({
 }: {
   joinUrl: string | null;
 }) {
+  const tx = useUiText();
+
   if (!joinUrl) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Ogólny kod wejścia</CardTitle>
+          <CardTitle>{tx("Ogólny kod wejścia")}</CardTitle>
           <CardDescription>
-            Ten link prowadzi do formularza, w którym uczestnik wpisuje kod
-            wydarzenia.
-          </CardDescription>
+            {tx("Ten link prowadzi do formularza, w którym uczestnik wpisuje kod wydarzenia.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Alert>
             <CircleAlert aria-hidden="true" />
-            <AlertTitle>Ogólny adres jest chwilowo niedostępny</AlertTitle>
+            <AlertTitle>{tx("Ogólny adres jest chwilowo niedostępny")}</AlertTitle>
             <AlertDescription>
-              Sprawdź konfigurację kanonicznego adresu aplikacji i odśwież
-              stronę.
-            </AlertDescription>
+              {tx("Sprawdź konfigurację kanonicznego adresu aplikacji i odśwież stronę.")}</AlertDescription>
           </Alert>
         </CardContent>
       </Card>
@@ -57,6 +57,8 @@ export function GeneralJoinAccessPanel({
 }
 
 function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
+  const tx = useUiText();
+
   const [qrState, setQrState] = useState<{
     joinUrl: string;
     svg: string | null;
@@ -90,17 +92,17 @@ function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
   async function copyJoinUrl() {
     try {
       await navigator.clipboard.writeText(joinUrl);
-      toast.success("Ogólny link skopiowany.");
+      toast.success(tx("Ogólny link skopiowany."));
     } catch {
-      toast.error("Nie udało się skopiować", {
-        description: "Skopiuj link ręcznie.",
+      toast.error(tx("Nie udało się skopiować"), {
+        description: tx("Skopiuj link ręcznie."),
       });
     }
   }
 
   function downloadQrSvg() {
     if (!qrSvg) {
-      toast.error("Kod QR nie jest jeszcze gotowy.");
+      toast.error(tx("Kod QR nie jest jeszcze gotowy."));
       return;
     }
 
@@ -116,10 +118,10 @@ function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
-      toast.success("Ogólny kod QR został pobrany.");
+      toast.success(tx("Ogólny kod QR został pobrany."));
     } catch {
-      toast.error("Nie udało się pobrać kodu QR.", {
-        description: "Spróbuj ponownie za chwilę.",
+      toast.error(tx("Nie udało się pobrać kodu QR."), {
+        description: tx("Spróbuj ponownie za chwilę."),
       });
     } finally {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -129,18 +131,15 @@ function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <CardTitle>Ogólny kod wejścia</CardTitle>
+        <CardTitle>{tx("Ogólny kod wejścia")}</CardTitle>
         <CardDescription>
-          Uczestnik trafia na stronę dołączania i sam wpisuje 6-cyfrowy kod
-          właściwego wydarzenia.
-        </CardDescription>
+          {tx("Uczestnik trafia na stronę dołączania i sam wpisuje 6-cyfrowy kod właściwego wydarzenia.")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid min-w-0 grid-cols-1 gap-4 min-[60rem]:grid-cols-[minmax(0,1fr)_minmax(16rem,24rem)]">
           <div className="grid min-w-0 content-start gap-3 rounded-md border border-border bg-muted/30 p-4">
             <h2 className="text-base font-semibold leading-snug">
-              Link ogólny
-            </h2>
+              {tx("Link ogólny")}</h2>
             <a
               className="min-w-0 break-all text-primary underline underline-offset-4 focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               href={joinUrl}
@@ -154,9 +153,7 @@ function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
               />
             </a>
             <p className="text-sm text-muted-foreground">
-              Ten adres nie wskazuje jednego wydarzenia i może być używany na
-              stałych materiałach organizatora.
-            </p>
+              {tx("Ten adres nie wskazuje jednego wydarzenia i może być używany na stałych materiałach organizatora.")}</p>
             <Button
               className="justify-self-start"
               onClick={() => void copyJoinUrl()}
@@ -164,21 +161,19 @@ function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
               variant="outline"
             >
               <Check data-icon="inline-start" />
-              Kopiuj link ogólny
-            </Button>
+              {tx("Kopiuj link ogólny")}</Button>
           </div>
 
           <div className="grid min-w-0 content-start gap-3 rounded-md border border-border bg-muted/30 p-4">
             <h2 className="flex items-center gap-2 text-base font-semibold leading-snug">
               <QrCode aria-hidden="true" />
-              Ogólny kod QR
-            </h2>
+              {tx("Ogólny kod QR")}</h2>
             <div className="mx-auto grid aspect-square w-full min-w-0 max-w-sm place-items-center overflow-clip rounded-md bg-white p-3 sm:p-4">
               {qrDataUrl ? (
                 // The QR is a generated data URL, so Next image optimization is not applicable.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  alt="Kod QR prowadzący do ogólnej strony dołączania"
+                  alt={tx("Kod QR prowadzący do ogólnej strony dołączania")}
                   className="block h-auto w-full max-w-full"
                   src={qrDataUrl}
                 />
@@ -194,8 +189,7 @@ function AvailableGeneralJoinAccessPanel({ joinUrl }: { joinUrl: string }) {
               variant="outline"
             >
               <Download data-icon="inline-start" />
-              Pobierz ogólny QR (SVG)
-            </Button>
+              {tx("Pobierz ogólny QR (SVG)")}</Button>
             {qrUnavailable ? <SessionStateAlert kind="qr_unavailable" /> : null}
           </div>
         </div>

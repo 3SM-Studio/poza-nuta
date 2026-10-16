@@ -265,12 +265,27 @@ describe("import worker runtime", () => {
       loadImportWorkerProcessOptions(
         {
           NODE_ENV: "test",
-          IMPORT_WORKER_DATABASE_URL: "postgres://worker-only",
+          IMPORT_WORKER_DATABASE_URL: "postgres://worker:synthetic@127.0.0.1:55522/postgres",
           ISING_CLIENT_ID: "test-client",
+          ISING_API_BASE_URL: "http://127.0.0.1:55525",
         },
         ["--once"],
       ).once,
     ).toBe(true);
+  });
+
+  it("blocks production and unknown worker targets before creating a connection", () => {
+    for (const databaseUrl of [
+      "postgres://synthetic@db.qwmimnhdnzqfckswxjww.supabase.co:5432/postgres",
+      "postgres://synthetic@remote.example:5432/postgres",
+      "postgres://synthetic@127.0.0.1:54322/postgres",
+    ]) {
+      expect(() => loadImportWorkerProcessOptions({ NODE_ENV: "test",
+        IMPORT_WORKER_DATABASE_URL: databaseUrl, ISING_CLIENT_ID: "synthetic" }, ["--once"])).toThrow(/Blocked/);
+    }
+    expect(() => loadImportWorkerProcessOptions({ NODE_ENV: "test",
+      IMPORT_WORKER_DATABASE_URL: "postgres://worker:synthetic@127.0.0.1:55522/postgres",
+      ISING_CLIENT_ID: "synthetic", ISING_API_BASE_URL: "https://remote.example" }, ["--once"])).toThrow(/synthetic loopback/);
   });
 
   it("validates iSing configuration before the worker can start", () => {
@@ -278,7 +293,7 @@ describe("import worker runtime", () => {
       loadImportWorkerProcessOptions(
         {
           NODE_ENV: "test",
-          IMPORT_WORKER_DATABASE_URL: "postgres://worker-only",
+          IMPORT_WORKER_DATABASE_URL: "postgres://worker:synthetic@127.0.0.1:55522/postgres",
         },
         ["--once"],
       ),
@@ -288,7 +303,7 @@ describe("import worker runtime", () => {
       loadImportWorkerProcessOptions(
         {
           NODE_ENV: "test",
-          IMPORT_WORKER_DATABASE_URL: "postgres://worker-only",
+          IMPORT_WORKER_DATABASE_URL: "postgres://worker:synthetic@127.0.0.1:55522/postgres",
           ISING_CLIENT_ID: "test-client",
           ISING_API_BASE_URL: "not-a-url",
         },
@@ -300,8 +315,9 @@ describe("import worker runtime", () => {
   it("allows a bounded limit only for a controlled --once run", () => {
     const env = {
       NODE_ENV: "test",
-      IMPORT_WORKER_DATABASE_URL: "postgres://worker-only",
+      IMPORT_WORKER_DATABASE_URL: "postgres://worker:synthetic@127.0.0.1:55522/postgres",
       ISING_CLIENT_ID: "test-client",
+      ISING_API_BASE_URL: "http://127.0.0.1:55525",
       ISING_IMPORT_LIMIT: "1",
     } satisfies NodeJS.ProcessEnv;
 

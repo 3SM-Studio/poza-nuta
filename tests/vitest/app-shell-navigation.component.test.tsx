@@ -124,7 +124,7 @@ describe("shared application shell", () => {
     ).toBeVisible();
     expect(screen.getByRole("link", { name: "Zespół" })).toBeVisible();
 
-    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const breadcrumb = screen.getByRole("navigation", { name: "Nawigacja okruszkowa" });
     expect(within(breadcrumb).getByText("Studio Demo")).toBeVisible();
     expect(within(breadcrumb).getByText("Wieczór testowy")).toBeVisible();
     expect(
@@ -168,7 +168,7 @@ describe("shared application shell", () => {
     pathname = href;
     renderDashboard();
 
-    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const breadcrumb = screen.getByRole("navigation", { name: "Nawigacja okruszkowa" });
     expect(within(breadcrumb).getByText("Panel organizatora")).toBeVisible();
     expect(
       within(breadcrumb).getByText(title, {

@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
@@ -27,13 +29,18 @@ import {
   requireOperatorSession,
 } from "../../../server/operator-api/supabase-session";
 
-export const metadata: Metadata = {
-  title: "Nowa organizacja | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Nowa organizacja | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
 export default async function NewDashboardOrganizationPage() {
+  const tx = await getUiText();
+
   const session = await requireOperatorSession();
   const organizations = await listDashboardOrganizationsForAuthUser(
     session.authUser.id,
@@ -54,16 +61,14 @@ export default async function NewDashboardOrganizationPage() {
       <section className={"mx-auto grid min-h-[calc(100vh-7.5rem)] w-full max-w-[42rem] place-items-center"}>
         <Card className={"w-full"}>
           <CardHeader>
-            <CardTitle>Utwórz nową organizację</CardTitle>
+            <CardTitle>{tx("Utwórz nową organizację")}</CardTitle>
             <CardDescription>
-              Organizacje grupują Twoje wydarzenia karaoke, zespół i
-              ustawienia.
-            </CardDescription>
+              {tx("Organizacje grupują Twoje wydarzenia karaoke, zespół i ustawienia.")}</CardDescription>
           </CardHeader>
           <CardContent>
             <form className={"grid gap-4 [&_button]:justify-self-start"} action={createOrganization}>
               <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-                <label htmlFor="organization-name">Nazwa</label>
+                <label htmlFor="organization-name">{tx("Nazwa")}</label>
                 <input
                   id="organization-name"
                   name="name"
@@ -76,42 +81,37 @@ export default async function NewDashboardOrganizationPage() {
 
               <section className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"} aria-labelledby="type-title">
                 <div>
-                  <h2 id="type-title">Typ</h2>
+                  <h2 id="type-title">{tx("Typ")}</h2>
                   <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                    To pole jest teraz tylko informacyjne i nie jest zapisywane
-                    w bazie.
-                  </p>
+                    {tx("To pole jest teraz tylko informacyjne i nie jest zapisywane w bazie.")}</p>
                 </div>
-                <div className={"w-fit rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-foreground"}>Osobista</div>
+                <div className={"w-fit rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-foreground"}>{tx("Osobista")}</div>
               </section>
 
               <section className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"} aria-labelledby="plan-title">
                 <div>
-                  <h2 id="plan-title">Plan</h2>
+                  <h2 id="plan-title">{tx("Plan")}</h2>
                   <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                    Rozliczenia nie są wdrażane w tym etapie.
-                  </p>
+                    {tx("Rozliczenia nie są wdrażane w tym etapie.")}</p>
                 </div>
-                <div className={"w-fit rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-foreground"}>Darmowy</div>
+                <div className={"w-fit rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-foreground"}>{tx("Darmowy")}</div>
               </section>
 
               <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
                 <Button variant="outline" asChild>
-                  <Link href={cancelPath}>Anuluj</Link>
+                  <Link href={cancelPath}>{tx("Anuluj")}</Link>
                 </Button>
                 <button
                   className={`${"inline-flex min-h-11 items-center justify-center rounded-md border border-transparent px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"} ${"border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"}`}
                   type="submit"
                 >
-                  Utwórz organizację
-                </button>
+                  {tx("Utwórz organizację")}</button>
               </div>
             </form>
           </CardContent>
           <CardFooter>
             <p className={"mt-1.5 text-sm text-muted-foreground"}>
-              ID organizacji jest generowane automatycznie po utworzeniu.
-            </p>
+              {tx("ID organizacji jest generowane automatycznie po utworzeniu.")}</p>
           </CardFooter>
         </Card>
       </section>

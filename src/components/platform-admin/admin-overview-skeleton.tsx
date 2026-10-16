@@ -1,8 +1,12 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function AdminOverviewSkeleton() {
+  const tx = useUiText();
+
   return (
-    <div className="grid gap-7" aria-label="Ładowanie Overview" aria-busy="true">
+    <div className="grid gap-7" aria-label={tx("Ładowanie Overview")} aria-busy="true">
       <div className="grid gap-2">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-9 w-52" />

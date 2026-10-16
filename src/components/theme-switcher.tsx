@@ -1,5 +1,8 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+import { localizeUiRecord } from "@/i18n/text";
+
 import { useSyncExternalStore } from "react";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -32,6 +35,9 @@ export function ThemeSwitcher({
 }: {
   managementTheme?: boolean;
 }) {
+  const tx = useUiText();
+  const themeOptions = localizeUiRecord(getI18nRecord_themeOptions(), tx);
+
   const themeContext = useTheme();
   const mounted = useSyncExternalStore(
     subscribeToMountState,
@@ -46,8 +52,8 @@ export function ThemeSwitcher({
         variant="ghost"
         size="icon"
         className="size-11"
-        aria-label="Wybierz motyw"
-        title="Wybierz motyw"
+        aria-label={tx("Wybierz motyw")}
+        title={tx("Wybierz motyw")}
         disabled
       >
         <MonitorIcon />
@@ -71,7 +77,7 @@ export function ThemeSwitcher({
               variant="ghost"
               size="icon"
               className="size-11"
-              aria-label="Wybierz motyw"
+              aria-label={tx("Wybierz motyw")}
             >
               <SelectedIcon />
             </Button>
@@ -81,14 +87,13 @@ export function ThemeSwitcher({
           side="bottom"
           data-management-theme={managementTheme ? "true" : undefined}
         >
-          Motyw
-        </TooltipContent>
+          {tx("Motyw")}</TooltipContent>
         <DropdownMenuContent
           align="end"
           className="w-44"
           data-management-theme={managementTheme ? "true" : undefined}
         >
-          <DropdownMenuLabel>Motyw aplikacji</DropdownMenuLabel>
+          <DropdownMenuLabel>{tx("Motyw aplikacji")}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={selectedTheme}
             onValueChange={(value) => {
@@ -125,3 +130,5 @@ function getServerMountState() {
 function isAppTheme(value: string | undefined): value is AppTheme {
   return themeOptions.some((option) => option.value === value);
 }
+
+function getI18nRecord_themeOptions() { return themeOptions; }

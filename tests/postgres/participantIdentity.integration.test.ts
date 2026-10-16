@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { test, vi } from "vitest";
 import type postgres from "postgres";
 import { runFaultProcess } from "./faultProcessHarness";
+import { queuePlacementRevision } from "../../src/lib/queue-placement";
 
 import {
   applyPostgresMigration,
@@ -2095,6 +2096,95 @@ for (const kind of ["approve/approve", "approve/move", "approve/start", "fair/mo
       assert.equal(new Set(rows.map(row => row.id)).size, rows.length);
       assert.equal((await t.sql`select count(*)::integer as count from public.song_requests where event_id=${t.fixture.eventA}`)[0].count, 5, "No requests disappear");
       if (kind === "approve/start" || kind === "fair/start") assert.equal((await t.sql`select status,position from public.song_requests where id=${a}`)[0].status, "now");
+    });
+  });
+}
+
+
+async function placementTools(t: Awaited<ReturnType<typeof fairQueueTools>>) {
+  const revision = async () => queuePlacementRevision((await t.queue.getDashboardOrganizationEventQueueForAuthUser(t.scope))!.items);
+  const place = async (id: number, position: number, expectedRevision: string, lane: "approved" | "pending" | "rejected" = "approved", confirmed?: boolean) =>
+    t.queue.placeDashboardEventQueueRequestForAuthUser({ ...t.scope, requestId: id, placement: { lane, position, expectedRevision, confirmed } });
+  return { revision, place };
+}
+
+test("postgres:17-alpine: DnD atomic placement, canonical order, approval history and invalid transition", async () => {
+  await withFairQueueFixture("placement", async t => {
+    const { a, b, c, d } = await t.base(); const p = await placementTools(t);
+    const result = await p.place(d, 2, await p.revision());
+    assert.deepEqual(await t.ids(), [c, d, b, a]);
+    assert.deepEqual(result.items.filter(row => row.status === "approved").map(row => row.id), [c, d, b, a]);
+    await p.place(a, 1, await p.revision()); assert.deepEqual(await t.ids(), [a, c, d, b]);
+    assert.equal((await t.sql`select count(*)::integer as count from public.operator_audit_log
+      where action='event_queue_approve' and entity_id=${String(a)}`)[0].count, 1,
+    "Manual reorder must not reset the approval timestamp or waiting history");
+    const before = await t.snapshot();
+    await assert.rejects(p.place(c, 1, await p.revision(), "rejected"), hasPublicError(409, "INVALID_STATUS_TRANSITION"));
+    assert.deepEqual(await t.snapshot(), before);
+    await p.place(c, 1, await p.revision(), "rejected", true);
+    await p.place(c, 1, await p.revision(), "pending");
+    await p.place(c, 4, await p.revision()); assert.deepEqual(await t.ids(), [a, d, b, c]);
+    await t.action(a, "start");
+    await assert.rejects(p.place(a, 1, await p.revision()), hasPublicError(409, "INVALID_STATUS_TRANSITION"));
+    const [audit] = await t.sql`select payload from public.operator_audit_log where action='event_queue_manual_drop' order by id desc limit 1`;
+    assert.equal(audit.payload.manualDrop, true); assert.equal(audit.payload.targetPosition, 1);
+    assert.equal((await t.sql`select status from public.song_requests where id=${a}`)[0].status, "now");
+  });
+});
+
+test("postgres:17-alpine: DnD stale, RBAC, workspace/event scope, 2/2 and complete rollback", async () => {
+  await withFairQueueFixture("placement-denials", async t => {
+    const { a, b, d, people } = await t.base(); const p = await placementTools(t);
+    const stale = await p.revision(); await t.move(a, 1);
+    await assert.rejects(p.place(b, 1, stale), hasPublicError(409, "QUEUE_PLACEMENT_STALE"));
+    const before = await t.snapshot();
+    await assert.rejects(t.queue.placeDashboardEventQueueRequestForAuthUser({ ...t.scope, eventId: t.fixture.eventPublicIdB, requestId: d, placement: { lane: "approved", position: 1, expectedRevision: await p.revision() } }), hasPublicError(409, "QUEUE_PLACEMENT_STALE"));
+    await t.sql`update public.workspace_members set role='viewer' where workspace_id=(select id from public.workspaces where public_id=${t.scope.organizationId})`;
+    await assert.rejects(p.place(d, 1, await p.revision()), hasPublicError(403, "WORKSPACE_EVENT_QUEUE_MANAGE_FORBIDDEN"));
+    await t.sql`update public.workspace_members set role='owner' where workspace_id=(select id from public.workspaces where public_id=${t.scope.organizationId})`;
+    await assert.rejects(p.place(d, 999, await p.revision()), hasPublicError(409, "QUEUE_PLACEMENT_STALE"));
+    assert.deepEqual(await t.snapshot(), before, "Out-of-range position rolls back status and versions");
+    await t.sql.unsafe(`create function test_fail_drop_audit() returns trigger language plpgsql as $$ begin if NEW.payload @> '{"manualDrop":true}'::jsonb then raise exception 'placement audit failure'; end if; return NEW; end $$`);
+    await t.sql.unsafe(`create trigger test_fail_drop_audit before insert on public.operator_audit_log for each row execute function test_fail_drop_audit()`);
+    await assert.rejects(p.place(d, 1, await p.revision()));
+    assert.deepEqual(await t.snapshot(), before, "All row versions and positions roll back with audit");
+    await t.sql.unsafe(`drop trigger test_fail_drop_audit on public.operator_audit_log`);
+    await t.sql.unsafe(`drop function test_fail_drop_audit()`);
+    const third = await t.request(people[0], t.fixture.secondSongId);
+    await p.place(third, 1, await p.revision(), "rejected", true);
+    await t.request(people[0], t.fixture.secondSongId);
+    await assert.rejects(p.place(third, 1, await p.revision()), hasPublicError(409, "QUEUE_ACTIVE_DUPLICATE"));
+    // Distinct song avoids duplicate denial so capacity is checked independently.
+    await t.sql`update public.song_requests set song_id=${t.fixture.songId} where id=${third}`;
+    await t.sql`update public.song_requests set song_id=${t.fixture.secondSongId} where id=${a}`;
+    await assert.rejects(p.place(third, 1, await p.revision()), hasPublicError(409, "SESSION_REQUEST_LIMIT_REACHED"));
+    await t.sql`update public.events set status='closed',closed_at=clock_timestamp(),close_reason='manual' where id=${t.fixture.eventA}`;
+    await assert.rejects(p.place(d, 1, await p.revision()), hasPublicError(409, "EVENT_QUEUE_CLOSED"));
+  });
+});
+
+for (const kind of ["drop/drop", "drop/approve", "drop/move", "drop/start", "drop/fair"] as const) {
+  test(`postgres:17-alpine: DnD real mutex race ${kind}`, async () => {
+    await withFairQueueFixture(kind.replaceAll("/", "-"), async t => {
+      const { a, b, d } = await t.base(); const p = await placementTools(t);
+      const revision = await p.revision(); const preview = await t.fair.previewFairEventQueue(t.scope);
+      const other = kind === "drop/drop" ? () => p.place(b, 1, revision) : kind === "drop/approve" ? () => t.action(d, "approve") :
+        kind === "drop/move" ? () => t.move(b, 1) : kind === "drop/start" ? () => t.action(a, "start") :
+        () => t.fair.applyFairEventQueue({ ...t.scope, revision: preview.revision });
+      await blockedSlice4Race(t.sql, tx => tx`select id from public.event_sessions where id=${t.fixture.sessionA} for no key update`.then(() => {}),
+        [() => p.place(a, 1, revision), other], "event_sessions", outcomes => {
+          assert.ok(outcomes.some(row => row.status === "fulfilled"));
+          if (kind === "drop/drop" || kind === "drop/fair") assert.equal(outcomes.filter(row => row.status === "fulfilled").length, 1);
+          for (const row of outcomes) if (row.status === "rejected") {
+            assert.equal(getPublicStatus(row.reason), 409);
+            assert.ok(["QUEUE_PLACEMENT_STALE", "FAIR_QUEUE_PREVIEW_STALE"].includes(row.reason.code));
+          }
+        });
+      const all = await t.sql`select id,status,position from public.song_requests where event_id=${t.fixture.eventA}`;
+      assert.equal(all.length, 5); assert.equal(new Set(all.map(row => row.id)).size, 5);
+      const approved = all.filter(row => row.status === "approved").sort((a,b) => a.position-b.position);
+      assert.deepEqual(approved.map(row => row.position), approved.map((_,i) => i+1));
+      if (kind === "drop/start") assert.equal(all.find(row => Number(row.id) === a)!.status, "now");
     });
   });
 }

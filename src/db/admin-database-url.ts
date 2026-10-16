@@ -1,3 +1,5 @@
+import { assertLocalDatabaseTarget } from "../lib/local-target.ts";
+
 type DatabaseEnvironment = Readonly<Record<string, string | undefined>>;
 
 export function requireAdminDatabaseUrl(
@@ -11,5 +13,5 @@ export function requireAdminDatabaseUrl(
     );
   }
 
-  return databaseUrl;
+  return assertLocalDatabaseTarget(databaseUrl);
 }

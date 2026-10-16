@@ -1,3 +1,4 @@
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -14,10 +15,13 @@ import { PARTICIPANT_CREDENTIAL_COOKIE } from "@/server/session-api/participant-
 import { getPublicSessionPageData, type PublicSessionEvent } from "@/server/session-api/service";
 import { isTransientInfrastructureError, traceServerStep } from "@/server/runtime-diagnostics";
 
-export const metadata: Metadata = {
-  title: "Sesja karaoke | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Sesja karaoke | Poza Nutą"),
   robots: { index: false, follow: false },
 };
+}
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 

@@ -4,7 +4,7 @@ import postgres from "postgres";
 import { requireAdminDatabaseUrl } from "./admin-database-url.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 type DatabaseClient = ReturnType<typeof postgres>;
 

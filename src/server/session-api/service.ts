@@ -55,6 +55,8 @@ import {
   PUBLIC_QUEUE_VISIBLE_STATUSES,
 } from "../public-api/queue-policy";
 import { searchCatalogSongs } from "../song-search";
+import { unicodeBrowsePredicate } from "../song-search-unicode";
+import { isUnicodeSongSearchEnabled } from "../../lib/song-search-engine";
 import type { SongSearchCursor } from "../../lib/song-search-cursor";
 import {
   generateParticipantCredential,
@@ -381,7 +383,7 @@ export async function browsePublicSessionSongs(
 
   const conditions: SQL[] = [];
   if (query.q) {
-    conditions.push(ilike(songs.searchText, `%${escapeLikePattern(query.q)}%`));
+    conditions.push(isUnicodeSongSearchEnabled() ? unicodeBrowsePredicate(query.q) : ilike(songs.searchText, `%${escapeLikePattern(query.q)}%`));
   }
   if (query.genre) {
     conditions.push(matchesNormalizedSongCategory(songs.genres, query.genre));

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import type { ReactNode } from "react";
 
 import { SidebarInset } from "@/components/ui/sidebar";
@@ -30,6 +32,8 @@ export function AppShell({
   children: ReactNode;
   contentClassName?: string;
 }) {
+  const tx = useUiText();
+
   const mainId = kind === "admin" ? "admin-main" : "dashboard-main";
   const shellData =
     kind === "admin"
@@ -42,8 +46,7 @@ export function AppShell({
         href={`#${mainId}`}
         className="sr-only rounded-md bg-primary px-4 py-3 text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
       >
-        Przejdź do treści
-      </a>
+        {tx("Przejdź do treści")}</a>
       {sidebar}
       <SidebarInset id={mainId} tabIndex={-1}>
         <SiteHeader

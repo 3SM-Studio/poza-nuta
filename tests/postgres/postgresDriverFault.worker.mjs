@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { createServer, connect } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { databaseClientOptions } from '../../src/server/db-client-options.ts';
+import { assertLocalDatabaseTarget, registerPostgresTestPort } from '../../src/lib/local-target.ts';
 
 const [scenario, entry = 'esm'] = process.argv.slice(2);
 // An explicit pristine package path supports reproducible before/after runs
@@ -15,6 +16,8 @@ const postgres = entry === 'cjs'
   : (await import(driverRoot ? pathToFileURL(resolve(driverRoot, 'src/index.js')).href : 'postgres')).default;
 const url = process.env.SLICE4_FAULT_DATABASE_URL;
 assert.ok(url, 'Isolated fixture URL required');
+registerPostgresTestPort(Number(process.env.KUNESTU_FAULT_TEST_PORT));
+assertLocalDatabaseTarget(url);
 const admin = postgres(url, { ...databaseClientOptions, max: 1, fetch_types: false, onnotice: () => {} });
 let sql, proxy;
 const pairs = new Set();

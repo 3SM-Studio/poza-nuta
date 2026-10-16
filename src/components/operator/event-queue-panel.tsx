@@ -1,5 +1,8 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+import { localizeUiRecord } from "@/i18n/text";
+
 import {
   type ReactNode,
   useCallback,
@@ -9,34 +12,11 @@ import {
   useState,
 } from "react";
 import {
-  closestCorners,
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  pointerWithin,
-  PointerSensor,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragStartEvent,
-  type KeyboardCoordinateGetter,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
   ArrowDown,
   ArrowUp,
   Check,
   CircleCheck,
   CircleDot,
-  GripVertical,
   LockKeyhole,
   Mic2,
   RefreshCw,
@@ -90,12 +70,15 @@ import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { formatDuration, OperatorClientError } from "./api";
 import {
   getDashboardEventQueue,
+  placeDashboardEventQueueRequest,
   moveDashboardEventQueueRequest,
   runDashboardEventQueueAction,
   type DashboardEventQueueItemDto,
 } from "./event-queue-api";
 import { useDashboardQueueRealtime } from "./use-dashboard-queue-realtime";
 import { FairQueueControl } from "./fair-queue-control";
+import { QueueDragBoard, QueueDragNotice } from "./queue-drag-board";
+import { queuePlacementRevision, type QueueDropInput } from "@/lib/queue-placement";
 
 const actionLabels: Record<DashboardEventQueueAction, string> = {
   approve: "Zaakceptuj",
@@ -119,9 +102,9 @@ type EventQueuePanelProps = {
 };
 
 type QueueRefreshReason = QueueRealtimeInvalidateReason | "local";
-type QueueBoardLane = "pending" | "approved" | "rejected";
 
 type QueueOptimisticOperation =
+  | { id: number; kind: "placement"; requestId: number; placement: QueueDropInput; changedAt: string }
   | {
       id: number;
       kind: "action";
@@ -136,164 +119,17 @@ type QueueOptimisticOperation =
       direction: DashboardEventQueueMoveDirection;
       changedAt: string;
     }
-  | {
-      id: number;
-      kind: "move-to-position";
-      requestId: number;
-      targetPosition: number;
-      changedAt: string;
-    };
+;
 
 type QueueOptimisticOperationInput =
+  | Omit<Extract<QueueOptimisticOperation, { kind: "placement" }>, "id" | "changedAt">
   | Omit<Extract<QueueOptimisticOperation, { kind: "action" }>, "id" | "changedAt">
   | Omit<Extract<QueueOptimisticOperation, { kind: "move" }>, "id" | "changedAt">
-  | Omit<
-      Extract<QueueOptimisticOperation, { kind: "move-to-position" }>,
-      "id" | "changedAt"
-    >;
+;
 
 type QueueOptimisticState = {
   baseItems: DashboardEventQueueItemDto[];
   pendingOperations: QueueOptimisticOperation[];
-};
-
-const queueBoardLanes: QueueBoardLane[] = [
-  "pending",
-  "approved",
-  "rejected",
-];
-
-const queueBoardLaneLabels: Record<QueueBoardLane, string> = {
-  pending: "Oczekujące",
-  approved: "Zaakceptowane",
-  rejected: "Odrzucone",
-};
-
-const queueCollisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-
-  if (pointerCollisions.length > 0) {
-    return pointerCollisions;
-  }
-
-  return closestCorners({
-    ...args,
-    droppableContainers: args.droppableContainers.filter(
-      (container) => container.id !== args.active.id,
-    ),
-  });
-};
-
-const queueKeyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
-  const direction = getKeyboardDirection(event.code);
-  const { active, collisionRect, droppableContainers, droppableRects, over } =
-    args.context;
-
-  if (!direction || !active || !collisionRect) {
-    return sortableKeyboardCoordinates(event, args);
-  }
-
-  event.preventDefault();
-
-  const activeData = active.data.current as QueueRequestDragData | undefined;
-  const overData = over?.data.current as QueueDropData | undefined;
-  const currentLane = overData?.lane ?? activeData?.lane;
-
-  if (!currentLane) {
-    return sortableKeyboardCoordinates(event, args);
-  }
-
-  const collisionCenter = getRectCenter(collisionRect);
-  const enabledContainers = droppableContainers.getEnabled();
-  const sameLaneRequest =
-    direction === "up" || direction === "down"
-      ? enabledContainers
-          .map((container) => {
-            const data = container.data.current as QueueDropData | undefined;
-            const rect = droppableRects.get(container.id);
-
-            if (
-              container.id === active.id ||
-              data?.type !== "request" ||
-              data.lane !== currentLane ||
-              !rect ||
-              !isRectInKeyboardDirection(
-                getRectCenter(rect),
-                collisionCenter,
-                direction,
-              )
-            ) {
-              return null;
-            }
-
-            const center = getRectCenter(rect);
-            return {
-              rect,
-              primaryDistance: Math.abs(center.y - collisionCenter.y),
-              distance: Math.hypot(
-                center.x - collisionCenter.x,
-                center.y - collisionCenter.y,
-              ),
-            };
-          })
-          .filter((candidate): candidate is NonNullable<typeof candidate> =>
-            Boolean(candidate),
-          )
-          .sort(
-            (left, right) =>
-              left.primaryDistance - right.primaryDistance ||
-              left.distance - right.distance,
-          )[0]
-      : null;
-
-  if (sameLaneRequest) {
-    return getKeyboardRequestCoordinates(
-      sameLaneRequest.rect,
-      collisionRect,
-      direction,
-    );
-  }
-
-  const targetLane = enabledContainers
-    .map((container) => {
-      const data = container.data.current as QueueDropData | undefined;
-      const rect = droppableRects.get(container.id);
-
-      if (
-        data?.type !== "lane" ||
-        data.lane === currentLane ||
-        !rect ||
-        !isRectInKeyboardDirection(
-          getRectCenter(rect),
-          collisionCenter,
-          direction,
-        )
-      ) {
-        return null;
-      }
-
-      const center = getRectCenter(rect);
-      return {
-        rect,
-        distance: Math.hypot(
-          center.x - collisionCenter.x,
-          center.y - collisionCenter.y,
-        ),
-      };
-    })
-    .filter((candidate): candidate is NonNullable<typeof candidate> =>
-      Boolean(candidate),
-    )
-    .sort((left, right) => left.distance - right.distance)[0];
-
-  if (!targetLane) {
-    return undefined;
-  }
-
-  return {
-    x: targetLane.rect.left,
-    y: targetLane.rect.top,
-  };
 };
 
 export function EventQueuePanel({
@@ -305,6 +141,8 @@ export function EventQueuePanel({
   publicQueueEnabled,
   initialItems,
 }: EventQueuePanelProps) {
+  const tx = useUiText();
+
   const [queueState, setQueueState] = useState<QueueOptimisticState>({
     baseItems: initialItems,
     pendingOperations: [],
@@ -318,9 +156,14 @@ export function EventQueuePanel({
       ),
     [queueState],
   );
-  const [activeDragRequestId, setActiveDragRequestId] = useState<number | null>(
-    null,
-  );
+  const dragActiveRef = useRef(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [dragEpoch, setDragEpoch] = useState(0);
+  const dragEpochRef = useRef(0);
+  const [dragNotice, setDragNotice] = useState<string | null>(null);
+  const [pendingReject, setPendingReject] = useState<{ requestId: number; placement: QueueDropInput } | null>(null);
+  const rejectionFocusRequestRef = useRef<number | null>(null);
+  const [placementBusy, setPlacementBusy] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -394,17 +237,13 @@ export function EventQueuePanel({
         requestRow.hasAttribute("tabindex") &&
         !requestRow.closest('[hidden], [inert], [aria-hidden="true"]')
       ) {
-        requestRow.focus();
+        requestRow.focus({ preventScroll: true });
         focusRequestIdRef.current = null;
       }
     });
   }, []);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: queueKeyboardCoordinates }),
-  );
   const canMutate =
-    canManage && lifecycle === "active" && !queueClosedDetected && !fairQueueBusy;
+    canManage && lifecycle === "active" && !queueClosedDetected && !fairQueueBusy && !placementBusy && !pendingReject;
   const pendingMutationCount = queueState.pendingOperations.length;
   const currentItem = useMemo(
     () => items.find((item) => item.status === "now") ?? null,
@@ -420,26 +259,12 @@ export function EventQueuePanel({
         ),
     [items],
   );
-  const boardItems = useMemo(
-    () =>
-      Object.fromEntries(
-        queueBoardLanes.map((lane) => [
-          lane,
-          items.filter((item) => item.status === lane),
-        ]),
-      ) as Record<QueueBoardLane, DashboardEventQueueItemDto[]>,
-    [items],
-  );
   const closedItems = useMemo(
     () =>
       items.filter(
         (item) => item.status === "done" || item.status === "skipped",
       ),
     [items],
-  );
-  const activeDragItem = useMemo(
-    () => items.find((item) => item.id === activeDragRequestId) ?? null,
-    [activeDragRequestId, items],
   );
   const beginCanonicalRequest = useCallback(() => {
     canonicalRequestGenerationRef.current += 1;
@@ -491,7 +316,7 @@ export function EventQueuePanel({
       const showSyncIndicator = reason !== "subscribe" && reason !== "local";
       realtimeRefreshInFlightRef.current = true;
       setIsRefreshing(false);
-      setIsSyncing(showSyncIndicator);
+      if (!dragActiveRef.current) setIsSyncing(showSyncIndicator);
 
       try {
         const response = await getDashboardEventQueue(
@@ -512,10 +337,20 @@ export function EventQueuePanel({
           return;
         }
 
-        replaceQueueBase(response.items);
+        const sameRevision = queuePlacementRevision(response.items) === queuePlacementRevision(queueStateRef.current.baseItems);
+        if (dragActiveRef.current && !sameRevision) {
+          dragActiveRef.current = false;
+          setDragActive(false);
+          dragEpochRef.current += 1;
+          setDragEpoch(dragEpochRef.current);
+          setDragNotice("Kolejka została zaktualizowana. Przeciągnij zgłoszenie ponownie.");
+        }
+        // Focus/reconnect can refetch unchanged data. Keep the gesture and its
+        // DOM stable; only a changed canonical version invalidates the intent.
+        if (!dragActiveRef.current || !sameRevision) replaceQueueBase(response.items);
         // A background invalidation must not dismiss feedback about a denied
         // operator action. The next action or explicit refresh clears it.
-        if (errorSourceRef.current !== "mutation") {
+        if (errorSourceRef.current !== "mutation" && !dragActiveRef.current) {
           setError(null);
           setErrorSource(null);
         }
@@ -549,7 +384,7 @@ export function EventQueuePanel({
       } finally {
         realtimeRefreshInFlightRef.current = false;
 
-        if (isCanonicalRequestCurrent(canonicalGeneration)) {
+        if (isCanonicalRequestCurrent(canonicalGeneration) && !dragActiveRef.current) {
           setIsSyncing(false);
         }
 
@@ -654,7 +489,7 @@ export function EventQueuePanel({
       replaceQueueBase(response.items);
       setError(null);
       setErrorSource(null);
-      if (announceSuccess) toast.success("Kolejka zaktualizowana");
+      if (announceSuccess) toast.success(tx("Kolejka zaktualizowana"));
       return true;
     } catch (caughtError) {
       if (
@@ -686,7 +521,7 @@ export function EventQueuePanel({
     action: DashboardEventQueueAction,
     restoreFocus = false,
   ) {
-    if (!canMutate) {
+    if (!canMutate || dragActiveRef.current) {
       return;
     }
 
@@ -726,7 +561,7 @@ export function EventQueuePanel({
     requestId: number,
     direction: DashboardEventQueueMoveDirection,
   ) {
-    if (!canMutate) {
+    if (!canMutate || dragActiveRef.current) {
       return;
     }
 
@@ -753,7 +588,7 @@ export function EventQueuePanel({
         );
 
         if (result.moved) {
-          confirmOptimisticOperation(operation.id, result.request);
+          confirmOptimisticOperation(operation.id, result.request, result.items);
         } else {
           discardOptimisticOperation(operation.id);
         }
@@ -763,129 +598,34 @@ export function EventQueuePanel({
     });
   }
 
-  function handleMoveToPosition(
-    requestId: number,
-    targetPosition: number,
-    restoreFocus = false,
-  ) {
-    if (!canMutate) {
+  function handlePlacement(requestId: number, placement: QueueDropInput) {
+    if (!canMutate || queueStateRef.current.pendingOperations.length > 0) return;
+    setDragNotice(null);
+    if (placement.lane === "rejected" && !placement.confirmed) {
+      rejectionFocusRequestRef.current = requestId;
+      setPendingReject({ requestId, placement });
       return;
     }
+    submitPlacement(requestId, placement);
+  }
 
-    const operation = beginLocalMutation(
-      {
-        kind: "move-to-position",
-        requestId,
-        targetPosition,
-      },
-      restoreFocus ? requestId : null,
-    );
-    setError(null);
-    setErrorSource(null);
-
+  function submitPlacement(requestId: number, placement: QueueDropInput) {
+    const operation = beginLocalMutation({ kind: "placement", requestId, placement }, requestId);
+    beginCanonicalRequest();
+    setPlacementBusy(true);
+    setError(null); setErrorSource(null);
     scheduleMutation(async () => {
-      if (!canRunMutationTask()) {
-        discardOptimisticOperation(operation.id);
-        return;
-      }
-
       try {
-        const result = await moveDashboardEventQueueRequest(
-          organizationId,
-          eventId,
-          requestId,
-          { targetPosition },
-        );
-
-        if (result.moved) {
-          confirmOptimisticOperation(operation.id, result.request);
-        } else {
-          discardOptimisticOperation(operation.id);
-        }
+        if (!canRunMutationTask()) { discardOptimisticOperation(operation.id); return; }
+        const result = await placeDashboardEventQueueRequest(organizationId, eventId, requestId, placement);
+        confirmOptimisticOperation(operation.id, result.request, result.items);
+        if (mountedRef.current) setDragNotice("Zmiana kolejki zapisana.");
       } catch (caughtError) {
         await handleMutationError(caughtError, operation.id);
+      } finally {
+        if (mountedRef.current) setPlacementBusy(false);
       }
     });
-  }
-
-  function handleDragStart(event: DragStartEvent) {
-    const dragData = event.active.data.current as
-      | QueueRequestDragData
-      | undefined;
-
-    if (dragData?.type === "request") {
-      setActiveDragRequestId(dragData.requestId);
-    }
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveDragRequestId(null);
-
-    const dragData = event.active.data.current as
-      | QueueRequestDragData
-      | undefined;
-
-    if (dragData?.type !== "request") {
-      return;
-    }
-
-    if (!canMutate || !event.over) {
-      scheduleQueueRequestFocus(dragData.requestId);
-      return;
-    }
-
-    const dropData = event.over.data.current as QueueDropData | undefined;
-
-    if (!dropData) {
-      scheduleQueueRequestFocus(dragData.requestId);
-      return;
-    }
-
-    const targetLane = dropData.lane;
-    const sourceLane = dragData.lane;
-    const targetPosition = getApprovedDropPosition(
-      dropData,
-      approvedItems,
-    );
-
-    if (sourceLane === targetLane) {
-      if (
-        dropData.type === "request" &&
-        dropData.requestId === dragData.requestId
-      ) {
-        scheduleQueueRequestFocus(dragData.requestId);
-        return;
-      }
-
-      if (targetLane === "approved" && targetPosition !== null) {
-        handleMoveToPosition(dragData.requestId, targetPosition, true);
-      } else {
-        scheduleQueueRequestFocus(dragData.requestId);
-      }
-      return;
-    }
-
-    const action = getLaneTransitionAction(sourceLane, targetLane);
-
-    if (!action) {
-      scheduleQueueRequestFocus(dragData.requestId);
-      return;
-    }
-
-    handleAction(dragData.requestId, action, true);
-
-    if (targetLane === "approved" && targetPosition !== null) {
-      handleMoveToPosition(dragData.requestId, targetPosition);
-    }
-  }
-
-  function handleDragCancel() {
-    const requestId = activeDragRequestId;
-    setActiveDragRequestId(null);
-
-    if (requestId !== null) {
-      scheduleQueueRequestFocus(requestId);
-    }
   }
 
   function beginLocalMutation(
@@ -1099,12 +839,9 @@ export function EventQueuePanel({
             id="event-queue-heading"
             className="text-xl font-semibold tracking-[-0.02em]"
           >
-            Kolejka operacyjna
-          </h2>
+            {tx("Kolejka operacyjna")}</h2>
           <p className="mt-1 max-w-[70ch] text-sm text-muted-foreground">
-            Zgłoszenia tego wydarzenia. Zmiany są widoczne od razu, a zapis
-            odbywa się kolejno w tle.
-          </p>
+            {tx("Zgłoszenia tego wydarzenia. Zmiany są widoczne od razu, a zapis odbywa się kolejno w tle.")}</p>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1123,37 +860,30 @@ export function EventQueuePanel({
                 data-icon="inline-start"
               />
             )}
-            {formatLiveStatus(liveStatus)}
+            {tx(formatLiveStatus(liveStatus))}
           </Badge>
           <Badge variant="secondary">
-            Kolejka publiczna: {publicQueueEnabled ? "włączona" : "wyłączona"}
+            {tx("Kolejka publiczna: ")}{publicQueueEnabled ? tx("włączona") : tx("wyłączona")}
           </Badge>
           <Badge variant="outline">
-            {canMutate
-              ? "Możesz zarządzać"
-              : canManage
-                ? "Zmiany niedostępne"
-                : "Tylko podgląd"}
+            {canMutate ? tx("Możesz zarządzać") : canManage ? tx("Zmiany niedostępne") : tx("Tylko podgląd")}
           </Badge>
           {isSyncing ? (
             <Badge variant="secondary" role="status">
-              Synchronizacja…
-            </Badge>
+              {tx("Synchronizacja…")}</Badge>
           ) : null}
           {pendingMutationCount > 0 ? (
             <Badge variant="secondary" role="status">
-              Trwa zapis…
-            </Badge>
+              {tx("Trwa zapis…")}</Badge>
           ) : null}
           {errorSource === "refresh" ? (
             <Badge variant="destructive" role="status">
-              Błąd synchronizacji
-            </Badge>
+              {tx("Błąd synchronizacji")}</Badge>
           ) : null}
           {canManage ? <FairQueueControl
             organizationId={organizationId}
             eventId={eventId}
-            disabled={lifecycle !== "active" || queueClosedDetected || pendingMutationCount > 0 || isRefreshing}
+            disabled={lifecycle !== "active" || queueClosedDetected || pendingMutationCount > 0 || isRefreshing || dragActive || !!pendingReject || placementBusy}
             onBusyChange={busy => {
               fairQueueBusyRef.current = busy;
               setFairQueueBusy(busy);
@@ -1173,14 +903,14 @@ export function EventQueuePanel({
             variant="outline"
             type="button"
             onClick={() => void refreshQueue()}
-            disabled={isRefreshing || fairQueueBusy}
+            disabled={isRefreshing || fairQueueBusy || dragActive || placementBusy}
           >
             <RefreshCw
               aria-hidden="true"
               className={isRefreshing ? "animate-spin" : undefined}
               data-icon="inline-start"
             />
-            {isRefreshing ? "Odświeżanie…" : "Odśwież"}
+            {isRefreshing ? tx("Odświeżanie…") : tx("Odśwież")}
           </Button>
         </div>
       </header>
@@ -1193,18 +923,12 @@ export function EventQueuePanel({
         >
           <LockKeyhole aria-hidden="true" />
           <AlertTitle>
-            {lifecycle !== "active" || queueClosedDetected
-              ? "Kolejka jest zamknięta"
-              : "Tryb tylko do odczytu"}
+            {lifecycle !== "active" || queueClosedDetected ? tx("Kolejka jest zamknięta") : tx("Tryb tylko do odczytu")}
           </AlertTitle>
           <AlertDescription>
             {!canManage ? (
               <>
-                Rola viewer pozwala przeglądać kolejkę, ale nie zmieniać
-                statusów zgłoszeń ani ich kolejności.
-                {lifecycle !== "active" || queueClosedDetected
-                  ? ` ${getClosedQueueDescription(lifecycle, queueClosedDetected)}`
-                  : null}
+                {tx("Rola viewer pozwala przeglądać kolejkę, ale nie zmieniać statusów zgłoszeń ani ich kolejności.")}{lifecycle !== "active" || queueClosedDetected ? ` ${tx(getClosedQueueDescription(lifecycle, queueClosedDetected))}` : null}
               </>
             ) : (
               getClosedQueueDescription(lifecycle, queueClosedDetected)
@@ -1216,11 +940,9 @@ export function EventQueuePanel({
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>
-            {errorSource === "mutation"
-              ? "Nie udało się zapisać zmiany"
-              : "Nie udało się zsynchronizować kolejki"}
+            {errorSource === "mutation" ? tx("Nie udało się zapisać zmiany") : tx("Nie udało się zsynchronizować kolejki")}
           </AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{tx(error)}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -1229,10 +951,9 @@ export function EventQueuePanel({
           className="rounded-xl border border-dashed border-border px-4 py-6 text-center"
           data-queue-empty
         >
-          <p className="text-sm font-semibold">Brak zgłoszeń</p>
+          <p className="text-sm font-semibold">{tx("Brak zgłoszeń")}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Nowe zgłoszenia z linku sesji pojawią się tutaj.
-          </p>
+            {tx("Nowe zgłoszenia z linku sesji pojawią się tutaj.")}</p>
         </div>
       ) : null}
 
@@ -1243,14 +964,12 @@ export function EventQueuePanel({
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h3 id="current-performance-heading" className="text-base font-semibold">
-              Aktualnie śpiewane
-            </h3>
+              {tx("Aktualnie śpiewane")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Jedno bieżące zgłoszenie w wydarzeniu.
-            </p>
+              {tx("Jedno bieżące zgłoszenie w wydarzeniu.")}</p>
           </div>
           <Badge variant={currentItem ? "default" : "secondary"}>
-            {currentItem ? "Występ trwa" : "Scena wolna"}
+            {currentItem ? tx("Występ trwa") : tx("Scena wolna")}
           </Badge>
         </div>
         {currentItem ? (
@@ -1264,61 +983,60 @@ export function EventQueuePanel({
           />
         ) : (
           <CardDescription className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
-            Żadne zgłoszenie nie jest teraz oznaczone jako śpiewane.
-          </CardDescription>
+            {tx("Żadne zgłoszenie nie jest teraz oznaczone jako śpiewane.")}</CardDescription>
         )}
       </section>
 
-      <DndContext
+      {dragNotice ? <QueueDragNotice>{tx(dragNotice)}</QueueDragNotice> : null}
+      <QueueDragBoard
+        generation={dragEpoch}
         id={`event-queue:${organizationId}:${eventId}`}
-        sensors={sensors}
-        collisionDetection={queueCollisionDetection}
-        onDragStart={handleDragStart}
-        onDragCancel={handleDragCancel}
-        onDragEnd={handleDragEnd}
-        accessibility={{
-          screenReaderInstructions: {
-            draggable:
-              "Aby podnieść zgłoszenie, naciśnij spację. Strzałkami wybierz miejsce i ponownie naciśnij spację, aby je upuścić.",
-          },
+        items={items}
+        canDrag={canMutate && pendingMutationCount === 0 && !isRefreshing}
+        onDraggingChange={(active, requestId) => {
+          dragActiveRef.current = active; setDragActive(active);
+          if (!active) setIsSyncing(false);
+          if (active) {
+            setDragNotice(null);
+            focusRequestIdRef.current = null;
+            if (focusAnimationFrameRef.current !== null) {
+              window.cancelAnimationFrame(focusAnimationFrameRef.current);
+              focusAnimationFrameRef.current = null;
+            }
+          }
+          if (!active && requestId !== undefined) scheduleQueueRequestFocus(requestId);
         }}
-      >
-        <div
-          data-queue-board
-          className="grid grid-cols-1 items-start gap-4 @min-[48rem]/queue:grid-cols-2"
-        >
-          {queueBoardLanes.map((lane) => (
-            <QueueLane
-              key={lane}
-              lane={lane}
-              items={boardItems[lane]}
-              approvedItems={approvedItems}
-              canManage={canMutate}
-              onAction={handleAction}
-              onMove={handleMove}
-            />
-          ))}
-        </div>
-
-        <DragOverlay dropAnimation={null}>
-          {activeDragItem ? (
-            <div
-              data-queue-drag-overlay
-              className="h-full w-full opacity-95 shadow-2xl [&>article]:h-full"
-            >
-              <EventQueueRequestRow
-                item={activeDragItem}
-                isDragOverlay
-                canManage={false}
-                canMoveUp={false}
-                canMoveDown={false}
-                onAction={handleAction}
-                onMove={handleMove}
-              />
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+        onDrop={(requestId, placement) => {
+          if (dragEpoch === dragEpochRef.current) handlePlacement(requestId, placement);
+        }}
+        renderRow={(item, dragHandle, overlay) => <EventQueueRequestRow
+          item={item} isDragOverlay={overlay} dragHandle={dragHandle}
+          canManage={canMutate && !overlay}
+          canMoveUp={approvedItems.findIndex(row => row.id === item.id) > 0}
+          canMoveDown={item.status === "approved" && approvedItems.findIndex(row => row.id === item.id) < approvedItems.length - 1}
+          onAction={handleAction} onMove={handleMove}
+        />}
+      />
+      <AlertDialog open={pendingReject !== null} onOpenChange={open => { if (!open) setPendingReject(null); }}>
+        <AlertDialogContent onCloseAutoFocus={event => {
+          const requestId = rejectionFocusRequestRef.current;
+          if (requestId !== null) {
+            event.preventDefault();
+            rejectionFocusRequestRef.current = null;
+            scheduleQueueRequestFocus(requestId);
+          }
+        }}>
+          <AlertDialogHeader><AlertDialogTitle>{tx("Odrzucić zgłoszenie?")}</AlertDialogTitle>
+            <AlertDialogDescription>{tx("Zgłoszenie trafi do odrzuconych. Zmiana nastąpi dopiero po potwierdzeniu.")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>{tx("Anuluj")}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => {
+              if (pendingReject) submitPlacement(pendingReject.requestId, { ...pendingReject.placement, confirmed: true });
+              setPendingReject(null);
+            }}>{tx("Odrzuć zgłoszenie")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <section
         className="grid gap-3 border-t border-border pt-5"
@@ -1327,11 +1045,9 @@ export function EventQueuePanel({
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h3 id="queue-history-heading" className="text-base font-semibold">
-              Historia
-            </h3>
+              {tx("Historia")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Zagrane i pominięte zgłoszenia.
-            </p>
+              {tx("Zagrane i pominięte zgłoszenia.")}</p>
           </div>
           <Badge variant="secondary">{closedItems.length}</Badge>
         </div>
@@ -1351,205 +1067,10 @@ export function EventQueuePanel({
           </div>
         ) : (
           <CardDescription className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
-            Historia jest jeszcze pusta.
-          </CardDescription>
+            {tx("Historia jest jeszcze pusta.")}</CardDescription>
         )}
       </section>
     </section>
-  );
-}
-
-type QueueRequestDragData = {
-  type: "request";
-  requestId: number;
-  lane: QueueBoardLane;
-};
-
-type QueueLaneDropData = {
-  type: "lane";
-  lane: QueueBoardLane;
-};
-
-type QueueDropData = QueueRequestDragData | QueueLaneDropData;
-
-type QueueLaneProps = {
-  lane: QueueBoardLane;
-  items: DashboardEventQueueItemDto[];
-  approvedItems: DashboardEventQueueItemDto[];
-  canManage: boolean;
-  onAction: (
-    requestId: number,
-    action: DashboardEventQueueAction,
-    restoreFocus?: boolean,
-  ) => void;
-  onMove: (
-    requestId: number,
-    direction: DashboardEventQueueMoveDirection,
-  ) => void;
-};
-
-function QueueLane({
-  lane,
-  items,
-  approvedItems,
-  canManage,
-  onAction,
-  onMove,
-}: QueueLaneProps) {
-  const { isOver, setNodeRef } = useDroppable({
-    id: getQueueLaneId(lane),
-    data: { type: "lane", lane } satisfies QueueLaneDropData,
-    disabled: !canManage,
-  });
-
-  return (
-    <section
-      ref={setNodeRef}
-      aria-labelledby={getQueueLaneHeadingId(lane)}
-      data-queue-lane={lane}
-      className={[
-        "grid min-h-48 content-start gap-3 rounded-xl border border-border bg-muted/25 p-3 transition-colors",
-        lane === "rejected" ? "col-span-full" : "",
-        isOver ? "border-primary bg-primary/10 ring-2 ring-primary/30" : "",
-      ].join(" ")}
-    >
-      <header className={"flex items-center justify-between gap-3 px-1"}>
-        <div>
-          <h3 id={getQueueLaneHeadingId(lane)} className={"font-semibold"}>
-            {queueBoardLaneLabels[lane]}
-          </h3>
-          <p className={"mt-0.5 text-xs text-muted-foreground"}>
-            {getQueueLaneDescription(lane)}
-          </p>
-        </div>
-        <Badge variant={lane === "approved" ? "default" : "secondary"}>
-          {items.length}
-        </Badge>
-      </header>
-
-      {isOver ? (
-        <p className="rounded-lg bg-primary/10 px-3 py-2 text-center text-xs font-semibold text-foreground" role="status">
-          Upuść w sekcji „{queueBoardLaneLabels[lane]}”
-        </p>
-      ) : null}
-
-      <SortableContext
-        items={items.map((item) => getQueueRequestId(item.id))}
-        strategy={verticalListSortingStrategy}
-      >
-        <div className={"grid gap-3"}>
-          {items.map((item) => {
-            const approvedIndex = approvedItems.findIndex(
-              (approvedItem) => approvedItem.id === item.id,
-            );
-
-            return (
-              <SortableQueueRequest
-                key={item.id}
-                item={item}
-                lane={lane}
-                canManage={canManage}
-                canMoveUp={approvedIndex > 0}
-                canMoveDown={
-                  approvedIndex >= 0 &&
-                  approvedIndex < approvedItems.length - 1
-                }
-                onAction={onAction}
-                onMove={onMove}
-              />
-            );
-          })}
-        </div>
-      </SortableContext>
-
-      {items.length === 0 ? (
-        <div className={"grid min-h-28 place-items-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground"}>
-          Upuść zgłoszenie tutaj
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-type SortableQueueRequestProps = {
-  item: DashboardEventQueueItemDto;
-  lane: QueueBoardLane;
-  canManage: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-  onAction: (
-    requestId: number,
-    action: DashboardEventQueueAction,
-    restoreFocus?: boolean,
-  ) => void;
-  onMove: (
-    requestId: number,
-    direction: DashboardEventQueueMoveDirection,
-  ) => void;
-};
-
-function SortableQueueRequest({
-  item,
-  lane,
-  canManage,
-  canMoveUp,
-  canMoveDown,
-  onAction,
-  onMove,
-}: SortableQueueRequestProps) {
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({
-    id: getQueueRequestId(item.id),
-    data: {
-      type: "request",
-      requestId: item.id,
-      lane,
-    } satisfies QueueRequestDragData,
-    disabled: !canManage,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.35 : 1,
-      }}
-    >
-      <EventQueueRequestRow
-        item={item}
-        canManage={canManage}
-        canMoveUp={canMoveUp}
-        canMoveDown={canMoveDown}
-        onAction={onAction}
-        onMove={onMove}
-        dragHandle={
-          canManage ? (
-            <Button
-              ref={setActivatorNodeRef}
-              size="icon-lg"
-              variant="ghost"
-              type="button"
-              className="size-11 touch-none cursor-grab active:cursor-grabbing sm:size-9"
-              aria-label={`Przeciągnij zgłoszenie: ${item.displayName || item.singerName} — ${item.song.title}`}
-              title="Przeciągnij zgłoszenie"
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical aria-hidden="true" />
-            </Button>
-          ) : null
-        }
-      />
-    </div>
   );
 }
 
@@ -1581,13 +1102,16 @@ function EventQueueRequestRow({
   onAction,
   onMove,
 }: EventQueueRequestRowProps) {
+  const tx = useUiText();
+  const actionLabels = localizeUiRecord(getI18nRecord_actionLabels(), tx);
+
   const actions = getAvailableActions(item.status);
   const duration = formatDuration(item.song.durationSeconds);
   const requestLabel = getQueueRequestLabel(item);
 
   return (
     <article
-      aria-label={`Zgłoszenie: ${requestLabel}`}
+      aria-label={tx("Zgłoszenie: {v0}", {v0: requestLabel})}
       aria-hidden={isDragOverlay ? true : undefined}
       data-queue-request-id={isDragOverlay ? undefined : item.id}
       tabIndex={isDragOverlay ? undefined : -1}
@@ -1606,25 +1130,25 @@ function EventQueueRequestRow({
           <strong>{item.displayName || item.singerName}</strong>
           <RequestStatusBadge status={item.status} />
           <Badge variant="outline">
-            {item.requestedBy === "public" ? "Link sesji" : "Operator"}
+            {item.requestedBy === "public" ? tx("Link sesji") : tx("Operator")}
           </Badge>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <p className={"m-0 text-sm font-semibold leading-snug"}>{item.song.title}</p>
         </div>
         <p className={"mt-0.5 text-sm leading-snug text-muted-foreground"}>{item.song.artist}</p>
-        {item.note ? <p className={"mt-2 text-sm leading-relaxed text-muted-foreground"}>Notatka: {item.note}</p> : null}
+        {item.note ? <p className={"mt-2 text-sm leading-relaxed text-muted-foreground"}>{tx("Notatka: ")}{item.note}</p> : null}
       </div>
 
       <div className="flex flex-row flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground sm:flex-col sm:items-end sm:gap-1 sm:whitespace-nowrap">
         <span>
-          Pozycja: {item.status === "approved" ? item.position : "—"}
+          {tx("Pozycja: ")}{item.status === "approved" ? item.position : "—"}
         </span>
-        <span>Zgłoszono: {formatDateTime(item.createdAt)}</span>
-        {getQueueActivityTimestamp(item) ? (
-          <span>{getQueueActivityTimestamp(item)}</span>
+        <span>{tx("Zgłoszono: ")}{tx.date(item.createdAt)}</span>
+        {getQueueActivityTimestamp(item, tx.date) ? (
+          <span>{tx(getQueueActivityTimestamp(item, tx.date))}</span>
         ) : null}
-        {duration ? <span>Czas: {duration}</span> : null}
+        {duration ? <span>{tx("Czas: ")}{duration}</span> : null}
       </div>
 
       {canManage && (actions.length > 0 || item.status === "approved") ? (
@@ -1636,8 +1160,8 @@ function EventQueueRequestRow({
                 variant="outline"
                 type="button"
                 className="size-11 sm:size-7"
-                title="Przesuń w górę"
-                aria-label={`Przesuń zgłoszenie w górę: ${requestLabel}`}
+                title={tx("Przesuń w górę")}
+                aria-label={tx("Przesuń zgłoszenie w górę: {v0}", {v0: requestLabel})}
                 onClick={() => void onMove(item.id, "up")}
                 disabled={!canMoveUp}
               >
@@ -1648,8 +1172,8 @@ function EventQueueRequestRow({
                 variant="outline"
                 type="button"
                 className="size-11 sm:size-7"
-                title="Przesuń w dół"
-                aria-label={`Przesuń zgłoszenie w dół: ${requestLabel}`}
+                title={tx("Przesuń w dół")}
+                aria-label={tx("Przesuń zgłoszenie w dół: {v0}", {v0: requestLabel})}
                 onClick={() => void onMove(item.id, "down")}
                 disabled={!canMoveDown}
               >
@@ -1668,7 +1192,7 @@ function EventQueueRequestRow({
                       variant="destructive"
                       type="button"
                       className={`${destructiveButtonClassName} min-h-11 sm:min-h-7`}
-                      aria-label={getRequestActionLabel(action, item)}
+                      aria-label={`${tx(actionLabels[action])}: ${getQueueRequestLabel(item)}`}
                     >
                       {getActionIcon(action)}
                       {actionLabels[action]}
@@ -1676,24 +1200,21 @@ function EventQueueRequestRow({
                   </AlertDialogTrigger>
                   <AlertDialogContent data-management-theme="true">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Odrzucić zgłoszenie?</AlertDialogTitle>
+                      <AlertDialogTitle>{tx("Odrzucić zgłoszenie?")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Zgłoszenie zniknie z aktywnej kolejki. Można je później
-                        przywrócić.
-                      </AlertDialogDescription>
+                        {tx("Zgłoszenie zniknie z aktywnej kolejki. Można je później przywrócić.")}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                      <AlertDialogCancel>{tx("Anuluj")}</AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"
                         className={`${destructiveButtonClassName} min-h-11 sm:min-h-7`}
-                        aria-label={getRequestActionLabel(action, item)}
+                        aria-label={`${tx(actionLabels[action])}: ${getQueueRequestLabel(item)}`}
                         onClick={(event) =>
                           void onAction(item.id, action, event.detail === 0)
                         }
                       >
-                        Odrzuć zgłoszenie
-                      </AlertDialogAction>
+                        {tx("Odrzuć zgłoszenie")}</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -1715,7 +1236,7 @@ function EventQueueRequestRow({
                 }
                 type="button"
                 className="min-h-11 sm:min-h-7"
-                aria-label={getRequestActionLabel(action, item)}
+                aria-label={`${tx(actionLabels[action])}: ${getQueueRequestLabel(item)}`}
                 onClick={(event) =>
                   void onAction(item.id, action, event.detail === 0)
                 }
@@ -1737,77 +1258,10 @@ function getAvailableActions(status: DashboardEventQueueRequestStatus) {
   );
 }
 
-function getQueueLaneId(lane: QueueBoardLane) {
-  return `queue-lane:${lane}`;
-}
-
-function getQueueLaneHeadingId(lane: QueueBoardLane) {
-  return `queue-lane-${lane}-heading`;
-}
-
-function getQueueRequestId(requestId: number) {
-  return `queue-request:${requestId}`;
-}
-
 function getQueueRequestLabel(item: DashboardEventQueueItemDto) {
   return `${item.displayName || item.singerName} — ${item.song.title}`;
 }
 
-function getRequestActionLabel(
-  action: DashboardEventQueueAction,
-  item: DashboardEventQueueItemDto,
-) {
-  return `${actionLabels[action]}: ${getQueueRequestLabel(item)}`;
-}
-
-function getQueueLaneDescription(lane: QueueBoardLane) {
-  switch (lane) {
-    case "pending":
-      return "Nowe zgłoszenia do decyzji";
-    case "approved":
-      return "Kolejność występów";
-    case "rejected":
-      return "Zgłoszenia poza kolejką";
-  }
-}
-
-function getLaneTransitionAction(
-  sourceLane: QueueBoardLane,
-  targetLane: QueueBoardLane,
-): DashboardEventQueueAction | null {
-  if (sourceLane === targetLane) {
-    return null;
-  }
-
-  if (targetLane === "approved") {
-    return "approve";
-  }
-
-  if (targetLane === "pending") {
-    return "restore";
-  }
-
-  return "reject";
-}
-
-function getApprovedDropPosition(
-  dropData: QueueDropData,
-  approvedItems: DashboardEventQueueItemDto[],
-) {
-  if (dropData.lane !== "approved") {
-    return null;
-  }
-
-  if (dropData.type === "lane") {
-    return approvedItems.length + 1;
-  }
-
-  const dropIndex = approvedItems.findIndex(
-    (item) => item.id === dropData.requestId,
-  );
-
-  return dropIndex >= 0 ? dropIndex + 1 : approvedItems.length + 1;
-}
 
 function getActionIcon(action: DashboardEventQueueAction) {
   switch (action) {
@@ -1828,13 +1282,13 @@ function formatDateTime(value: string) {
   return formatWarsawDateTime(value);
 }
 
-function getQueueActivityTimestamp(item: DashboardEventQueueItemDto) {
+function getQueueActivityTimestamp(item: DashboardEventQueueItemDto, format = formatDateTime) {
   if (item.completedAt) {
-    return `Zakończono: ${formatDateTime(item.completedAt)}`;
+    return `Zakończono: ${format(item.completedAt)}`;
   }
 
   if (item.startedAt) {
-    return `Rozpoczęto: ${formatDateTime(item.startedAt)}`;
+    return `Rozpoczęto: ${format(item.startedAt)}`;
   }
 
   return null;
@@ -1869,6 +1323,8 @@ function getClientErrorMessage(error: unknown) {
       return "Nie znaleziono wydarzenia albo zgłoszenia.";
     case "INVALID_STATUS_TRANSITION":
       return "Status zgłoszenia zmienił się i ta akcja nie jest już dostępna.";
+    case "QUEUE_PLACEMENT_STALE":
+      return "Kolejka została zmieniona przez innego operatora. Sprawdź aktualną kolejność i przeciągnij ponownie.";
     case "QUEUE_ACTION_CONFLICT":
       return "Zgłoszenie zostało w międzyczasie zmienione. Odśwież kolejkę.";
     case "QUEUE_ACTIVE_DUPLICATE":
@@ -1933,6 +1389,16 @@ function applyQueueOptimisticOperation(
   operation: QueueOptimisticOperation,
 ) {
   switch (operation.kind) {
+    case "placement": {
+      const current = items.find(row => row.id === operation.requestId);
+      let next = items;
+      if (current?.status !== operation.placement.lane) {
+        next = applyOptimisticDashboardEventQueueAction(items, operation.requestId,
+          operation.placement.lane === "approved" ? "approve" : operation.placement.lane === "pending" ? "restore" : "reject", operation.changedAt);
+      }
+      return operation.placement.lane === "approved"
+        ? applyOptimisticDashboardEventQueueMoveToPosition(next, operation.requestId, operation.placement.position, operation.changedAt) : next;
+    }
     case "action":
       return applyOptimisticDashboardEventQueueAction(
         items,
@@ -1947,72 +1413,8 @@ function applyQueueOptimisticOperation(
         operation.direction,
         operation.changedAt,
       );
-    case "move-to-position":
-      return applyOptimisticDashboardEventQueueMoveToPosition(
-        items,
-        operation.requestId,
-        operation.targetPosition,
-        operation.changedAt,
-      );
+
   }
 }
 
-type QueueKeyboardDirection = "up" | "down" | "left" | "right";
-
-function getKeyboardDirection(code: string): QueueKeyboardDirection | null {
-  switch (code) {
-    case "ArrowUp":
-      return "up";
-    case "ArrowDown":
-      return "down";
-    case "ArrowLeft":
-      return "left";
-    case "ArrowRight":
-      return "right";
-    default:
-      return null;
-  }
-}
-
-function getRectCenter(rect: {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}) {
-  return {
-    x: rect.left + rect.width / 2,
-    y: rect.top + rect.height / 2,
-  };
-}
-
-function getKeyboardRequestCoordinates(
-  targetRect: { left: number; top: number; width: number; height: number },
-  collisionRect: { width: number; height: number },
-  direction: QueueKeyboardDirection,
-) {
-  return {
-    x: targetRect.left,
-    y:
-      direction === "down"
-        ? targetRect.top - (collisionRect.height - targetRect.height)
-        : targetRect.top,
-  };
-}
-
-function isRectInKeyboardDirection(
-  candidate: { x: number; y: number },
-  origin: { x: number; y: number },
-  direction: QueueKeyboardDirection,
-) {
-  switch (direction) {
-    case "up":
-      return candidate.y < origin.y;
-    case "down":
-      return candidate.y > origin.y;
-    case "left":
-      return candidate.x < origin.x;
-    case "right":
-      return candidate.x > origin.x;
-  }
-}
+function getI18nRecord_actionLabels() { return actionLabels; }

@@ -1,12 +1,16 @@
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 
 import { DiscoveryHomePage } from "@/components/public/discovery-home-page";
 
-export const metadata: Metadata = {
-  title: "Karaoke w Polsce | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Karaoke w Polsce | Poza Nutą"),
   description:
-    "Odkrywaj wydarzenia karaoke w całej Polsce, sprawdzaj lokale i organizatorów.",
+    tx("Odkrywaj wydarzenia karaoke w całej Polsce, sprawdzaj lokale i organizatorów."),
 };
+}
 
 export const dynamic = "force-dynamic";
 

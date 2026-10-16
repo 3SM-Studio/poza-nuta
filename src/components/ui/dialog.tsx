@@ -1,5 +1,7 @@
 "use client"
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
@@ -55,6 +57,8 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const tx = useUiText();
+
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -76,7 +80,7 @@ function DialogContent({
             >
               <XIcon
               />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{tx("Close")}</span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -103,6 +107,8 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
+  const tx = useUiText();
+
   return (
     <div
       data-slot="dialog-footer"
@@ -115,7 +121,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">{tx("Close")}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

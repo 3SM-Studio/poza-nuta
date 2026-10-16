@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
@@ -16,6 +18,8 @@ export function AdminShell({
   actor: AdminActorViewModel;
   children: ReactNode;
 }) {
+  const tx = useUiText();
+
   const pathname = usePathname();
   const groups = getAdminNavigationGroups(actor.role);
   const activeHref = getActiveNavigationHref(pathname, groups);
@@ -27,8 +31,8 @@ export function AdminShell({
     <AppShell
       kind="admin"
       sidebar={<AdminSidebar actor={actor} pathname={pathname} />}
-      section="Administracja"
-      title={title}
+      section={tx("Administracja")}
+      title={tx(title)}
     >
       {children}
     </AppShell>

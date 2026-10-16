@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -26,6 +28,8 @@ export function CloseEventConfirmation({
   onCancel,
   onConfirm,
 }: CloseEventConfirmationProps) {
+  const tx = useUiText();
+
   return (
     <AlertDialog
       open={open}
@@ -37,21 +41,19 @@ export function CloseEventConfirmation({
     >
       <AlertDialogContent id={id} data-management-theme="true">
         <AlertDialogHeader>
-          <AlertDialogTitle>Potwierdź zamknięcie eventu</AlertDialogTitle>
+          <AlertDialogTitle>{tx("Potwierdź zamknięcie eventu")}</AlertDialogTitle>
           <AlertDialogDescription>
-          Zamknięcie eventu ukryje aktywną sesję i zablokuje nowe zgłoszenia.
-          Kolejka i historia zostaną zachowane.
-          </AlertDialogDescription>
+          {tx("Zamknięcie eventu ukryje aktywną sesję i zablokuje nowe zgłoszenia. Kolejka i historia zostaną zachowane.")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isConfirming}>Anuluj</AlertDialogCancel>
+          <AlertDialogCancel disabled={isConfirming}>{tx("Anuluj")}</AlertDialogCancel>
           <Button
             type="button"
             variant="destructive"
             onClick={onConfirm}
             disabled={isConfirming}
           >
-            {isConfirming ? "Zamykanie…" : "Tak, zamknij event"}
+            {isConfirming ? tx("Zamykanie…") : tx("Tak, zamknij event")}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

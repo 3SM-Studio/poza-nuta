@@ -1,5 +1,7 @@
 "use client"
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { Dialog as SheetPrimitive } from "radix-ui"
@@ -51,6 +53,8 @@ function SheetContent({
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "left" | "right"
 }) {
+  const tx = useUiText();
+
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -72,7 +76,7 @@ function SheetContent({
             variant="ghost"
             size="icon"
             className="absolute top-3 right-3 size-11"
-            aria-label="Zamknij menu"
+            aria-label={tx("Zamknij menu")}
           >
             <XIcon />
           </Button>

@@ -37,13 +37,13 @@ test("feedback integrations preserve field errors and use transient action toast
 
   assert.doesNotMatch(sessionForm, /from "sonner"/);
   assert.match(sessionForm, /session-code-error/);
-  assert.match(sessionRequest, /toast\.success\("Dodano zgłoszenie"/);
-  assert.match(sessionRequest, /toast\.error\("Nie udało się dodać zgłoszenia"/);
-  assert.match(accessPanel, /toast\.success\(message\)/);
-  assert.match(eventSettings, /toast\.success\(successMessage\)/);
+  assert.match(sessionRequest, /toast\.success\(tx\("Dodano zgłoszenie"/);
+  assert.match(sessionRequest, /toast\.error\(tx\("Nie udało się dodać zgłoszenia"/);
+  assert.match(accessPanel, /toast\.success\(tx\(message\)\)/);
+  assert.match(eventSettings, /toast\.success\(tx\(successMessage\)\)/);
   assert.match(eventSettings, /<FieldIssue state=\{detailsState\}/);
-  assert.match(imports, /toast\.success\("Gotowe"/);
-  assert.match(imports, /toast\.error\("Operacja nieudana"/);
+  assert.match(imports, /toast\.success\(tx\("Gotowe"/);
+  assert.match(imports, /toast\.error\(tx\("Operacja nieudana"/);
 });
 
 function source(path: string) {

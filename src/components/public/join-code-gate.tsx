@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { CircleAlert, ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -15,6 +17,8 @@ export function JoinCodeGate({ joinError, resolveCode = resolveJoinCodeClient }:
   joinError?: string;
   resolveCode?: (code: string, signal?: AbortSignal) => Promise<JoinCodeResolution>;
 }) {
+  const tx = useUiText();
+
   const router = useRouter();
   const [activeError, setActiveError] = useState<JoinCodeError | null>(normalizeJoinError(joinError));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,10 +50,10 @@ export function JoinCodeGate({ joinError, resolveCode = resolveJoinCodeClient }:
   }
 
   return (
-    <PublicSessionEntryShell eyebrow="Dołącz do karaoke" title="Wpisz kod wydarzenia" titleId="join-code-title">
+    <PublicSessionEntryShell eyebrow={tx("Dołącz do karaoke")} title={tx("Wpisz kod wydarzenia")} titleId="join-code-title">
       <div className="px-6 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-8 sm:py-7">
-        <h2 className="text-center text-xl font-extrabold tracking-[-0.03em] sm:text-2xl">Kod wydarzenia</h2>
-        <p className="mt-1.5 mb-5 text-center text-sm text-muted-foreground">Kod znajdziesz na ekranie lub przy stoliku.</p>
+        <h2 className="text-center text-xl font-extrabold tracking-[-0.03em] sm:text-2xl">{tx("Kod wydarzenia")}</h2>
+        <p className="mt-1.5 mb-5 text-center text-sm text-muted-foreground">{tx("Kod znajdziesz na ekranie lub przy stoliku.")}</p>
         <SessionCodeForm
           externalErrorId={activeError ? "session-code-resolution-error" : undefined}
           isSubmitting={isSubmitting}
@@ -71,15 +75,17 @@ function isAbortError(error: unknown) {
 }
 
 function JoinErrorAlert({ kind }: { kind: JoinCodeError }) {
+  const tx = useUiText();
+
   const limited = kind === "rate-limited";
   const unavailable = kind === "unavailable";
   const Icon = limited ? ShieldAlert : CircleAlert;
   return (
     <Alert className="mt-4 text-left" id="session-code-resolution-error" variant={limited || unavailable ? "destructive" : "default"}>
       <Icon aria-hidden="true" />
-      <AlertTitle>{limited ? "Zbyt wiele prób" : unavailable ? "Nie możemy teraz sprawdzić kodu" : "Nie znaleźliśmy aktywnego wydarzenia"}</AlertTitle>
+      <AlertTitle>{limited ? tx("Zbyt wiele prób") : unavailable ? tx("Nie możemy teraz sprawdzić kodu") : tx("Nie znaleźliśmy aktywnego wydarzenia")}</AlertTitle>
       <AlertDescription>
-        {limited ? "Odczekaj chwilę, a potem spróbuj ponownie." : unavailable ? "Kod pozostał wpisany. Spróbuj ponownie za chwilę." : "Sprawdź cyfry lub poproś organizatora o aktualny kod."}
+        {limited ? tx("Odczekaj chwilę, a potem spróbuj ponownie.") : unavailable ? tx("Kod pozostał wpisany. Spróbuj ponownie za chwilę.") : tx("Sprawdź cyfry lub poproś organizatora o aktualny kod.")}
       </AlertDescription>
     </Alert>
   );

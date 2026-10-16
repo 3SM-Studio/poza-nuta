@@ -1,10 +1,14 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import * as React from "react"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
 function Breadcrumb({ ...props }: React.ComponentProps<"nav">) {
-  return <nav aria-label="Breadcrumb" data-slot="breadcrumb" {...props} />
+  const tx = useUiText();
+
+  return <nav aria-label={tx("Breadcrumb")} data-slot="breadcrumb" {...props} />
 }
 
 function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {

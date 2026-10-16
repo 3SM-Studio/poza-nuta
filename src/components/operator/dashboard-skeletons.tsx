@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import {
   Card,
   CardAction,
@@ -9,14 +11,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 
 export function DashboardPageSkeleton() {
+  const tx = useUiText();
+
   return (
     <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
       <section
         className={"mx-auto w-full min-w-0 max-w-[72rem]"}
         role="status"
-        aria-label="Ładowanie dashboardu"
+        aria-label={tx("Ładowanie dashboardu")}
       >
-        <span className="sr-only">Ładowanie dashboardu</span>
+        <span className="sr-only">{tx("Ładowanie dashboardu")}</span>
         <PageHeaderSkeleton action />
         <div className={"grid min-w-0 gap-4"}>
           <WideCardSkeleton />
@@ -28,14 +32,16 @@ export function DashboardPageSkeleton() {
 }
 
 export function OrganizationsListSkeleton() {
+  const tx = useUiText();
+
   return (
     <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
       <section
         className={"mx-auto w-full min-w-0 max-w-[72rem]"}
         role="status"
-        aria-label="Ładowanie listy organizacji"
+        aria-label={tx("Ładowanie listy organizacji")}
       >
-        <span className="sr-only">Ładowanie listy organizacji</span>
+        <span className="sr-only">{tx("Ładowanie listy organizacji")}</span>
         <PageHeaderSkeleton action />
         <OrganizationsListSkeletonContent count={3} />
       </section>
@@ -44,14 +50,16 @@ export function OrganizationsListSkeleton() {
 }
 
 export function OrganizationOverviewSkeleton() {
+  const tx = useUiText();
+
   return (
     <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
       <section
         className={"mx-auto w-full min-w-0 max-w-[80rem]"}
         role="status"
-        aria-label="Ładowanie organizacji"
+        aria-label={tx("Ładowanie organizacji")}
       >
-        <span className="sr-only">Ładowanie organizacji</span>
+        <span className="sr-only">{tx("Ładowanie organizacji")}</span>
         <OverviewPageHeaderSkeleton />
         <OverviewBentoSkeleton />
       </section>
@@ -60,15 +68,17 @@ export function OrganizationOverviewSkeleton() {
 }
 
 export function EventPageSkeleton() {
+  const tx = useUiText();
+
   return (
     <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
       <section
         className={"mx-auto w-full min-w-0 max-w-[72rem]"}
         role="status"
-        aria-label="Ładowanie wydarzenia"
+        aria-label={tx("Ładowanie wydarzenia")}
         aria-live="polite"
       >
-        <span className="sr-only">Ładowanie wydarzenia</span>
+        <span className="sr-only">{tx("Ładowanie wydarzenia")}</span>
         <PageHeaderSkeleton action />
         <div className={"grid min-w-0 gap-4"}>
           <WideCardSkeleton />
@@ -180,14 +190,16 @@ export function OverviewBentoSkeleton() {
 }
 
 export function AccountPageSkeleton() {
+  const tx = useUiText();
+
   return (
     <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
       <section
         className={"mx-auto w-full min-w-0 max-w-[72rem]"}
         role="status"
-        aria-label="Ładowanie konta"
+        aria-label={tx("Ładowanie konta")}
       >
-        <span className="sr-only">Ładowanie konta</span>
+        <span className="sr-only">{tx("Ładowanie konta")}</span>
         <PageHeaderSkeleton />
         <div className={"grid min-w-0 gap-4"}>
           <AccountCardSkeleton />
@@ -199,14 +211,16 @@ export function AccountPageSkeleton() {
 }
 
 export function SettingsPageSkeleton() {
+  const tx = useUiText();
+
   return (
     <main className={"min-h-[calc(100vh-4.5rem)] min-w-0 bg-background text-foreground"}>
       <section
         className={"mx-auto w-full min-w-0 max-w-[58rem]"}
         role="status"
-        aria-label="Ładowanie ustawień"
+        aria-label={tx("Ładowanie ustawień")}
       >
-        <span className="sr-only">Ładowanie ustawień</span>
+        <span className="sr-only">{tx("Ładowanie ustawień")}</span>
         <PageHeaderSkeleton action />
         <div className={"grid min-w-0 gap-4"}>
           <WideCardSkeleton />
@@ -218,13 +232,15 @@ export function SettingsPageSkeleton() {
 }
 
 export function PublicQueueSkeleton() {
+  const tx = useUiText();
+
   return (
     <section
       className="flex flex-col gap-3"
       role="status"
-      aria-label="Ładowanie publicznej kolejki"
+      aria-label={tx("Ładowanie publicznej kolejki")}
     >
-      <span className="sr-only">Ładowanie publicznej kolejki</span>
+      <span className="sr-only">{tx("Ładowanie publicznej kolejki")}</span>
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-2">

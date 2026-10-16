@@ -1,5 +1,5 @@
 export type SongSearchCursor = {
-  version: 1;
+  version: 1 | 2;
   query: string;
   relevanceTier: number;
   fuzzyRelevance: number;
@@ -16,8 +16,10 @@ export function encodeSongSearchCursor(cursor: SongSearchCursor) {
 export function decodeSongSearchCursor(
   input: string,
   expectedQuery: string,
+  expectedVersion: 1 | 2 = 1,
 ): SongSearchCursor | null {
-  if (input.length === 0 || input.length > 2_048 || !/^[A-Za-z0-9_-]+$/.test(input)) {
+  // NFD keys and UTF-8 alphabets expand beyond the former ASCII byte bound.
+  if (input.length === 0 || input.length > 8_192 || !/^[A-Za-z0-9_-]+$/.test(input)) {
     return null;
   }
 
@@ -25,7 +27,7 @@ export function decodeSongSearchCursor(
     const value = JSON.parse(Buffer.from(input, "base64url").toString("utf8")) as unknown;
     if (!isRecord(value)) return null;
     if (
-      value.version !== 1 ||
+      value.version !== expectedVersion ||
       value.query !== expectedQuery ||
       !Number.isSafeInteger(value.relevanceTier) ||
       typeof value.fuzzyRelevance !== "number" ||
@@ -52,7 +54,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isCursorText(value: unknown): value is string {
-  return typeof value === "string" && value.length <= 300;
+  return typeof value === "string" && value.length <= 1200;
 }
 
 function isSongSource(value: unknown): value is SongSearchCursor["source"] {

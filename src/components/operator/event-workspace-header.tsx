@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import {
   CalendarClockIcon,
   CheckCircle2Icon,
@@ -9,7 +11,6 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import type { DashboardEventLifecycleStatus } from "@/lib/dashboard-event-lifecycle";
-import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
 export function EventWorkspaceHeader({
   event,
@@ -23,6 +24,8 @@ export function EventWorkspaceHeader({
     lifecycle: DashboardEventLifecycleStatus;
   };
 }) {
+  const tx = useUiText();
+
   const status = getLifecyclePresentation(event.lifecycle);
   const StatusIcon = status.icon;
   const location = [event.venue, event.city].filter(Boolean).join(", ");
@@ -32,15 +35,14 @@ export function EventWorkspaceHeader({
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium text-muted-foreground">
-            Wydarzenie
-          </p>
+            {tx("Wydarzenie")}</p>
           <h1 className="mt-1 break-words text-2xl font-semibold leading-tight tracking-tight [overflow-wrap:anywhere] lg:text-3xl">
             {event.name}
           </h1>
         </div>
         <Badge className="w-fit shrink-0 gap-1.5" variant={status.variant}>
           <StatusIcon aria-hidden="true" className="size-3.5" />
-          {status.label}
+          {tx(status.label)}
         </Badge>
       </div>
 
@@ -48,8 +50,8 @@ export function EventWorkspaceHeader({
         <span className="flex min-w-0 items-start gap-2">
           <Clock3Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span className="break-words [overflow-wrap:anywhere]">
-            {formatWarsawDateTime(event.startsAt)} –{" "}
-            {formatWarsawDateTime(event.closesAt)}
+            {tx.date(event.startsAt)} –{" "}
+            {tx.date(event.closesAt)}
           </span>
         </span>
         {location ? (

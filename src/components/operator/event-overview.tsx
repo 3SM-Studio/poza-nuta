@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRightIcon,
@@ -66,6 +68,8 @@ export type EventOverviewModel = {
 };
 
 export function EventOverview({ overview }: { overview: EventOverviewModel }) {
+  const tx = useUiText();
+
   const { event, organizationId, role } = overview;
   const queuePath = getDashboardOrganizationEventQueuePath(
     organizationId,
@@ -94,72 +98,61 @@ export function EventOverview({ overview }: { overview: EventOverviewModel }) {
       data-event-overview
     >
       <h2 id="event-overview-heading" className="sr-only">
-        Przegląd wydarzenia
-      </h2>
+        {tx("Przegląd wydarzenia")}</h2>
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
         <Card className="min-w-0 lg:col-span-7">
           <CardHeader>
             <CardTitle role="heading" aria-level={3}>
-              Dostęp publiczny
-            </CardTitle>
+              {tx("Dostęp publiczny")}</CardTitle>
             <CardDescription>
-              Funkcje widoczne dla uczestników i stan publikacji wydarzenia.
-            </CardDescription>
+              {tx("Funkcje widoczne dla uczestników i stan publikacji wydarzenia.")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ItemGroup className="grid gap-3 xl:grid-cols-2">
               <StateItem
-                description={requests.description}
+                description={tx(requests.description)}
                 enabled={requests.enabled}
                 icon={requests.icon}
-                title="Zgłoszenia piosenek"
-                value={requests.value}
+                title={tx("Zgłoszenia piosenek")}
+                value={tx(requests.value)}
               />
               <StateItem
                 description={
-                  isPublished
-                    ? "Wydarzenie jest widoczne w publicznym katalogu."
-                    : "Wydarzenie nie jest widoczne w publicznym katalogu."
+                  isPublished ? tx("Wydarzenie jest widoczne w publicznym katalogu.") : tx("Wydarzenie nie jest widoczne w publicznym katalogu.")
                 }
                 enabled={isPublished}
                 icon={EyeIcon}
-                title="Katalog wydarzeń"
-                value={isPublished ? "Opublikowane" : "Nieopublikowane"}
+                title={tx("Katalog wydarzeń")}
+                value={isPublished ? tx("Opublikowane") : tx("Nieopublikowane")}
               />
               <StateItem
                 description={
-                  event.isActivePublicEvent
-                    ? "Publiczna sesja i kolejka tego wydarzenia są udostępnione uczestnikom."
-                    : "Publiczna sesja i kolejka tego wydarzenia nie są udostępnione uczestnikom."
+                  event.isActivePublicEvent ? tx("Publiczna sesja i kolejka tego wydarzenia są udostępnione uczestnikom.") : tx("Publiczna sesja i kolejka tego wydarzenia nie są udostępnione uczestnikom.")
                 }
                 enabled={event.isActivePublicEvent}
                 icon={RadioIcon}
-                title="Sesja publiczna"
-                value={event.isActivePublicEvent ? "Aktywna" : "Nieaktywna"}
+                title={tx("Sesja publiczna")}
+                value={event.isActivePublicEvent ? tx("Aktywna") : tx("Nieaktywna")}
               />
               <StateItem
                 description={
-                  event.publicQueueEnabled
-                    ? "Uczestnicy mogą zobaczyć udostępnioną kolejkę."
-                    : "Kolejka nie jest udostępniana uczestnikom."
+                  event.publicQueueEnabled ? tx("Uczestnicy mogą zobaczyć udostępnioną kolejkę.") : tx("Kolejka nie jest udostępniana uczestnikom.")
                 }
                 enabled={event.publicQueueEnabled}
                 icon={ListMusicIcon}
-                title="Publiczna kolejka"
-                value={event.publicQueueEnabled ? "Widoczna" : "Ukryta"}
+                title={tx("Publiczna kolejka")}
+                value={event.publicQueueEnabled ? tx("Widoczna") : tx("Ukryta")}
               />
               <StateItem
                 className="xl:col-span-2"
                 description={
-                  event.publicShowSongTitles
-                    ? "Publiczna kolejka pokazuje tytuły zgłoszonych utworów."
-                    : "Tytuły utworów pozostają ukryte w publicznej kolejce."
+                  event.publicShowSongTitles ? tx("Publiczna kolejka pokazuje tytuły zgłoszonych utworów.") : tx("Tytuły utworów pozostają ukryte w publicznej kolejce.")
                 }
                 enabled={event.publicShowSongTitles}
                 icon={SlidersHorizontalIcon}
-                title="Tytuły utworów"
-                value={event.publicShowSongTitles ? "Widoczne" : "Ukryte"}
+                title={tx("Tytuły utworów")}
+                value={event.publicShowSongTitles ? tx("Widoczne") : tx("Ukryte")}
               />
             </ItemGroup>
           </CardContent>
@@ -168,11 +161,9 @@ export function EventOverview({ overview }: { overview: EventOverviewModel }) {
         <Card className="min-w-0 lg:col-span-5">
           <CardHeader>
             <CardTitle role="heading" aria-level={3}>
-              Szybkie akcje
-            </CardTitle>
+              {tx("Szybkie akcje")}</CardTitle>
             <CardDescription>
-              Przejdź bezpośrednio do obsługi lub podglądu wydarzenia.
-            </CardDescription>
+              {tx("Przejdź bezpośrednio do obsługi lub podglądu wydarzenia.")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-2.5">
@@ -180,32 +171,28 @@ export function EventOverview({ overview }: { overview: EventOverviewModel }) {
                 href={queuePath}
                 icon={ListMusicIcon}
                 label={
-                  canManageDashboardEventQueue(role)
-                    ? "Zarządzaj kolejką"
-                    : "Zobacz kolejkę"
+                  canManageDashboardEventQueue(role) ? tx("Zarządzaj kolejką") : tx("Zobacz kolejkę")
                 }
               />
               {canShareDashboardOrganizationEvent(role) ? (
                 <ActionItem
                   href={sharePath}
                   icon={QrCodeIcon}
-                  label="Udostępnij link i QR"
+                  label={tx("Udostępnij link i QR")}
                 />
               ) : null}
               <ActionItem
                 href={settingsPath}
                 icon={SettingsIcon}
                 label={
-                  canManageSettings
-                    ? "Zarządzaj ustawieniami"
-                    : "Zobacz ustawienia"
+                  canManageSettings ? tx("Zarządzaj ustawieniami") : tx("Zobacz ustawienia")
                 }
               />
               {publicEventPath ? (
                 <ActionItem
                   href={publicEventPath}
                   icon={ExternalLinkIcon}
-                  label="Otwórz stronę wydarzenia"
+                  label={tx("Otwórz stronę wydarzenia")}
                   external
                 />
               ) : null}
@@ -213,7 +200,7 @@ export function EventOverview({ overview }: { overview: EventOverviewModel }) {
                 <ActionItem
                   href={event.facebookUrl}
                   icon={Share2Icon}
-                  label="Otwórz wydarzenie na Facebooku"
+                  label={tx("Otwórz wydarzenie na Facebooku")}
                   external
                 />
               ) : null}
@@ -224,11 +211,9 @@ export function EventOverview({ overview }: { overview: EventOverviewModel }) {
         <Card className="min-w-0 lg:col-span-12">
           <CardHeader>
             <CardTitle role="heading" aria-level={3}>
-              Obecność publiczna
-            </CardTitle>
+              {tx("Obecność publiczna")}</CardTitle>
             <CardDescription>
-              Adresy i kanały, przez które uczestnicy mogą znaleźć wydarzenie.
-            </CardDescription>
+              {tx("Adresy i kanały, przez które uczestnicy mogą znaleźć wydarzenie.")}</CardDescription>
             {canManageSettings &&
             (!event.slug || !event.facebookUrl || !publicPageAvailable) ? (
               <CardAction>
@@ -238,7 +223,7 @@ export function EventOverview({ overview }: { overview: EventOverviewModel }) {
                   size="sm"
                   asChild
                 >
-                  <Link href={settingsPath}>Uzupełnij</Link>
+                  <Link href={settingsPath}>{tx("Uzupełnij")}</Link>
                 </Button>
               </CardAction>
             ) : null}
@@ -246,23 +231,19 @@ export function EventOverview({ overview }: { overview: EventOverviewModel }) {
           <CardContent>
             <dl className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <PresenceDetail
-                label="Slug publiczny"
-                value={event.slug ?? "Nie ustawiono"}
+                label={tx("Slug publiczny")}
+                value={event.slug ?? tx("Nie ustawiono")}
               />
               <PresenceDetail
-                label="Strona wydarzenia"
+                label={tx("Strona wydarzenia")}
                 value={
-                  publicPageAvailable
-                    ? "Dostępna publicznie"
-                    : hasValidSlug
-                      ? "Nieopublikowana"
-                      : "Brak poprawnego adresu"
+                  publicPageAvailable ? tx("Dostępna publicznie") : hasValidSlug ? tx("Nieopublikowana") : tx("Brak poprawnego adresu")
                 }
               />
               <PresenceDetail
                 className="sm:col-span-2 lg:col-span-1"
-                label="Facebook"
-                value={event.facebookUrl ? "Skonfigurowano" : "Nie ustawiono"}
+                label={tx("Facebook")}
+                value={event.facebookUrl ? tx("Skonfigurowano") : tx("Nie ustawiono")}
               />
             </dl>
           </CardContent>
@@ -329,6 +310,8 @@ function ActionItem({
   icon: LucideIcon;
   label: string;
 }) {
+  const tx = useUiText();
+
   const TrailingIcon = external ? ArrowUpRightIcon : ArrowRightIcon;
   const content = (
     <>
@@ -339,7 +322,7 @@ function ActionItem({
         <ItemTitle className="line-clamp-none break-words">
           {label}
           {external ? (
-            <span className="sr-only">, otwiera w nowej karcie</span>
+            <span className="sr-only">{tx(", otwiera w nowej karcie")}</span>
           ) : null}
         </ItemTitle>
       </ItemContent>

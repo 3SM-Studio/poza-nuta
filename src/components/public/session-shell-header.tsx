@@ -1,11 +1,14 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import Image from "next/image";
 import type { FormEvent } from "react";
 import { ListMusic, Search, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 type SessionShellHeaderProps = {
   isSubmitting: boolean;
@@ -36,6 +39,8 @@ export function SessionShellHeader({
   onSearchCompositionEnd,
   onOpenQueue,
 }: SessionShellHeaderProps) {
+  const tx = useUiText();
+
   return (
     <header
       className="sticky top-0 z-30 shrink-0 border-b border-border bg-background/95 px-4 pt-[max(0.6rem,env(safe-area-inset-top))] pb-3 backdrop-blur sm:px-8"
@@ -53,9 +58,10 @@ export function SessionShellHeader({
           />
         </div>
         <div className="flex items-center gap-0.5">
+          <LanguageSwitcher />
           {showQueue ? (
             <Button
-              aria-label={queueButtonLabel}
+              aria-label={tx(queueButtonLabel)}
               className="size-11 rounded-full xl:hidden"
               onClick={onOpenQueue}
               size="icon-lg"
@@ -66,7 +72,7 @@ export function SessionShellHeader({
             </Button>
           ) : null}
           {showProfile ? (
-            <Button aria-label="Zmień swój nick" className="size-11 rounded-full" onClick={onOpenProfile} size="icon-lg" type="button" variant="ghost">
+            <Button aria-label={tx("Zmień swój nick")} className="size-11 rounded-full" onClick={onOpenProfile} size="icon-lg" type="button" variant="ghost">
               <UserRound />
             </Button>
           ) : null}
@@ -75,17 +81,17 @@ export function SessionShellHeader({
 
       {showSearch ? <form className="relative mt-2" onSubmit={onSearch}>
         <label className="sr-only" htmlFor="session-song-search">
-          Tytuł lub wykonawca
-        </label>
+          {tx("Tytuł lub wykonawca")}</label>
         <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          dir="auto"
           id="session-song-search"
           className="h-12 rounded-xl border-border bg-secondary pl-10 text-base placeholder:text-muted-foreground"
           disabled={isSubmitting}
           onChange={(event) => onSearchTermChange(event.target.value)}
           onCompositionStart={onSearchCompositionStart}
           onCompositionEnd={(event) => onSearchCompositionEnd(event.currentTarget.value)}
-          placeholder="Szukaj utworu lub wykonawcy"
+          placeholder={tx("Szukaj utworu lub wykonawcy")}
           style={{ fontSize: "1rem" }}
           type="search"
           value={searchTerm}

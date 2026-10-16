@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2Icon, ChevronsUpDownIcon } from "lucide-react";
@@ -39,15 +41,17 @@ type DashboardOrganizationSwitcherProps = {
 export function DashboardOrganizationSwitcher({
   organizations,
 }: DashboardOrganizationSwitcherProps) {
+  const tx = useUiText();
+
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
   const currentOrganizationId = getSelectedOrganizationId(pathname);
   const currentOrganization = organizations.find(
     (organization) => organization.organizationId === currentOrganizationId,
   );
-  const triggerLabel = currentOrganization?.name ?? "Wybierz organizację";
+  const triggerLabel = currentOrganization?.name ?? tx("Wybierz organizację");
   const triggerContext = currentOrganization
-    ? `Poza Nutą · ${formatRole(currentOrganization.role)}`
+    ? `Poza Nutą · ${tx(formatRole(currentOrganization.role))}`
     : "Poza Nutą";
 
   return (
@@ -57,16 +61,14 @@ export function DashboardOrganizationSwitcher({
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              aria-label={`Wybierz organizację. Aktywna: ${triggerLabel}`}
+              aria-label={tx("Wybierz organizację. Aktywna: {v0}", {v0: triggerLabel})}
               tooltip={{
                 children: triggerLabel,
                 "data-management-theme": "true",
               }}
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground">
-                {currentOrganization
-                  ? getOrganizationInitials(currentOrganization.name)
-                  : <Building2Icon aria-hidden="true" />}
+                {currentOrganization ? getOrganizationInitials(currentOrganization.name) : <Building2Icon aria-hidden="true" />}
               </span>
               <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-semibold">{triggerLabel}</span>
@@ -83,7 +85,7 @@ export function DashboardOrganizationSwitcher({
             className="w-72"
             data-management-theme="true"
           >
-            <DropdownMenuLabel>Organizacje</DropdownMenuLabel>
+            <DropdownMenuLabel>{tx("Organizacje")}</DropdownMenuLabel>
             <DropdownMenuGroup>
               {organizations.length > 0 ? (
                 organizations.map((organization) => {
@@ -105,7 +107,7 @@ export function DashboardOrganizationSwitcher({
                         <span className="grid min-w-0">
                           <strong className="truncate">{organization.name}</strong>
                           <span className="truncate text-xs text-muted-foreground">
-                            {formatRole(organization.role)}
+                            {tx(formatRole(organization.role))}
                           </span>
                         </span>
                       </Link>
@@ -114,8 +116,7 @@ export function DashboardOrganizationSwitcher({
                 })
               ) : (
                 <DropdownMenuItem disabled>
-                  Brak przypisanych organizacji
-                </DropdownMenuItem>
+                  {tx("Brak przypisanych organizacji")}</DropdownMenuItem>
               )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -124,16 +125,14 @@ export function DashboardOrganizationSwitcher({
                 href={getDashboardOrganizationsPath()}
                 onClick={() => setOpenMobile(false)}
               >
-                Wszystkie organizacje
-              </Link>
+                {tx("Wszystkie organizacje")}</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link
                 href={getDashboardNewOrganizationPath()}
                 onClick={() => setOpenMobile(false)}
               >
-                Utwórz organizację
-              </Link>
+                {tx("Utwórz organizację")}</Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

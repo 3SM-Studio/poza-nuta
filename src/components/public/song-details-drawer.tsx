@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { Clock3, X } from "lucide-react";
 import { useRef } from "react";
 
@@ -33,6 +35,8 @@ export function SongDetailsDrawer({
   onOpenChange,
   onSubmit,
 }: SongDetailsDrawerProps) {
+  const tx = useUiText();
+
   const returnFocusRef = useRef<HTMLElement | null>(null);
   if (!song) return null;
 
@@ -57,14 +61,14 @@ export function SongDetailsDrawer({
         <DrawerHeader className="relative flex-row items-start gap-4 px-6 pt-5 pb-4 text-left">
           <SessionSongArtwork className="size-16" song={song} />
           <div className="min-w-0 pt-0.5">
-            <DrawerTitle className="truncate pr-10 text-xl font-extrabold tracking-[-0.035em]">
+            <DrawerTitle dir="auto" className="truncate pr-10 text-xl font-extrabold tracking-[-0.035em]">
               {song.title}
             </DrawerTitle>
-            <p className="mt-1 truncate text-sm text-muted-foreground">{song.artist}</p>
+            <p dir="auto" className="mt-1 truncate text-sm text-muted-foreground">{song.artist}</p>
           </div>
           <DrawerClose asChild>
             <Button
-              aria-label="Zamknij szczegóły utworu"
+              aria-label={tx("Zamknij szczegóły utworu")}
               className="absolute top-4 right-4 size-11 rounded-full"
               disabled={isSubmitting}
               size="icon"
@@ -78,7 +82,7 @@ export function SongDetailsDrawer({
 
         <div className="border-y border-border px-6 py-3">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
-            <span>{formatSongSource(song.source)}</span>
+            <span>{tx(formatSongSource(song.source))}</span>
             {song.durationSeconds !== null ? (
               <span className="inline-flex items-center gap-1.5">
                 <Clock3 aria-hidden="true" className="size-4" />
@@ -96,7 +100,7 @@ export function SongDetailsDrawer({
             onClick={onSubmit}
             type="button"
           >
-            {isSubmitting ? "Dodaję…" : "Dodaj do kolejki"}
+            {isSubmitting ? tx("Dodaję…") : tx("Dodaj do kolejki")}
           </Button>
         </div>
       </DrawerContent>

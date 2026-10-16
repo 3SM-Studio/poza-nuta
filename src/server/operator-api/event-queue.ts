@@ -37,6 +37,7 @@ import {
   getDashboardOrganizationEventForAuthUser,
 } from "./organizations";
 import { OperatorApiError } from "./errors";
+import { canDropQueueRequest, queuePlacementRevision, type QueueDropInput } from "../../lib/queue-placement";
 
 type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
@@ -121,6 +122,8 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
   eventId: string;
   requestId: number;
   action: DashboardEventQueueAction;
+  /** Internal manual-placement contract. Ordinary action routes never populate this. */
+  placement?: QueueDropInput;
 }) {
   return traceDbTransaction("operator.queue.action", "operator.queue.action", (onStarted) => getDb().transaction(async (transaction) => {
     onStarted();
@@ -131,6 +134,9 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       input.organizationId,
       input.eventId,
     );
+    if (input.placement && queuePlacementRevision(await loadDashboardEventQueueItems(transaction, context.event.id)) !== input.placement.expectedRevision) {
+      throw new OperatorApiError(409, "QUEUE_PLACEMENT_STALE", "The queue changed. Refresh before moving the request again.");
+    }
     const queueRequestLock = startForUpdateSelect("operator.queue.action", "operator.queue_request.lock", "song_request");
     const [queueRequest] = await transaction
       .select({
@@ -162,6 +168,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     }
 
     if (
+      !(input.placement?.lane === "approved" && queueRequest.status === "approved") &&
       !canApplyDashboardEventQueueAction(input.action, queueRequest.status)
     ) {
       throw new OperatorApiError(
@@ -172,6 +179,10 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     }
 
     const targetStatus = getDashboardEventQueueTargetStatus(input.action);
+    if (input.placement && (!canDropQueueRequest(queueRequest.status, input.placement.lane) ||
+      (input.placement.lane === "rejected" && input.placement.confirmed !== true))) {
+      throw new OperatorApiError(409, "INVALID_STATUS_TRANSITION", "This placement is not allowed or requires confirmation.");
+    }
 
     if (
       queueRequest.eventParticipantId !== null &&
@@ -271,9 +282,20 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     }
 
     if (targetStatus === "approved") {
-      const snapshot = await loadFairQueueSnapshot(transaction, context.event.id, { id: queueRequest.id, at: changedAt });
+      const snapshot = await loadFairQueueSnapshot(transaction, context.event.id,
+        queueRequest.status === "approved" ? undefined : { id: queueRequest.id, at: changedAt });
+      const order = input.placement
+        ? snapshot.requests.filter(row => row.status === "approved" && row.id !== queueRequest.id)
+          .sort((a, b) => a.position - b.position || a.id - b.id).map(row => row.id)
+        : insertFairQueue(snapshot.requests, queueRequest.id);
+      if (input.placement) {
+        if (input.placement.position < 1 || input.placement.position > order.length + 1) {
+          throw new OperatorApiError(409, "QUEUE_PLACEMENT_STALE", "The target position is no longer available.");
+        }
+        order.splice(input.placement.position - 1, 0, queueRequest.id);
+      }
       await writeApprovedOrder(transaction, context.event.id, snapshot.requests,
-        insertFairQueue(snapshot.requests, queueRequest.id), changedAt, queueRequest.id);
+        order, changedAt, queueRequest.id);
       await anchorLegacyApprovedRequests(transaction, context.event.id, snapshot.requests, changedAt, context.organization.operatorId);
     } else if (queueRequest.status === "approved") {
       await traceDbOperation("operator.queue.action", "operator.queue.renumber", () => renumberApprovedQueue(
@@ -293,10 +315,11 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       actorKind: "operator",
       operatorId: context.organization.operatorId,
       eventId: context.event.id,
-      action: `event_queue_${input.action}`,
+      action: input.placement && queueRequest.status === targetStatus ? "event_queue_manual_drop" : `event_queue_${input.action}`,
       entityId: String(queueRequest.id),
       createdAt: changedAt,
       payload: {
+        ...(input.placement ? { manualDrop: true, targetLane: input.placement.lane, targetPosition: input.placement.position } : {}),
         previousStatus: queueRequest.status,
         nextStatus: targetStatus,
         previousPosition: queueRequest.position,
@@ -315,6 +338,20 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       items: await loadDashboardEventQueueItems(transaction, context.event.id),
     };
   }));
+}
+
+export async function placeDashboardEventQueueRequestForAuthUser(input: {
+  authUserId: string; organizationId: string; eventId: string; requestId: number; placement: QueueDropInput;
+}) {
+  if (!Number.isSafeInteger(input.placement.position) || input.placement.position < 1 ||
+    !["pending", "approved", "rejected"].includes(input.placement.lane) ||
+    !input.placement.expectedRevision.startsWith("v1|") || input.placement.expectedRevision.length > 250_000) {
+    throw new OperatorApiError(400, "VALIDATION_ERROR", "Invalid queue placement.");
+  }
+  return applyDashboardOrganizationEventQueueActionForAuthUser({
+    ...input,
+    action: input.placement.lane === "approved" ? "approve" : input.placement.lane === "pending" ? "restore" : "reject",
+  });
 }
 
 export async function moveDashboardOrganizationEventQueueRequestForAuthUser(input: {
@@ -406,6 +443,7 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
     if (targetIndex < 0 || targetIndex >= orderedRequests.length) {
       return {
         moved: false as const,
+        items: await loadDashboardEventQueueItems(transaction, context.event.id),
         event: context.event,
         request: await requireDashboardEventQueueItem(
           transaction,
@@ -468,6 +506,7 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
 
     return {
       moved: true as const,
+      items: await loadDashboardEventQueueItems(transaction, context.event.id),
       event: context.event,
       request: updatedRequest,
     };

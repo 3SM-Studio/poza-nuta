@@ -1,8 +1,11 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import {
   useActionState,
   useEffect,
+  useRef,
   useState,
   type MouseEvent,
 } from "react";
@@ -95,6 +98,8 @@ export function EventManagementPanel({
   canRotateCode: boolean;
   successMessage: string | null;
 }) {
+  const tx = useUiText();
+
   const [detailsState, detailsFormAction, isSavingDetails] = useActionState(
     detailsAction,
     initialState,
@@ -116,18 +121,21 @@ export function EventManagementPanel({
     initialState,
   );
 
+  const announcedSuccess = useRef<string | null>(null);
   useEffect(() => {
-    if (successMessage) {
-      toast.success(successMessage);
+    if (!successMessage) announcedSuccess.current = null;
+    if (successMessage && announcedSuccess.current !== successMessage) {
+      announcedSuccess.current = successMessage;
+      toast.success(tx(successMessage));
     }
-  }, [successMessage]);
+  }, [successMessage, tx]);
 
   if (!canManage && !canReopen && !canRotateCode) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Zarządzanie wydarzeniem</CardTitle>
-          <CardDescription>{manageBlockedReason}</CardDescription>
+          <CardTitle>{tx("Zarządzanie wydarzeniem")}</CardTitle>
+          <CardDescription>{tx(manageBlockedReason)}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -140,15 +148,15 @@ export function EventManagementPanel({
           <>
             <ReopenWindowAlert deadline={reopenDeadline} />
             <LifecycleTimeCard
-              title="Przywrócenie wydarzenia"
-              description="Wybierz nowy przyszły czas zamknięcia. Kolejka i zgłoszenia pozostaną bez zmian."
+              title={tx("Przywrócenie wydarzenia")}
+              description={tx("Wybierz nowy przyszły czas zamknięcia. Kolejka i zgłoszenia pozostaną bez zmian.")}
               action={reopenFormAction}
               state={reopenState}
               pending={isReopening}
-              submitLabel="Przywróć wydarzenie"
+              submitLabel={tx("Przywróć wydarzenie")}
               formId="event-reopen-form"
-              confirmationTitle="Przywrócić wydarzenie?"
-              confirmationDescription="Sesja ponownie zacznie przyjmować zgłoszenia, a dotychczasowa kolejka pozostanie bez zmian."
+              confirmationTitle={tx("Przywrócić wydarzenie?")}
+              confirmationDescription={tx("Sesja ponownie zacznie przyjmować zgłoszenia, a dotychczasowa kolejka pozostanie bez zmian.")}
             />
           </>
         ) : null}
@@ -168,8 +176,7 @@ export function EventManagementPanel({
       {showClosingWarning ? (
         <Alert className={"mb-4"}>
           <AlertTitle>
-            Wydarzenie kończy się za mniej niż 30 minut. Wydłużyć?
-          </AlertTitle>
+            {tx("Wydarzenie kończy się za mniej niż 30 minut. Wydłużyć?")}</AlertTitle>
           <AlertDescription>
             <form
               id="event-warning-extend-form"
@@ -187,18 +194,16 @@ export function EventManagementPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle>Szczegóły i widoczność</CardTitle>
+          <CardTitle>{tx("Szczegóły i widoczność")}</CardTitle>
           <CardDescription>
-            Te ustawienia kontrolują harmonogram wydarzenia oraz to, czy jest
-            ono używane przez publiczny widok kolejki.
-          </CardDescription>
+            {tx("Te ustawienia kontrolują harmonogram wydarzenia oraz to, czy jest ono używane przez publiczny widok kolejki.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form className={"grid gap-4 [&_button]:justify-self-start"} action={detailsFormAction}>
             <ActionMessage state={detailsState} />
 
             <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-              <label htmlFor="event-manage-title">Nazwa wydarzenia</label>
+              <label htmlFor="event-manage-title">{tx("Nazwa wydarzenia")}</label>
               <input
                 id="event-manage-title"
                 name="title"
@@ -212,7 +217,7 @@ export function EventManagementPanel({
             </div>
 
             <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-              <label htmlFor="event-manage-venue">Miejsce</label>
+              <label htmlFor="event-manage-venue">{tx("Miejsce")}</label>
               <input
                 id="event-manage-venue"
                 name="venue"
@@ -225,7 +230,7 @@ export function EventManagementPanel({
             </div>
 
             <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-              <label htmlFor="event-manage-city">Miasto</label>
+              <label htmlFor="event-manage-city">{tx("Miasto")}</label>
               <input
                 id="event-manage-city"
                 name="city"
@@ -239,8 +244,7 @@ export function EventManagementPanel({
 
             <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-starts-at">
-                Start wydarzenia (czas polski)
-              </label>
+                {tx("Start wydarzenia (czas polski)")}</label>
               <input
                 id="event-manage-starts-at"
                 name="startsAt"
@@ -254,8 +258,7 @@ export function EventManagementPanel({
 
             <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
               <label htmlFor="event-manage-auto-close-at">
-                Czas zamknięcia (czas polski)
-              </label>
+                {tx("Czas zamknięcia (czas polski)")}</label>
               <input
                 id="event-manage-auto-close-at"
                 name="autoCloseAt"
@@ -264,14 +267,12 @@ export function EventManagementPanel({
                 aria-invalid={hasIssue(detailsState, "autoCloseAt") || undefined}
               />
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Jeśli zostawisz puste, czas zamknięcia zostanie ustawiony na 6
-                godzin po starcie.
-              </p>
+                {tx("Jeśli zostawisz puste, czas zamknięcia zostanie ustawiony na 6 godzin po starcie.")}</p>
               <FieldIssue state={detailsState} field="autoCloseAt" />
             </div>
 
             <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-              <label htmlFor="event-manage-facebook-url">Facebook URL</label>
+              <label htmlFor="event-manage-facebook-url">{tx("Facebook URL")}</label>
               <input
                 id="event-manage-facebook-url"
                 name="facebookUrl"
@@ -284,9 +285,9 @@ export function EventManagementPanel({
             </div>
 
             <div className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"}>
-              <h2>Katalog publiczny</h2>
+              <h2>{tx("Katalog publiczny")}</h2>
               <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-                <label htmlFor="event-manage-slug">Slug publiczny</label>
+                <label htmlFor="event-manage-slug">{tx("Slug publiczny")}</label>
                 <input
                   id="event-manage-slug"
                   name="slug"
@@ -297,8 +298,7 @@ export function EventManagementPanel({
                   aria-invalid={hasIssue(detailsState, "slug") || undefined}
                 />
                 <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                  Zostaw puste, aby wygenerować slug z nazwy przy publikacji.
-                </p>
+                  {tx("Zostaw puste, aby wygenerować slug z nazwy przy publikacji.")}</p>
                 <FieldIssue state={detailsState} field="slug" />
               </div>
 
@@ -309,29 +309,25 @@ export function EventManagementPanel({
                   value="public"
                   defaultChecked={initialValues.visibility === "public"}
                 />
-                <span>Opublikuj w katalogu wydarzeń</span>
+                <span>{tx("Opublikuj w katalogu wydarzeń")}</span>
               </label>
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Publiczne wydarzenie wymaga sluga i daty publikacji. Wyłączenie
-                publikacji nie usuwa historii pierwszej publikacji.
-              </p>
+                {tx("Publiczne wydarzenie wymaga sluga i daty publikacji. Wyłączenie publikacji nie usuwa historii pierwszej publikacji.")}</p>
               <FieldIssue state={detailsState} field="visibility" />
             </div>
 
             <div className={"grid min-w-0 gap-3 rounded-md border border-border bg-muted/30 p-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:leading-snug"}>
-              <h2>Widoczność i kolejka publiczna</h2>
+              <h2>{tx("Widoczność i kolejka publiczna")}</h2>
               <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
                   name="songRequestsEnabled"
                   type="checkbox"
                   defaultChecked={initialValues.songRequestsEnabled}
                 />
-                <span>Publiczne zgłoszenia włączone</span>
+                <span>{tx("Publiczne zgłoszenia włączone")}</span>
               </label>
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Decyduje, czy publiczny endpoint wydarzenia przyjmuje nowe
-                piosenki.
-              </p>
+                {tx("Decyduje, czy publiczny endpoint wydarzenia przyjmuje nowe piosenki.")}</p>
 
               <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
@@ -339,12 +335,10 @@ export function EventManagementPanel({
                   type="checkbox"
                   defaultChecked={initialValues.publicQueueEnabled}
                 />
-                <span>Publiczna kolejka włączona</span>
+                <span>{tx("Publiczna kolejka włączona")}</span>
               </label>
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Decyduje, czy ludzie mogą korzystać z publicznego widoku kolejki
-                dla tego wydarzenia.
-              </p>
+                {tx("Decyduje, czy ludzie mogą korzystać z publicznego widoku kolejki dla tego wydarzenia.")}</p>
 
               <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
@@ -352,12 +346,10 @@ export function EventManagementPanel({
                   type="checkbox"
                   defaultChecked={initialValues.publicShowSongTitles}
                 />
-                <span>Pokazuj tytuły piosenek publicznie</span>
+                <span>{tx("Pokazuj tytuły piosenek publicznie")}</span>
               </label>
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Decyduje, czy publicznie widać tytuły zgłoszeń, czy tylko osoby
-                i statusy.
-              </p>
+                {tx("Decyduje, czy publicznie widać tytuły zgłoszeń, czy tylko osoby i statusy.")}</p>
 
               <label className={"flex items-center gap-3 text-sm font-semibold [&_input]:size-5 [&_input]:accent-primary"}>
                 <input
@@ -365,17 +357,16 @@ export function EventManagementPanel({
                   type="checkbox"
                   defaultChecked={initialValues.isActivePublicEvent}
                 />
-                <span>Event aktywny publicznie</span>
+                <span>{tx("Event aktywny publicznie")}</span>
               </label>
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Udostępnia publiczną sesję i kolejkę tego wydarzenia.
-              </p>
+                {tx("Udostępnia publiczną sesję i kolejkę tego wydarzenia.")}</p>
               <FieldIssue state={detailsState} field="isActivePublicEvent" />
             </div>
 
             <div className={"flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:max-w-full"}>
               <Button type="submit" disabled={isSavingDetails}>
-                {isSavingDetails ? "Zapisywanie..." : "Zapisz szczegóły"}
+                {isSavingDetails ? tx("Zapisywanie...") : tx("Zapisz szczegóły")}
               </Button>
             </div>
           </form>
@@ -392,11 +383,9 @@ export function EventManagementPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle>Szybkie wydłużenie</CardTitle>
+          <CardTitle>{tx("Szybkie wydłużenie")}</CardTitle>
           <CardDescription>
-            Wydłużamy względem późniejszej wartości: teraz albo obecnego czasu
-            zamknięcia.
-          </CardDescription>
+            {tx("Wydłużamy względem późniejszej wartości: teraz albo obecnego czasu zamknięcia.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -409,7 +398,7 @@ export function EventManagementPanel({
               <ExtendButtons disabled={isExtending} formId="event-extend-form" />
             </div>
             <div className="grid gap-2 sm:max-w-sm">
-              <label htmlFor="event-extend-closes-at">Własny czas zamknięcia</label>
+              <label htmlFor="event-extend-closes-at">{tx("Własny czas zamknięcia")}</label>
               <input
                 id="event-extend-closes-at"
                 name="closesAt"
@@ -421,10 +410,10 @@ export function EventManagementPanel({
               <ConfirmedSubmitButton
                 formId="event-extend-form"
                 pending={isExtending}
-                triggerLabel="Ustaw własny czas"
-                pendingLabel="Zapisywanie..."
-                title="Przedłużyć wydarzenie?"
-                description="Nowy czas zamknięcia zostanie ustawiony, a sesja i kolejka pozostaną bez zmian."
+                triggerLabel={tx("Ustaw własny czas")}
+                pendingLabel={tx("Zapisywanie...")}
+                title={tx("Przedłużyć wydarzenie?")}
+                description={tx("Nowy czas zamknięcia zostanie ustawiony, a sesja i kolejka pozostaną bez zmian.")}
               />
             </div>
           </form>
@@ -433,11 +422,9 @@ export function EventManagementPanel({
 
       <Card className={"border-destructive/40"}>
         <CardHeader>
-          <CardTitle>Zamknięcie wydarzenia</CardTitle>
+          <CardTitle>{tx("Zamknięcie wydarzenia")}</CardTitle>
           <CardDescription>
-            Zamknięcie ustawia status wydarzenia na zamknięty i nie usuwa
-            żadnych danych.
-          </CardDescription>
+            {tx("Zamknięcie ustawia status wydarzenia na zamknięty i nie usuwa żadnych danych.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -450,10 +437,10 @@ export function EventManagementPanel({
               <ConfirmedSubmitButton
                 formId="event-close-form"
                 pending={isClosing}
-                triggerLabel="Zamknij wydarzenie teraz"
-                pendingLabel="Zamykanie..."
-                title="Zamknąć wydarzenie?"
-                description="Nowe zgłoszenia zostaną zablokowane. Kolejka i historia zgłoszeń nie zostaną usunięte."
+                triggerLabel={tx("Zamknij wydarzenie teraz")}
+                pendingLabel={tx("Zamykanie...")}
+                title={tx("Zamknąć wydarzenie?")}
+                description={tx("Nowe zgłoszenia zostaną zablokowane. Kolejka i historia zgłoszeń nie zostaną usunięte.")}
                 destructive
               />
             </div>
@@ -471,6 +458,8 @@ function ExtendButtons({
   disabled: boolean;
   formId: string;
 }) {
+  const tx = useUiText();
+
   return (
     <>
       {DASHBOARD_EVENT_EXTENSION_MINUTES.map((minutes) => (
@@ -479,9 +468,9 @@ function ExtendButtons({
           formId={formId}
           pending={disabled}
           triggerLabel={`+${minutes} min`}
-          pendingLabel="Zapisywanie..."
-          title="Przedłużyć wydarzenie?"
-          description={`Czas zamknięcia zostanie przedłużony o ${minutes} minut. Sesja i kolejka pozostaną bez zmian.`}
+          pendingLabel={tx("Zapisywanie...")}
+          title={tx("Przedłużyć wydarzenie?")}
+          description={tx("Czas zamknięcia zostanie przedłużony o {v0} minut. Sesja i kolejka pozostaną bez zmian.", {v0: minutes})}
           name="minutes"
           value={String(minutes)}
         />
@@ -511,6 +500,8 @@ function LifecycleTimeCard({
   confirmationTitle: string;
   confirmationDescription: string;
 }) {
+  const tx = useUiText();
+
   return (
     <Card>
       <CardHeader>
@@ -524,7 +515,7 @@ function LifecycleTimeCard({
             <ExtendButtons disabled={pending} formId={formId} />
           </div>
           <div className="grid gap-2 sm:max-w-sm">
-            <label htmlFor={`${title}-closes-at`}>Własny czas zamknięcia</label>
+            <label htmlFor={`${title}-closes-at`}>{tx("Własny czas zamknięcia")}</label>
             <input
               id={`${title}-closes-at`}
               name="closesAt"
@@ -537,7 +528,7 @@ function LifecycleTimeCard({
               formId={formId}
               pending={pending}
               triggerLabel={submitLabel}
-              pendingLabel="Zapisywanie..."
+              pendingLabel={tx("Zapisywanie...")}
               title={confirmationTitle}
               description={confirmationDescription}
             />
@@ -557,39 +548,37 @@ function SessionCodeRotationCard({
   state: EventManagementActionState;
   pending: boolean;
 }) {
+  const tx = useUiText();
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Kod dołączenia</CardTitle>
+        <CardTitle>{tx("Kod dołączenia")}</CardTitle>
         <CardDescription>
-          Rotacja natychmiast wyłącza poprzedni kod. Stały link i kod QR nie
-          zmieniają się.
-        </CardDescription>
+          {tx("Rotacja natychmiast wyłącza poprzedni kod. Stały link i kod QR nie zmieniają się.")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form id="event-session-code-rotation-form" className="grid gap-4" action={action}>
           <ActionMessage state={state} />
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" variant="outline">Zmień kod sesji</Button>
+              <Button type="button" variant="outline">{tx("Zmień kod sesji")}</Button>
             </AlertDialogTrigger>
             <AlertDialogContent data-management-theme="true">
               <AlertDialogHeader>
-                <AlertDialogTitle>Zmienić kod sesji?</AlertDialogTitle>
+                <AlertDialogTitle>{tx("Zmienić kod sesji?")}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Poprzedni kod przestanie działać od razu. Kanoniczny link i QR
-                  pozostaną bez zmian.
-                </AlertDialogDescription>
+                  {tx("Poprzedni kod przestanie działać od razu. Kanoniczny link i QR pozostaną bez zmian.")}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                <AlertDialogCancel>{tx("Anuluj")}</AlertDialogCancel>
                 <AlertDialogAction
                   type="submit"
                   form="event-session-code-rotation-form"
                   disabled={pending}
                   onClick={submitAssociatedForm}
                 >
-                  {pending ? "Zmienianie..." : "Zmień kod"}
+                  {pending ? tx("Zmienianie...") : tx("Zmień kod")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -601,15 +590,19 @@ function SessionCodeRotationCard({
 }
 
 function ActionMessage({ state }: { state: EventManagementActionState }) {
+  const tx = useUiText();
+
   return state.message ? (
     <Alert variant="destructive" role="alert">
-      <AlertTitle>Nie udało się wykonać operacji</AlertTitle>
-      <AlertDescription>{state.message}</AlertDescription>
+      <AlertTitle>{tx("Nie udało się wykonać operacji")}</AlertTitle>
+      <AlertDescription>{tx(state.message)}</AlertDescription>
     </Alert>
   ) : null;
 }
 
 function ReopenWindowAlert({ deadline }: { deadline: string | null }) {
+  const tx = useUiText();
+
   const [remaining, setRemaining] = useState<string | null>(null);
 
   useEffect(() => {
@@ -634,11 +627,9 @@ function ReopenWindowAlert({ deadline }: { deadline: string | null }) {
 
   return (
     <Alert>
-      <AlertTitle>Wydarzenie zostało zakończone</AlertTitle>
+      <AlertTitle>{tx("Wydarzenie zostało zakończone")}</AlertTitle>
       <AlertDescription>
-        Możesz je przywrócić jeszcze przez {remaining ?? "--:--"}. Decyzja
-        zostanie ponownie sprawdzona przez serwer.
-      </AlertDescription>
+        {tx("Możesz je przywrócić jeszcze przez ")}{remaining ?? "--:--"}{tx(". Decyzja zostanie ponownie sprawdzona przez serwer.")}</AlertDescription>
     </Alert>
   );
 }
@@ -664,6 +655,8 @@ function ConfirmedSubmitButton({
   value?: string;
   destructive?: boolean;
 }) {
+  const tx = useUiText();
+
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -677,7 +670,7 @@ function ConfirmedSubmitButton({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Anuluj</AlertDialogCancel>
+          <AlertDialogCancel>{tx("Anuluj")}</AlertDialogCancel>
           <AlertDialogAction
             type="submit"
             form={formId}
@@ -702,9 +695,10 @@ function FieldIssue({
   state: EventManagementActionState;
   field: string;
 }) {
+  const tx = useUiText();
   const issue = state.issues.find((item) => item.field === field);
 
-  return issue ? <p className={"m-0 text-sm leading-snug text-destructive"}>{issue.message}</p> : null;
+  return issue ? <p className={"m-0 text-sm leading-snug text-destructive"}>{tx(issue.message)}</p> : null;
 }
 
 function hasIssue(state: EventManagementActionState, field: string) {

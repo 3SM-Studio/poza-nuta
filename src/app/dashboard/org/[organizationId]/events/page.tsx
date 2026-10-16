@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -16,7 +18,6 @@ import {
   getDashboardOrganizationEventPath,
   getDashboardOrganizationNewEventPath,
 } from "@/lib/dashboard-routes";
-import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
 import {
   canCreateDashboardOrganizationEvent,
@@ -24,9 +25,12 @@ import {
 } from "../../../../../server/operator-api/organizations";
 import { requireOperatorSession } from "../../../../../server/operator-api/supabase-session";
 
-export const metadata: Metadata = {
-  title: "Eventy organizacji | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Eventy organizacji | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +43,8 @@ type OrganizationEventsPageProps = {
 export default async function OrganizationEventsPage({
   params,
 }: OrganizationEventsPageProps) {
+  const tx = await getUiText();
+
   const { organizationId } = await params;
   const session = await requireOperatorSession();
   const result = await listDashboardOrganizationEventsForAuthUser(
@@ -62,12 +68,12 @@ export default async function OrganizationEventsPage({
       <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
         <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
-            <h1>Eventy</h1>
+            <h1>{tx("Eventy")}</h1>
             <p className={"mt-1.5 text-sm text-muted-foreground"}>{result.organization.name}</p>
           </div>
           {canCreateEvent ? (
             <Button asChild>
-              <Link href={newEventPath}>Utwórz wydarzenie</Link>
+              <Link href={newEventPath}>{tx("Utwórz wydarzenie")}</Link>
             </Button>
           ) : null}
         </header>
@@ -79,38 +85,38 @@ export default async function OrganizationEventsPage({
                 <CardHeader>
                   <CardTitle>{event.name}</CardTitle>
                   <CardDescription>
-                    {event.venue ?? "Bez ustawionego miejsca"}
+                    {event.venue ?? tx("Bez ustawionego miejsca")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                     <div>
-                      <dt>Status</dt>
+                      <dt>{tx("Status")}</dt>
                       <dd>
                         <Badge variant={getStatusBadgeVariant(event.effectiveStatus)}>
-                          {formatEventStatus(event.effectiveStatus)}
+                          {tx(formatEventStatus(event.effectiveStatus))}
                         </Badge>
                       </dd>
                     </div>
                     <div>
-                      <dt>Start (czas polski)</dt>
-                      <dd>{formatDate(event.startsAt)}</dd>
+                      <dt>{tx("Start (czas polski)")}</dt>
+                      <dd>{tx.date(event.startsAt, { dateStyle: "medium" })}</dd>
                     </div>
                     <div>
-                      <dt>Czas zamknięcia (czas polski)</dt>
-                      <dd>{formatDate(event.autoCloseAt)}</dd>
+                      <dt>{tx("Czas zamknięcia (czas polski)")}</dt>
+                      <dd>{tx.date(event.autoCloseAt)}</dd>
                     </div>
                     <div>
-                      <dt>Publiczna kolejka</dt>
-                      <dd>{event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
+                      <dt>{tx("Publiczna kolejka")}</dt>
+                      <dd>{event.publicQueueEnabled ? tx("Włączona") : tx("Wyłączona")}</dd>
                     </div>
                     <div>
-                      <dt>Publiczny event</dt>
-                      <dd>{event.isActivePublicEvent ? "Tak" : "Nie"}</dd>
+                      <dt>{tx("Publiczny event")}</dt>
+                      <dd>{event.isActivePublicEvent ? tx("Tak") : tx("Nie")}</dd>
                     </div>
                     <div>
-                      <dt>Katalog wydarzeń</dt>
-                      <dd>{event.visibility === "public" ? "Opublikowany" : "Prywatny"}</dd>
+                      <dt>{tx("Katalog wydarzeń")}</dt>
+                      <dd>{event.visibility === "public" ? tx("Opublikowany") : tx("Prywatny")}</dd>
                     </div>
                   </dl>
                 </CardContent>
@@ -122,8 +128,7 @@ export default async function OrganizationEventsPage({
                         event.publicId,
                       )}
                     >
-                      Otwórz
-                    </Link>
+                      {tx("Otwórz")}</Link>
                   </Button>
                 </CardFooter>
               </Card>
@@ -132,15 +137,14 @@ export default async function OrganizationEventsPage({
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Brak eventów</CardTitle>
+              <CardTitle>{tx("Brak eventów")}</CardTitle>
               <CardDescription>
-                Ta organizacja nie ma jeszcze eventów w bazie.
-              </CardDescription>
+                {tx("Ta organizacja nie ma jeszcze eventów w bazie.")}</CardDescription>
             </CardHeader>
             {canCreateEvent ? (
               <CardFooter>
                 <Button asChild>
-                  <Link href={newEventPath}>Utwórz wydarzenie</Link>
+                  <Link href={newEventPath}>{tx("Utwórz wydarzenie")}</Link>
                 </Button>
               </CardFooter>
             ) : null}
@@ -174,12 +178,4 @@ function formatEventStatus(status: string) {
     default:
       return status;
   }
-}
-
-function formatDate(date: Date | null) {
-  if (!date) {
-    return "Brak terminu";
-  }
-
-  return formatWarsawDateTime(date);
 }

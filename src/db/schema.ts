@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -299,6 +300,39 @@ export const songs = pgTable(
 export type CatalogCollectionRuleConfig = {
   genre: string;
 };
+
+// Additive derived search projection; legacy songs columns and identities stay intact.
+export const songSearchDocuments = pgTable("song_search_documents", {
+  songId: bigint("song_id", { mode: "number" }).primaryKey().references(() => songs.id, { onDelete: "cascade" }),
+  normalizedTitle: text("normalized_title").notNull(),
+  normalizedArtist: text("normalized_artist").notNull(),
+  searchText: text("search_text").notNull(),
+  shortGrams: text("short_grams").array().notNull(),
+  normalizationVersion: integer("normalization_version").notNull(),
+}, table => [
+  index("song_search_documents_title_idx").on(table.normalizedTitle),
+  index("song_search_documents_artist_idx").on(table.normalizedArtist),
+  index("song_search_documents_grams_idx").using("gin", table.shortGrams),
+  index("song_search_documents_trgm_idx").using("gin", table.searchText.op("gin_trgm_ops")),
+  check("song_search_documents_version_check", sql`${table.normalizationVersion} = 2`),
+]).enableRLS();
+
+// Trusted, provenance-bearing spellings only. No public API writes this table.
+export const songSearchAliases = pgTable("song_search_aliases", {
+  songId: bigint("song_id", { mode: "number" }).notNull().references(() => songs.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  value: text("value").notNull(),
+  provenance: text("provenance").notNull(),
+  normalizedValue: text("normalized_value").notNull().default(""),
+  shortGrams: text("short_grams").array().notNull().default(sql`'{}'::text[]`),
+}, table => [
+  primaryKey({ columns: [table.songId, table.kind, table.value] }),
+  index("song_search_aliases_value_idx").on(table.normalizedValue),
+  index("song_search_aliases_grams_idx").using("gin", table.shortGrams),
+  check("song_search_aliases_kind_check", sql`${table.kind} in ('title', 'artist', 'combined')`),
+  check("song_search_aliases_value_check", sql`length(${table.value}) between 1 and 300 and length(${table.normalizedValue}) > 0`),
+  check("song_search_aliases_provenance_check", sql`length(btrim(${table.provenance})) between 1 and 500`),
+]).enableRLS();
 
 export const catalogCollections = pgTable(
   "catalog_collections",

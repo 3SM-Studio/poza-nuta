@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react";
@@ -171,6 +173,8 @@ function Sidebar({
   "aria-label": ariaLabel = "Panel boczny",
   ...props
 }: SidebarProps) {
+  const tx = useUiText();
+
   const { isMobile, state, openMobile, setOpenMobile, triggerRef } = useSidebar();
 
   if (collapsible === "none") {
@@ -222,7 +226,7 @@ function Sidebar({
         >
           <SheetHeader className="sr-only">
             <SheetTitle>{ariaLabel}</SheetTitle>
-            <SheetDescription>Mobilny panel nawigacyjny.</SheetDescription>
+            <SheetDescription>{tx("Mobilny panel nawigacyjny.")}</SheetDescription>
           </SheetHeader>
           <div className="flex h-full min-h-0 w-full flex-col [&>[data-slot=sidebar-header]]:pr-14">
             {children}
@@ -315,6 +319,8 @@ function SidebarTrigger({
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
+  const tx = useUiText();
+
   const { open, toggleSidebar } = useSidebar();
   const title = open ? "Zwiń panel boczny" : "Rozwiń panel boczny";
 
@@ -323,7 +329,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
       type="button"
       data-sidebar="rail"
       data-slot="sidebar-rail"
-      aria-label="Przełącz szerokość panelu"
+      aria-label={tx("Przełącz szerokość panelu")}
       tabIndex={-1}
       onClick={toggleSidebar}
       title={title}

@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -87,6 +88,7 @@ export function SiteHeader({
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {actions}
+        <LanguageSwitcher management />
         <ThemeSwitcher managementTheme />
       </div>
     </header>

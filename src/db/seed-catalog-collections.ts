@@ -12,7 +12,7 @@ import {
   songs,
 } from "./schema.ts";
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 async function seedCatalogCollections() {
   const databaseUrl = requireAdminDatabaseUrl();

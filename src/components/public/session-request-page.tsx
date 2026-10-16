@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -64,6 +66,8 @@ export function SessionRequestPage({
   participantDisplayName?: string;
   discovery?: SessionSongDiscovery;
 }) {
+  const tx = useUiText();
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -311,7 +315,7 @@ export function SessionRequestPage({
       setDisplayName(response.participant.displayName);
       setRenameValue(response.participant.displayName);
       setIsProfileOpen(false);
-      toast.success("Nazwa została zmieniona");
+      toast.success(tx("Nazwa została zmieniona"));
     } catch (caughtError) {
       if (
         caughtError instanceof SessionClientError &&
@@ -335,7 +339,7 @@ export function SessionRequestPage({
       await cancelParticipantRequest(sessionToken, requestId);
       await waitForRealtimeOrRefresh(invalidationVersion);
       succeeded = true;
-      toast.success("Zgłoszenie zostało anulowane");
+      toast.success(tx("Zgłoszenie zostało anulowane"));
     } catch (caughtError) {
       if (
         caughtError instanceof SessionClientError &&
@@ -344,8 +348,8 @@ export function SessionRequestPage({
         router.refresh();
         return;
       }
-      toast.error("Nie udało się anulować zgłoszenia", {
-        description: getCancelErrorMessage(caughtError),
+      toast.error(tx("Nie udało się anulować zgłoszenia"), {
+        description: tx(getCancelErrorMessage(caughtError)),
       });
       await loadParticipantRequests();
     } finally {
@@ -644,8 +648,8 @@ export function SessionRequestPage({
       const invalidationVersion = realtimeInvalidationVersionRef.current;
       await createSessionRequest(sessionToken, { songId: selectedSong.id });
       clearSearchResults();
-      toast.success("Dodano zgłoszenie", {
-        description: "Operator musi je zatwierdzić.",
+      toast.success(tx("Dodano zgłoszenie"), {
+        description: tx("Operator musi je zatwierdzić."),
       });
       await waitForRealtimeOrRefresh(invalidationVersion);
     } catch (caughtError) {
@@ -663,8 +667,8 @@ export function SessionRequestPage({
       if (alertKind) {
         setSubmitAlert(alertKind);
       } else {
-        toast.error("Nie udało się dodać zgłoszenia", {
-          description: getSubmitErrorMessage(caughtError),
+        toast.error(tx("Nie udało się dodać zgłoszenia"), {
+          description: tx(getSubmitErrorMessage(caughtError)),
         });
       }
     } finally {
@@ -716,7 +720,7 @@ export function SessionRequestPage({
             }}
             onSearchCompositionEnd={handleSearchCompositionEnd}
             onOpenQueue={openQueue}
-            queueButtonLabel={canViewPublicQueue ? "Otwórz kolejkę" : "Otwórz moje zgłoszenia"}
+            queueButtonLabel={canViewPublicQueue ? tx("Otwórz kolejkę") : tx("Otwórz moje zgłoszenia")}
             searchTerm={searchTerm}
             showProfile={Boolean(participantDisplayName)}
             showQueue={canViewPublicQueue || Boolean(participantDisplayName)}
@@ -726,20 +730,18 @@ export function SessionRequestPage({
             <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 xl:max-w-6xl">
       {participantDisplayName ? (
         <p aria-live="polite" className="mb-4 text-sm text-muted-foreground">
-          {participantRequests === null
-            ? "Wczytywanie limitu zgłoszeń…"
-            : `Aktywne zgłoszenia: ${countActiveParticipantRequests(participantRequests)}/${PARTICIPANT_ACTIVE_REQUEST_LIMIT}`}
+          {participantRequests === null ? tx("Wczytywanie limitu zgłoszeń…") : tx("Aktywne zgłoszenia: {v0}/{v1}", {v0: countActiveParticipantRequests(participantRequests), v1: PARTICIPANT_ACTIVE_REQUEST_LIMIT})}
         </p>
       ) : null}
       {capabilities.allSessionFeaturesDisabled ? (
         <section className="mb-7">
-          <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">Sesja wydarzenia</h2>
+          <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">{tx("Sesja wydarzenia")}</h2>
           <SessionStateAlert kind="queue_disabled" />
         </section>
       ) : null}
 
       {canSubmitSongRequests ? (
-        <section aria-label="Wyszukiwanie piosenek" className="mb-7">
+        <section aria-label={tx("Wyszukiwanie piosenek")} className="mb-7">
           <div hidden={isSearchActive}>
             {displayedCatalogView.kind === "discovery" && discovery ? (
               <SessionDiscoveryHome discovery={discovery} onSongSelect={selectSong} sessionToken={sessionToken} />
@@ -769,8 +771,8 @@ export function SessionRequestPage({
             ) : null}
             {displayedCatalogView.kind === "catalog" ? (
               <CatalogSongList
-                backLabel={displayedCatalogView.backLabel}
-                heading={displayedCatalogView.heading}
+                backLabel={tx(displayedCatalogView.backLabel)}
+                heading={displayedCatalogView.input.genre ? displayedCatalogView.heading : tx(displayedCatalogView.heading)}
                 input={displayedCatalogView.input}
                 onBack={() => navigateBack(router, displayedCatalogView.fallbackHref, routeProvenanceRef.current.hasSessionPredecessor)}
                 onSongSelect={selectSong}

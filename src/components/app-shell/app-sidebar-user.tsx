@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -44,6 +46,8 @@ export function AppSidebarUser({
   user: AppSidebarUserModel;
   managementTheme?: boolean;
 }) {
+  const tx = useUiText();
+
   const pathname = usePathname();
   const router = useRouter();
   const { setOpenMobile } = useSidebar();
@@ -81,7 +85,7 @@ export function AppSidebarUser({
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              aria-label={`Menu użytkownika: ${user.displayName}`}
+              aria-label={tx("Menu użytkownika: {v0}", {v0: user.displayName})}
               title={user.displayName}
             >
               <Avatar size="sm">
@@ -90,7 +94,7 @@ export function AppSidebarUser({
               <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-medium">{user.displayName}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {user.roleLabel}
+                  {tx(user.roleLabel)}
                 </span>
               </span>
               <ChevronUpIcon className="ml-auto group-data-[collapsible=icon]:hidden" />
@@ -106,7 +110,7 @@ export function AppSidebarUser({
               <strong className="truncate text-sm text-foreground">
                 {user.displayName}
               </strong>
-              <span className="truncate font-normal">{user.roleLabel}</span>
+              <span className="truncate font-normal">{tx(user.roleLabel)}</span>
               {user.email ? (
                 <span className="truncate font-normal">{user.email}</span>
               ) : null}
@@ -115,7 +119,7 @@ export function AppSidebarUser({
             {error ? (
               <>
                 <p className="px-1.5 py-1 text-xs text-destructive" role="alert">
-                  {error}
+                  {tx(error)}
                 </p>
                 <DropdownMenuSeparator />
               </>
@@ -123,7 +127,7 @@ export function AppSidebarUser({
             <DropdownMenuGroup>
               <AppMenuLink
                 href="/dashboard"
-                label="Panel organizatora"
+                label={tx("Panel organizatora")}
                 current={pathname.startsWith("/dashboard")}
                 onNavigate={() => setOpenMobile(false)}
                 icon={LayoutDashboardIcon}
@@ -131,7 +135,7 @@ export function AppSidebarUser({
               {user.canAccessAdmin ? (
                 <AppMenuLink
                   href="/admin"
-                  label="Administracja"
+                  label={tx("Administracja")}
                   current={pathname.startsWith("/admin")}
                   onNavigate={() => setOpenMobile(false)}
                   icon={ShieldCheckIcon}
@@ -139,7 +143,7 @@ export function AppSidebarUser({
               ) : null}
               <AppMenuLink
                 href="/account"
-                label="Konto"
+                label={tx("Konto")}
                 current={pathname.startsWith("/account")}
                 onNavigate={() => setOpenMobile(false)}
                 icon={UserRoundIcon}
@@ -149,7 +153,7 @@ export function AppSidebarUser({
                 onSelect={() => void handleLogout()}
               >
                 <LogOutIcon aria-hidden="true" />
-                {isLoggingOut ? "Wylogowywanie…" : "Wyloguj"}
+                {isLoggingOut ? tx("Wylogowywanie…") : tx("Wyloguj")}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

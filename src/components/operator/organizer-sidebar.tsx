@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import {
   Building2Icon,
   CalendarDaysIcon,
@@ -210,6 +212,8 @@ export function OrganizerSidebar({
   email: string | null;
   canAccessAdmin: boolean;
 }) {
+  const tx = useUiText();
+
   const groups = getOrganizerNavigationGroups({
     organizationId: organization?.organizationId ?? null,
     accountRoute: pathname.startsWith("/account"),
@@ -221,9 +225,9 @@ export function OrganizerSidebar({
 
   return (
     <AppSidebar
-      ariaLabel="Nawigacja panelu organizatora"
+      ariaLabel={tx("Nawigacja panelu organizatora")}
       homeHref="/dashboard"
-      contextLabel={organization?.name ?? "Panel organizatora"}
+      contextLabel={organization?.name ?? tx("Panel organizatora")}
       groups={groups}
       pathname={pathname}
       managementTheme

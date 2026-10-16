@@ -37,6 +37,8 @@ test-results/
 playwright-report/
 .playwright-p3-e2e/
 .artifacts/
+supabase/.temp/
+supabase/.branches/
 
 # Local archives
 poza-nuta*.zip

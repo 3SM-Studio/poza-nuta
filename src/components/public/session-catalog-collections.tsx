@@ -1,5 +1,8 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+import { localizeUiRecord } from "@/i18n/text";
+
 import { ArrowLeft, ListMusic, Palette, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -45,6 +48,9 @@ export function SessionCatalogCollections({
   section: CatalogCollectionSection;
   sessionToken: string;
 }) {
+  const tx = useUiText();
+  const SECTION_CONTENT = localizeUiRecord(getI18nRecord_SECTION_CONTENT(), tx);
+
   const [state, setState] = useState<CollectionState>({
     status: "loading",
     items: [],
@@ -82,7 +88,7 @@ export function SessionCatalogCollections({
     <section aria-labelledby="catalog-collections-heading" className="mb-7">
       <div className="mb-4 flex items-center gap-2">
         <Button
-          aria-label="Wróć do odkrywania"
+          aria-label={tx("Wróć do odkrywania")}
           className="size-11 rounded-full"
           onClick={onBack}
           size="icon"
@@ -103,8 +109,7 @@ export function SessionCatalogCollections({
       {state.status === "error" ? (
         <div className="py-4" role="alert">
           <p className="text-sm text-destructive">
-            Nie udało się wczytać kolekcji. Spróbuj ponownie.
-          </p>
+            {tx("Nie udało się wczytać kolekcji. Spróbuj ponownie.")}</p>
           <Button
             className="mt-3"
             onClick={loadCollections}
@@ -112,8 +117,7 @@ export function SessionCatalogCollections({
             type="button"
             variant="outline"
           >
-            Spróbuj ponownie
-          </Button>
+            {tx("Spróbuj ponownie")}</Button>
         </div>
       ) : null}
       {state.status === "ready" && state.items.length === 0 ? (
@@ -128,7 +132,7 @@ export function SessionCatalogCollections({
             return (
               <li key={collection.filterKey}>
                 <Link
-                  aria-label={`Otwórz kolekcję ${collection.title}`}
+                  aria-label={tx("Otwórz kolekcję {v0}", {v0: collection.title})}
                   className={`group relative flex min-h-36 overflow-hidden rounded-2xl bg-gradient-to-br ${getCardGradient(index)} p-5 text-primary-foreground shadow-[0_12px_28px_oklch(0_0_0_/_24%)] transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/60`}
                   href={buildCollectionHref(sessionToken, collection.filterKey)}
                   prefetch={false}
@@ -161,8 +165,10 @@ export function buildCollectionHref(sessionToken: string, filterKey: string) {
 }
 
 function CollectionSkeletons() {
+  const tx = useUiText();
+
   return (
-    <div aria-label="Wczytywanie kolekcji" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div aria-label={tx("Wczytywanie kolekcji")} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {Array.from({ length: 4 }, (_, index) => (
         <Skeleton className="h-36 rounded-2xl" key={index} />
       ))}
@@ -183,3 +189,5 @@ function getCardGradient(index: number) {
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
+
+function getI18nRecord_SECTION_CONTENT() { return SECTION_CONTENT; }

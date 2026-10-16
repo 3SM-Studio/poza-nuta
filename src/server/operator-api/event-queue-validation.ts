@@ -7,6 +7,23 @@ import {
   type DashboardEventQueueMoveInput,
 } from "../../lib/dashboard-event-queue.ts";
 import type { ValidationResult } from "./validation.ts";
+import type { QueueDropInput } from "../../lib/queue-placement";
+
+export function validateQueuePlacementInput(input: unknown): ValidationResult<QueueDropInput> {
+  if (isRecord(input) &&
+    (input.lane === "pending" || input.lane === "approved" || input.lane === "rejected") &&
+    typeof input.position === "number" && Number.isSafeInteger(input.position) && input.position > 0 &&
+    typeof input.expectedRevision === "string" && input.expectedRevision.length <= 250_000 &&
+    /^v1\|(?:\d+:\d+:(?:pending|approved|now|done|skipped|rejected):\d+(?:\|\d+:\d+:(?:pending|approved|now|done|skipped|rejected):\d+)*)?$/.test(input.expectedRevision) &&
+    (input.confirmed === undefined || typeof input.confirmed === "boolean") &&
+    (input.lane !== "rejected" || input.confirmed === true) &&
+    (input.lane === "approved" || input.position === 1) &&
+    Object.keys(input).every(key => ["lane", "position", "expectedRevision", "confirmed"].includes(key))) {
+    return { success: true, data: { lane: input.lane, position: input.position,
+      expectedRevision: input.expectedRevision, ...(input.confirmed === undefined ? {} : { confirmed: input.confirmed }) } };
+  }
+  return { success: false, issues: [{ field: "placement", message: "Provide a valid lane, position, queue revision and rejection confirmation." }] };
+}
 
 export function validateDashboardEventQueueFilter(
   value: string | null,

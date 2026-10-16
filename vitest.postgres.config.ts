@@ -1,3 +1,7 @@
+import { assertNoCloudEnvironmentFiles } from "./scripts/local-environment-files.ts";
+
+assertNoCloudEnvironmentFiles();
+
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";

@@ -548,13 +548,13 @@ test("public route group uses shared public layout and header", () => {
 
   assert.match(
     rootLayoutSource,
-    /<html\s+className=\{`\$\{geist\.variable\} \$\{geistMono\.variable\}`\}\s+lang="pl"\s+suppressHydrationWarning/,
+    /<html\s+className=\{`\$\{geist\.variable\} \$\{geistMono\.variable\}`\}\s+lang=\{locale\}\s+suppressHydrationWarning/,
   );
   assert.doesNotMatch(rootLayoutSource, /PublicSiteHeader/);
   assert.match(publicLayoutSource, /PublicSiteHeader/);
   assert.match(headerSource, /<header/);
   assert.match(headerSource, /<nav/);
-  assert.match(headerSource, /aria-label="Nawigacja publiczna"/);
+  assert.match(headerSource, /aria-label=\{tx\("Nawigacja publiczna"\)\}/);
   assert.match(headerSource, /href="\/"/);
   assert.match(headerSource, /loading="eager"/);
   assert.doesNotMatch(headerSource, /priority|preload|fetchPriority/);
@@ -579,10 +579,10 @@ test("homepage carousels use real event sections and skip empty data", () => {
     "utf8",
   );
 
-  assert.match(homeComponentSource, /title="Trwa teraz"/);
-  assert.match(homeComponentSource, /title="Nadchodzące karaoke"/);
-  assert.match(homeComponentSource, /title="Ten weekend"/);
-  assert.match(homeComponentSource, /title="Nowo dodane"/);
+  assert.match(homeComponentSource, /title=\{tx\("Trwa teraz"\)\}/);
+  assert.match(homeComponentSource, /title=\{tx\("Nadchodzące karaoke"\)\}/);
+  assert.match(homeComponentSource, /title=\{tx\("Ten weekend"\)\}/);
+  assert.match(homeComponentSource, /title=\{tx\("Nowo dodane"\)\}/);
   assert.match(homeComponentSource, /isInWarsawWeekend/);
   assert.match(homeComponentSource, /isPromotablePublicEventStatus/);
   assert.match(carouselSource, /useEmblaCarousel\(\{ loop: false \}\)/);

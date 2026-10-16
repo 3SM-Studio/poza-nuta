@@ -1,3 +1,4 @@
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
@@ -11,13 +12,16 @@ import { resolvePlatformAdminPageAccess } from "@/server/platform-admin/page-acc
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Administracja | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Administracja | Poza Nutą"),
   robots: {
     index: false,
     follow: false,
   },
 };
+}
 
 export default async function PlatformAdminLayout({
   children,

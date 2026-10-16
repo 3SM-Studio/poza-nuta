@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import Link from "next/link";
 import { ShieldXIcon } from "lucide-react";
 
@@ -5,6 +7,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
 export function AdminAccessDenied() {
+  const tx = useUiText();
+
   return (
     <main
       data-admin-access-denied="true"
@@ -16,20 +20,17 @@ export function AdminAccessDenied() {
           <ShieldXIcon />
           <AlertTitle>
             <h1 id="access-denied-title" className="m-0 text-lg">
-              Dostęp niedostępny
-            </h1>
+              {tx("Dostęp niedostępny")}</h1>
           </AlertTitle>
           <AlertDescription className="mt-2">
-            Nie możesz otworzyć tego obszaru. Nie ujawniamy szczegółów dostępu
-            ani konfiguracji konta.
-          </AlertDescription>
+            {tx("Nie możesz otworzyć tego obszaru. Nie ujawniamy szczegółów dostępu ani konfiguracji konta.")}</AlertDescription>
         </Alert>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/dashboard">Panel organizatora</Link>
+            <Link href="/dashboard">{tx("Panel organizatora")}</Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link href="/sign-in">Logowanie</Link>
+            <Link href="/sign-in">{tx("Logowanie")}</Link>
           </Button>
         </div>
       </section>

@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -13,9 +15,12 @@ import {
 import { listDashboardOrganizationMembersForAuthUser } from "../../../../../server/operator-api/organizations";
 import { requireOperatorSession } from "../../../../../server/operator-api/supabase-session";
 
-export const metadata: Metadata = {
-  title: "Zespół organizacji | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Zespół organizacji | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +33,8 @@ type OrganizationTeamPageProps = {
 export default async function OrganizationTeamPage({
   params,
 }: OrganizationTeamPageProps) {
+  const tx = await getUiText();
+
   const { organizationId } = await params;
   const session = await requireOperatorSession();
   const result = await listDashboardOrganizationMembersForAuthUser(
@@ -44,18 +51,16 @@ export default async function OrganizationTeamPage({
       <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
         <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
-            <h1>Zespół</h1>
+            <h1>{tx("Zespół")}</h1>
             <p className={"mt-1.5 text-sm text-muted-foreground"}>{result.organization.name}</p>
           </div>
         </header>
 
         <Card>
           <CardHeader>
-            <CardTitle>Członkowie organizacji</CardTitle>
+            <CardTitle>{tx("Członkowie organizacji")}</CardTitle>
             <CardDescription>
-              Widok tylko do odczytu. Zaproszenia i zmiana ról nie są częścią
-              tego etapu.
-            </CardDescription>
+              {tx("Widok tylko do odczytu. Zaproszenia i zmiana ról nie są częścią tego etapu.")}</CardDescription>
           </CardHeader>
           <CardContent>
             {result.members.length > 0 ? (
@@ -65,15 +70,13 @@ export default async function OrganizationTeamPage({
                     <div>
                       <h2>{member.operatorName}</h2>
                       <p>
-                        {member.authUserId
-                          ? `Auth user: ${member.authUserId}`
-                          : "Brak powiązanego użytkownika Auth"}
+                        {member.authUserId ? tx("Auth user: {v0}", {v0: member.authUserId}) : tx("Brak powiązanego użytkownika Auth")}
                       </p>
                     </div>
                     <div className={"flex flex-wrap gap-2 sm:justify-end"}>
-                      <Badge variant="secondary">{formatRole(member.role)}</Badge>
+                      <Badge variant="secondary">{tx(formatRole(member.role))}</Badge>
                       <Badge variant={member.active ? "default" : "destructive"}>
-                        {member.active ? "Aktywny" : "Nieaktywny"}
+                        {member.active ? tx("Aktywny") : tx("Nieaktywny")}
                       </Badge>
                     </div>
                   </article>
@@ -81,8 +84,7 @@ export default async function OrganizationTeamPage({
               </div>
             ) : (
               <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                Ta organizacja nie ma przypisanych członków.
-              </p>
+                {tx("Ta organizacja nie ma przypisanych członków.")}</p>
             )}
           </CardContent>
         </Card>

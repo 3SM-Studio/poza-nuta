@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useActionState } from "react";
 
 
@@ -25,12 +27,14 @@ const initialState: OperatorProfileOnboardingState = {
 export function OperatorProfileOnboardingForm({
   action,
 }: OperatorProfileOnboardingFormProps) {
+  const tx = useUiText();
+
   const [state, formAction, isPending] = useActionState(action, initialState);
 
   return (
     <form className={"grid gap-4 [&_button]:justify-self-start"} action={formAction} noValidate>
       <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="profile-display-name">Imię i nazwisko</label>
+        <label htmlFor="profile-display-name">{tx("Imię i nazwisko")}</label>
         <input
           id="profile-display-name"
           name="displayName"
@@ -43,14 +47,14 @@ export function OperatorProfileOnboardingForm({
         />
         {state.fieldErrors.displayName ? (
           <p className={"m-0 text-sm leading-snug text-destructive"} role="alert">
-            {state.fieldErrors.displayName}
+            {tx(state.fieldErrors.displayName)}
           </p>
         ) : null}
       </div>
 
       {state.error ? (
         <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
-          {state.error}
+          {tx(state.error)}
         </p>
       ) : null}
 
@@ -59,7 +63,7 @@ export function OperatorProfileOnboardingForm({
         type="submit"
         disabled={isPending}
       >
-        {isPending ? "Zapisywanie..." : "Kontynuuj"}
+        {isPending ? tx("Zapisywanie...") : tx("Kontynuuj")}
       </button>
     </form>
   );

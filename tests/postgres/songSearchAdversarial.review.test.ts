@@ -23,7 +23,7 @@ test("adversarial search review", async () => {
 
   try {
     await installPostgresCompatibilityFixture(sql);
-    await applyPostgresMigrations(sql, 27);
+    await applyPostgresMigrations(sql, process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 31 : 27);
     await seedTargets(sql);
 
     await withApplicationDatabase(harness, async () => {
@@ -153,7 +153,7 @@ test("adversarial search review", async () => {
               returnedRows: page.items.length,
             });
             pageCursor = page.nextCursor
-              ? decodeSongSearchCursor(page.nextCursor, "rock")
+              ? decodeSongSearchCursor(page.nextCursor, "rock", process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 2 : 1)
               : null;
             assert.ok(pageCursor, `rock page ${pageNumber} must have a continuation`);
           }
@@ -253,7 +253,7 @@ async function collectAllSearchItems(
     pages += 1;
     assert.ok(pages <= 20, "search pagination must remain bounded");
     cursor = page.nextCursor
-      ? decodeSongSearchCursor(page.nextCursor, query)
+      ? decodeSongSearchCursor(page.nextCursor, query, process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 2 : 1)
       : null;
     if (page.nextCursor) {
       assert.ok(

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AudioLinesIcon } from "lucide-react";
@@ -46,13 +47,14 @@ export function AppSidebar({
     title: string;
   };
 }) {
+  const tx = useUiText();
   const { setOpenMobile } = useSidebar();
 
   return (
     <Sidebar
       variant="inset"
       collapsible="icon"
-      aria-label={ariaLabel}
+      aria-label={tx(ariaLabel)}
       mobileManagementTheme={managementTheme}
     >
       <SidebarHeader>
@@ -88,7 +90,7 @@ export function AppSidebar({
             className="min-w-0 px-2 pb-1 group-data-[collapsible=icon]:hidden"
           >
             <span className="block text-xs font-medium text-muted-foreground">
-              {navigationHeading.label}
+              {tx(navigationHeading.label)}
             </span>
             <strong
               className="mt-0.5 block truncate text-sm text-sidebar-foreground"
@@ -105,7 +107,7 @@ export function AppSidebar({
           data-sidebar-navigation-scroll
           className="min-h-0 flex-1"
           viewportProps={{
-            "aria-label": `${ariaLabel} — przewijana sekcja`,
+            "aria-label": tx("{v0} — przewijana sekcja", { v0: tx(ariaLabel) }),
           }}
         >
           <SidebarNavigation

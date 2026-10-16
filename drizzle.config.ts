@@ -1,7 +1,8 @@
 import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
+import { assertLocalDatabaseTarget } from "./src/lib/local-target.ts";
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 const databaseUrl = process.env.DIRECT_URL;
 
@@ -13,7 +14,7 @@ export default defineConfig({
   ...(databaseUrl
     ? {
         dbCredentials: {
-          url: databaseUrl,
+          url: assertLocalDatabaseTarget(databaseUrl),
         },
       }
     : {}),

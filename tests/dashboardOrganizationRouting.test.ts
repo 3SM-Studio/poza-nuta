@@ -515,12 +515,12 @@ test("organization overview renders empty states and no fake dashboard data", ()
   assert.match(source, /<SectionUnavailable/);
   assert.match(source, /role="progressbar"/);
   assert.match(source, /canManageEvents/);
-  assert.match(source, /overview\.partialFailures\.counts\s*\?\s*"Dane częściowe"/);
+  assert.match(source, /overview\.partialFailures\.counts\s*\?\s*tx\("Dane częściowe"\)/);
   assert.match(source, /Liczba wydarzeń chwilowo niedostępna/);
   assert.match(source, /Statystyki z 7 dni chwilowo niedostępne/);
   assert.match(
     source,
-    /overview\.partialFailures\.counts\s*\?\s*"Chwilowo niedostępne"\s*:\s*formatNumber\(overview\.stats\.pendingRequests\)/,
+    /overview\.partialFailures\.counts\s*\?\s*tx\("Chwilowo niedostępne"\)\s*:\s*tx\.number\(overview\.stats\.pendingRequests\)/,
   );
   assert.match(source, /canManageOrganization/);
   assert.match(source, /lg:grid-cols-2 xl:grid-cols-12/);
@@ -664,8 +664,8 @@ test("dashboard uses the shared header without duplicating the organization swit
     "src/components/operator/dashboard-shell.tsx",
     "utf8",
   );
-  assert.match(shellSource, /section="Panel organizatora"/);
-  assert.match(shellSource, /title=\{title\}/);
+  assert.match(shellSource, /section=\{tx\("Panel organizatora"\)\}/);
+  assert.match(shellSource, /title=\{tx\(title\)\}/);
   assert.match(shellSource, /organizations=\{organizations\}/);
   assert.equal(shellSource.includes("headerContext="), false);
   assert.equal(shellSource.includes("DashboardOrganizationSwitcher"), false);
@@ -818,7 +818,7 @@ test("account is in avatar menu and not a main header nav link", () => {
   );
 
   assert.match(userMenuSource, /href="\/account"/);
-  assert.match(userMenuSource, /label="Konto"/);
+  assert.match(userMenuSource, /label=\{tx\("Konto"\)\}/);
   assert.match(userMenuSource, /Wyloguj/);
 });
 

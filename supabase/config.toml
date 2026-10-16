@@ -1,0 +1,44 @@
+# Local only. Drizzle owns application migrations; never link this CLI workdir.
+project_id = "pozanuta-stage1-dev"
+[api]
+enabled = true
+port = 55521
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+[db]
+port = 55522
+shadow_port = 55520
+major_version = 17
+[db.pooler]
+enabled = false
+[db.migrations]
+enabled = false
+[db.seed]
+enabled = false
+[realtime]
+enabled = true
+[studio]
+enabled = false
+port = 55523
+[local_smtp]
+enabled = true
+port = 55524
+[storage]
+enabled = false
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 8
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+max_frequency = "1s"
+[analytics]
+enabled = false
+port = 55527
+[edge_runtime]
+enabled = false

@@ -9,7 +9,7 @@ import { hashPin } from "../server/operator-api/crypto.ts";
 import { DEFAULT_OPERATOR_NAME } from "../server/operator-api/validation.ts";
 import { logDatabaseError } from "./log-db-error.ts";
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 async function seedOperator() {
   const databaseUrl = requireAdminDatabaseUrl();

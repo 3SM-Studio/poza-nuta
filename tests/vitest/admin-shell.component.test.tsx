@@ -51,10 +51,10 @@ describe("AdminShell", () => {
     pathname = "/admin";
     renderAllowed("platform_admin");
 
-    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const breadcrumb = screen.getByRole("navigation", { name: "Nawigacja okruszkowa" });
     expect(within(breadcrumb).getByText("Administracja")).toBeVisible();
     expect(
-      within(breadcrumb).getByText("Overview", {
+      within(breadcrumb).getByText("Przegląd", {
         selector: "[data-slot='breadcrumb-page']",
       }),
     ).toBeVisible();
@@ -75,7 +75,7 @@ describe("AdminShell", () => {
       "Overview test",
     );
 
-    const overviewLink = screen.getByRole("link", { name: "Overview" });
+    const overviewLink = screen.getByRole("link", { name: "Przegląd" });
     expect(overviewLink).toHaveAttribute("href", "/admin");
     expect(overviewLink).toHaveAttribute("aria-current", "page");
 
@@ -94,7 +94,7 @@ describe("AdminShell", () => {
       "aria-current",
       "page",
     );
-    expect(screen.getByRole("link", { name: "Overview" })).not.toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Przegląd" })).not.toHaveAttribute(
       "aria-current",
     );
     expect(
@@ -160,7 +160,7 @@ describe("AdminShell", () => {
     );
 
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("link", { name: "Overview" }));
+    fireEvent.click(within(dialog).getByRole("link", { name: "Przegląd" }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

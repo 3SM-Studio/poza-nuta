@@ -1,8 +1,9 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import styles from "@/components/public/public.module.css";
-import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import { PublicApiError } from "@/server/public-api/errors";
 import { getPublicEventBySlug } from "@/server/public-api/service";
 
@@ -37,6 +38,8 @@ export async function generateMetadata({
 }
 
 export default async function PublicEventPage({ params }: PublicEventPageProps) {
+  const tx = await getUiText();
+
   const { slug } = await params;
   const event = await loadPublicEvent(slug);
 
@@ -44,43 +47,43 @@ export default async function PublicEventPage({ params }: PublicEventPageProps) 
     <main className={styles.publicPage}>
       <div className={styles.eventShell}>
         <header className={styles.eventHeader}>
-          <p className={styles.statusPill}>{formatPublicStatus(event.publicStatus)}</p>
+          <p className={styles.statusPill}>{tx(formatPublicStatus(event.publicStatus))}</p>
           <h1>{event.name}</h1>
         </header>
 
-        <section className={styles.eventSummary} aria-label="Szczegóły wydarzenia">
+        <section className={styles.eventSummary} aria-label={tx("Szczegóły wydarzenia")}>
           <dl className={styles.eventDetails}>
             <div>
-              <dt>Start</dt>
-              <dd>{formatDateTime(event.startsAt)}</dd>
+              <dt>{tx("Start")}</dt>
+              <dd>{tx.date(event.startsAt)}</dd>
             </div>
             <div>
-              <dt>Koniec</dt>
-              <dd>{event.endsAt ? formatDateTime(event.endsAt) : "Do zamknięcia"}</dd>
+              <dt>{tx("Koniec")}</dt>
+              <dd>{event.endsAt ? tx.date(event.endsAt) : tx("Do zamknięcia")}</dd>
             </div>
             <div>
-              <dt>Miejsce</dt>
-              <dd>{event.venueName ?? "Nie podano"}</dd>
+              <dt>{tx("Miejsce")}</dt>
+              <dd>{event.venueName ?? tx("Nie podano")}</dd>
             </div>
             <div>
-              <dt>Miasto</dt>
-              <dd>{event.city ?? "Nie podano"}</dd>
+              <dt>{tx("Miasto")}</dt>
+              <dd>{event.city ?? tx("Nie podano")}</dd>
             </div>
             <div>
-              <dt>Zgłoszenia</dt>
-              <dd>{event.requestsEnabled ? "Otwarte" : "Zamknięte"}</dd>
+              <dt>{tx("Zgłoszenia")}</dt>
+              <dd>{event.requestsEnabled ? tx("Otwarte") : tx("Zamknięte")}</dd>
             </div>
             <div>
-              <dt>Kolejka publiczna</dt>
-              <dd>{event.publicQueueEnabled ? "Włączona" : "Wyłączona"}</dd>
+              <dt>{tx("Kolejka publiczna")}</dt>
+              <dd>{event.publicQueueEnabled ? tx("Włączona") : tx("Wyłączona")}</dd>
             </div>
           </dl>
         </section>
 
         <section className={styles.publicSection}>
-          <h2>{getStateHeading(event.publicStatus)}</h2>
+          <h2>{tx(getStateHeading(event.publicStatus))}</h2>
           <p className={styles.inlineMessage}>
-            {getStateDescription(event.publicStatus, event.requestsEnabled)}
+            {tx(getStateDescription(event.publicStatus, event.requestsEnabled))}
           </p>
           <div className={styles.eventActions}>
             {event.facebookUrl ? (
@@ -90,8 +93,7 @@ export default async function PublicEventPage({ params }: PublicEventPageProps) 
                 rel="noreferrer"
                 target="_blank"
               >
-                Facebook
-              </a>
+                {tx("Facebook")}</a>
             ) : null}
           </div>
         </section>
@@ -113,9 +115,6 @@ async function loadPublicEvent(slug: string) {
   }
 }
 
-function formatDateTime(value: string) {
-  return formatWarsawDateTime(new Date(value));
-}
 
 function formatPublicStatus(status: string) {
   switch (status) {

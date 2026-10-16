@@ -1,3 +1,4 @@
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
@@ -8,9 +9,12 @@ import { resolveDashboardEventRouteForAuthUser } from "@/server/operator-api/eve
 import { getDashboardOrganizationEventForAuthUser } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 
-export const metadata: Metadata = {
-  title: "Wydarzenie | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Wydarzenie | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 

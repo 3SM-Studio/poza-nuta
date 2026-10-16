@@ -1,6 +1,7 @@
 import { config } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { assertLocalDatabaseTarget } from "../../lib/local-target.ts";
 
 import {
   classifyISingImportFailure,
@@ -15,7 +16,7 @@ import { runImportWorker } from "./import-worker-runtime-core.ts";
 const defaultPollingIntervalMs = 5_000;
 const defaultPollingJitterMs = 1_000;
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.worker.local", quiet: true });
 
 export function loadImportWorkerProcessOptions(
   env: NodeJS.ProcessEnv,
@@ -24,6 +25,10 @@ export function loadImportWorkerProcessOptions(
   const once = parseWorkerArguments(args);
   const databaseUrl = requiredWorkerDatabaseUrl(env.IMPORT_WORKER_DATABASE_URL);
   const isingOptions = loadISingAdapterOptions(env, "write");
+  const source = new URL(isingOptions.apiBaseUrl);
+  if (source.protocol !== "http:" || source.hostname !== "127.0.0.1" || source.username || source.password) {
+    throw new Error("Local workers require a synthetic loopback catalog source.");
+  }
   if (!once && isingOptions.limit !== null) {
     throw new Error(
       "ISING_IMPORT_LIMIT is allowed only for a controlled --once worker run.",
@@ -120,6 +125,7 @@ export async function runImportWorkerProcess(
 }
 
 export function createImportWorkerConnection(databaseUrl: string): postgres.Sql {
+  assertLocalDatabaseTarget(databaseUrl);
   return postgres(databaseUrl, {
     connect_timeout: 10,
     idle_timeout: 0,
@@ -298,7 +304,7 @@ function requiredWorkerDatabaseUrl(value: string | undefined) {
   if (!normalized || normalized === "replace_me") {
     throw new Error("IMPORT_WORKER_DATABASE_URL is not configured.");
   }
-  return normalized;
+  return assertLocalDatabaseTarget(normalized);
 }
 
 function parseBoundedInteger(

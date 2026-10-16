@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
@@ -48,9 +50,12 @@ import {
   validateUpdateDashboardEventDetailsInput,
 } from "@/server/operator-api/validation";
 
-export const metadata: Metadata = {
-  title: "Ustawienia wydarzenia | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Ustawienia wydarzenia | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +83,8 @@ export default async function OrganizationEventDetailPage({
   params,
   searchParams,
 }: OrganizationEventDetailPageProps) {
+  const tx = await getUiText();
+
   const { organizationId, eventId } = await params;
   const session = await requireOperatorSession();
   const routeResolution = await resolveDashboardEventRouteForAuthUser({
@@ -138,39 +145,35 @@ export default async function OrganizationEventDetailPage({
     <div className="grid min-w-0 gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Szczegóły wydarzenia</CardTitle>
+          <CardTitle>{tx("Szczegóły wydarzenia")}</CardTitle>
           <CardDescription>
-            Panel zarządzania godziną zamknięcia i ręcznym zakończeniem
-            wydarzenia.
-          </CardDescription>
+            {tx("Panel zarządzania godziną zamknięcia i ręcznym zakończeniem wydarzenia.")}</CardDescription>
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold">
             <div>
-              <dt>Zgłoszenia</dt>
-              <dd>{requestsOpen ? "Otwarte" : "Zamknięte"}</dd>
+              <dt>{tx("Zgłoszenia")}</dt>
+              <dd>{requestsOpen ? tx("Otwarte") : tx("Zamknięte")}</dd>
             </div>
             <div>
-              <dt>Publiczny event</dt>
-              <dd>{result.event.isActivePublicEvent ? "Tak" : "Nie"}</dd>
+              <dt>{tx("Publiczny event")}</dt>
+              <dd>{result.event.isActivePublicEvent ? tx("Tak") : tx("Nie")}</dd>
             </div>
             <div>
-              <dt>Katalog wydarzeń</dt>
+              <dt>{tx("Katalog wydarzeń")}</dt>
               <dd>
-                {result.event.visibility === "public"
-                  ? "Opublikowany"
-                  : "Prywatny"}
+                {result.event.visibility === "public" ? tx("Opublikowany") : tx("Prywatny")}
               </dd>
             </div>
             <div>
-              <dt>Publiczna kolejka</dt>
+              <dt>{tx("Publiczna kolejka")}</dt>
               <dd>
-                {result.event.publicQueueEnabled ? "Włączona" : "Wyłączona"}
+                {result.event.publicQueueEnabled ? tx("Włączona") : tx("Wyłączona")}
               </dd>
             </div>
             <div>
-              <dt>Uprawnienia</dt>
-              <dd>{roleCanManage ? "Zarządzanie" : "Tylko podgląd"}</dd>
+              <dt>{tx("Uprawnienia")}</dt>
+              <dd>{roleCanManage ? tx("Zarządzanie") : tx("Tylko podgląd")}</dd>
             </div>
           </dl>
         </CardContent>
@@ -231,7 +234,7 @@ export default async function OrganizationEventDetailPage({
         canReopen={canReopen}
         reopenDeadline={reopenDeadline ? reopenDeadline.toISOString() : null}
         canRotateCode={canRotateCode}
-        successMessage={actionMessage}
+        successMessage={tx(actionMessage)}
       />
     </div>
   );

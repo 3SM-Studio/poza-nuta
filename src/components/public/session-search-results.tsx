@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,8 @@ export function SessionSearchResults({
   backLabel = "Wróć do katalogu",
   emptyMessage = "Brak wyników. Spróbuj wpisać tytuł i wykonawcę.",
 }: SessionSearchResultsProps) {
+  const tx = useUiText();
+
   const hasSearchState = isLoading || message !== null || songs.length > 0;
   if (!hasSearchState) return null;
 
@@ -44,7 +48,7 @@ export function SessionSearchResults({
     <section aria-labelledby="session-search-results-heading" className="mb-7">
       <div className="mb-3 flex items-center gap-2">
         <Button
-          aria-label={backLabel}
+          aria-label={tx(backLabel)}
           className="size-11 rounded-full"
           onClick={onBack}
           size="icon"
@@ -54,6 +58,7 @@ export function SessionSearchResults({
           <ArrowLeft />
         </Button>
         <h1
+          dir="auto"
           className="min-w-0 truncate text-2xl font-extrabold tracking-[-0.04em]"
           id="session-search-results-heading"
         >
@@ -64,17 +69,16 @@ export function SessionSearchResults({
       {isLoading && songs.length === 0 ? <SearchResultSkeletons /> : null}
       {isLoading && songs.length > 0 ? (
         <p className="mb-2 text-sm text-muted-foreground" role="status">
-          Aktualizowanie wyników…
-        </p>
+          {tx("Aktualizowanie wyników…")}</p>
       ) : null}
       {isEmpty ? (
         <p className="py-8 text-center text-sm text-muted-foreground" role="status">
-          {message}
+          {tx(message)}
         </p>
       ) : null}
       {isError ? (
         <p className="py-4 text-sm text-destructive" role="alert">
-          {message}
+          {tx(message)}
         </p>
       ) : null}
       {songs.length > 0 ? (
@@ -99,7 +103,7 @@ export function SessionSearchResults({
                 type="button"
                 variant="outline"
               >
-                {isLoadingMore ? "Wczytywanie…" : "Pokaż więcej"}
+                {isLoadingMore ? tx("Wczytywanie…") : tx("Pokaż więcej")}
               </Button>
             </div>
           ) : null}
@@ -110,8 +114,10 @@ export function SessionSearchResults({
 }
 
 function SearchResultSkeletons() {
+  const tx = useUiText();
+
   return (
-    <div aria-label="Wczytywanie wyników" className="border-t border-border">
+    <div aria-label={tx("Wczytywanie wyników")} className="border-t border-border">
       {Array.from({ length: 5 }, (_, index) => (
         <div
           className="flex min-h-[76px] items-center gap-3 border-b border-border py-2"

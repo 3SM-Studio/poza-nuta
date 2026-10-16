@@ -1,10 +1,14 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useState, type FormEvent } from "react";
 
 import { loginOperator, OperatorClientError } from "./api";
 
 export function OperatorLoginForm() {
+  const tx = useUiText();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +33,7 @@ export function OperatorLoginForm() {
   return (
     <form className={"grid gap-4"} onSubmit={handleSubmit}>
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="operator-email">E-mail</label>
+        <label htmlFor="operator-email">{tx("E-mail")}</label>
         <input
           id="operator-email"
           name="email"
@@ -44,7 +48,7 @@ export function OperatorLoginForm() {
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="operator-password">Hasło</label>
+        <label htmlFor="operator-password">{tx("Hasło")}</label>
         <input
           id="operator-password"
           name="password"
@@ -60,7 +64,7 @@ export function OperatorLoginForm() {
 
       {error ? (
         <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
-          {error}
+          {tx(error)}
         </p>
       ) : null}
 
@@ -69,7 +73,7 @@ export function OperatorLoginForm() {
         type="submit"
         disabled={isSubmitting}
       >
-        {isSubmitting ? "Logowanie…" : "Zaloguj się"}
+        {isSubmitting ? tx("Logowanie…") : tx("Zaloguj się")}
       </button>
     </form>
   );

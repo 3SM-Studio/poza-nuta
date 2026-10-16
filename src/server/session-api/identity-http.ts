@@ -18,7 +18,7 @@ export function requireIdentityRateLimit(request: NextRequest) {
   }
 }
 
-export async function readIdentityBody(request: Request): Promise<Record<string, unknown>> {
+export async function readIdentityBody(request: Request, maxBytes = 1024): Promise<Record<string, unknown>> {
   const reader = request.body?.getReader();
   if (!reader) throw invalidBody();
   const chunks: Uint8Array[] = [];
@@ -28,7 +28,7 @@ export async function readIdentityBody(request: Request): Promise<Record<string,
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 1024) { await reader.cancel(); throw invalidBody(); }
+      if (size > maxBytes) { await reader.cancel(); throw invalidBody(); }
       chunks.push(value);
     }
   } finally { reader.releaseLock(); }

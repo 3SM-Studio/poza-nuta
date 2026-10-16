@@ -21,5 +21,5 @@ test("Slice 4 migration is additive, private, scoped and linked to the Drizzle j
     if (name !== "public.event_participants") assert.deepEqual(next.tables[name], table, name);
   }
   const journal = JSON.parse(readFileSync("drizzle/meta/_journal.json", "utf8"));
-  assert.equal(journal.entries.at(-1).tag, "0030_participant_linking");
+  assert.equal(journal.entries.find((entry: { idx: number }) => entry.idx === 30)?.tag, "0030_participant_linking");
 });

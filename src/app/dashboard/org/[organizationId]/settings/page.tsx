@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
@@ -19,9 +21,12 @@ import {
 } from "../../../../../server/operator-api/organizations";
 import { requireOperatorSession } from "../../../../../server/operator-api/supabase-session";
 
-export const metadata: Metadata = {
-  title: "Ustawienia organizacji | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Ustawienia organizacji | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +39,8 @@ type OrganizationSettingsPageProps = {
 export default async function OrganizationSettingsPage({
   params,
 }: OrganizationSettingsPageProps) {
+  const tx = await getUiText();
+
   const { organizationId } = await params;
   const session = await requireOperatorSession();
   const organization = await getDashboardOrganizationForAuthUser(
@@ -53,42 +60,40 @@ export default async function OrganizationSettingsPage({
       <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
         <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
-            <h1>Ustawienia</h1>
+            <h1>{tx("Ustawienia")}</h1>
             <p className={"mt-1.5 text-sm text-muted-foreground"}>{access.organization.name}</p>
           </div>
           <Badge variant={access.organization.active ? "secondary" : "destructive"}>
-            {access.organization.active ? "Aktywna" : "Nieaktywna"}
+            {access.organization.active ? tx("Aktywna") : tx("Nieaktywna")}
           </Badge>
         </header>
 
         <div className={"grid min-w-0 gap-4"}>
           <Card>
             <CardHeader>
-              <CardTitle>Dane organizacji</CardTitle>
+              <CardTitle>{tx("Dane organizacji")}</CardTitle>
               <CardDescription>
-                Public ID jest technicznym identyfikatorem URL i nie jest
-                edytowalny.
-              </CardDescription>
+                {tx("Public ID jest technicznym identyfikatorem URL i nie jest edytowalny.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                 <div>
-                  <dt>Nazwa</dt>
+                  <dt>{tx("Nazwa")}</dt>
                   <dd>{access.organization.name}</dd>
                 </div>
                 <div>
-                  <dt>ID organizacji</dt>
+                  <dt>{tx("ID organizacji")}</dt>
                   <dd className={"min-w-0 break-all [overflow-wrap:anywhere]"}>
                     {access.organization.publicId}
                   </dd>
                 </div>
                 <div>
-                  <dt>Handle techniczny</dt>
+                  <dt>{tx("Handle techniczny")}</dt>
                   <dd>{access.organization.handle}</dd>
                 </div>
                 <div>
-                  <dt>Rola</dt>
-                  <dd>{formatRole(access.organization.role)}</dd>
+                  <dt>{tx("Rola")}</dt>
+                  <dd>{tx(formatRole(access.organization.role))}</dd>
                 </div>
               </dl>
             </CardContent>
@@ -96,16 +101,15 @@ export default async function OrganizationSettingsPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Zmień nazwę</CardTitle>
+              <CardTitle>{tx("Zmień nazwę")}</CardTitle>
               <CardDescription>
-                Tylko właściciel może zmienić nazwę organizacji.
-              </CardDescription>
+                {tx("Tylko właściciel może zmienić nazwę organizacji.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form className={"grid gap-4 [&_button]:justify-self-start"} action={updateName}>
                 <input type="hidden" name="organizationId" value={organizationId} />
                 <div className={"grid gap-2 [&_input]:min-h-11 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-                  <label htmlFor="organization-name">Nazwa organizacji</label>
+                  <label htmlFor="organization-name">{tx("Nazwa organizacji")}</label>
                   <input
                     id="organization-name"
                     name="name"
@@ -121,8 +125,7 @@ export default async function OrganizationSettingsPage({
                   type="submit"
                   disabled={!canManageOrganization}
                 >
-                  Zapisz nazwę
-                </button>
+                  {tx("Zapisz nazwę")}</button>
               </form>
             </CardContent>
           </Card>

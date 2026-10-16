@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -26,13 +28,18 @@ import {
 } from "../../../../server/operator-api/supabase-session";
 import { validateOperatorProfileInput } from "../../../../server/operator-api/validation";
 
-export const metadata: Metadata = {
-  title: "Profil | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Profil | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardProfileOnboardingPage() {
+  const tx = await getUiText();
+
   const session = await requireOperatorSession("dashboard.onboarding.profile");
   const organizations = await listDashboardOrganizationsForAuthUser(
     session.authUser.id,
@@ -47,10 +54,9 @@ export default async function DashboardProfileOnboardingPage() {
       <section className={"mx-auto grid min-h-[calc(100vh-7.5rem)] w-full max-w-[42rem] place-items-center"}>
         <Card className={"w-full"}>
           <CardHeader>
-            <CardTitle>Przedstaw się</CardTitle>
+            <CardTitle>{tx("Przedstaw się")}</CardTitle>
             <CardDescription>
-              Podaj dane, które będą widoczne w Twoim panelu i historii działań.
-            </CardDescription>
+              {tx("Podaj dane, które będą widoczne w Twoim panelu i historii działań.")}</CardDescription>
           </CardHeader>
           <CardContent>
             <OperatorProfileOnboardingForm action={saveOperatorProfile} />

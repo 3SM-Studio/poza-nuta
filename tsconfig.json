@@ -43,6 +43,7 @@
     "tests/**/*.ts",
     "tests/**/*.tsx",
     "scripts/**/*.mjs",
+    "scripts/**/*.ts",
     ".next-p3-e2e/types/**/*.ts",
     ".next-p3-e2e/dev/types/**/*.ts"
   ],

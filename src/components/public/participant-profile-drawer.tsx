@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import type { FormEvent } from "react";
 import { X } from "lucide-react";
 
@@ -40,14 +42,16 @@ export function ParticipantProfileDrawer({
   onSubmit,
   onValueChange,
 }: ParticipantProfileDrawerProps) {
+  const tx = useUiText();
+
   return (
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
       <DrawerContent className="border-border bg-popover text-foreground sm:inset-x-auto sm:left-[max(2rem,calc(50%-16rem))] sm:w-[min(calc(100%-4rem),32rem)] sm:rounded-t-2xl sm:border-x">
         <DrawerHeader className="relative px-6 pt-2 pb-1 text-center">
-          <DrawerTitle className="text-xl font-extrabold tracking-[-0.035em]">Zmień swój nick</DrawerTitle>
+          <DrawerTitle className="text-xl font-extrabold tracking-[-0.035em]">{tx("Zmień swój nick")}</DrawerTitle>
           <DrawerClose asChild>
             <Button
-              aria-label="Zamknij zmianę nicku"
+              aria-label={tx("Zamknij zmianę nicku")}
               className="absolute top-3 right-4 size-9 rounded-full"
               size="icon"
               type="button"
@@ -59,8 +63,7 @@ export function ParticipantProfileDrawer({
         </DrawerHeader>
         <form className="grid gap-1.5 px-6 pt-1 pb-[calc(1.85rem+env(safe-area-inset-bottom))]" onSubmit={onSubmit}>
           <label className="sr-only" htmlFor="participant-display-name">
-            Twój nick
-          </label>
+            {tx("Twój nick")}</label>
           <Input
             id="participant-display-name"
             autoComplete="nickname"
@@ -82,17 +85,16 @@ export function ParticipantProfileDrawer({
           </span>
           {error ? (
             <p className="text-sm text-destructive" id="participant-rename-error" role="alert">
-              {error}
+              {tx(error)}
             </p>
           ) : null}
           <div className="mt-1 grid grid-cols-2 gap-3">
             <DrawerClose asChild>
               <Button className="h-12 rounded-full font-extrabold" disabled={isSaving} type="button" variant="outline">
-                Anuluj
-              </Button>
+                {tx("Anuluj")}</Button>
             </DrawerClose>
             <Button className="h-12 rounded-full font-extrabold" disabled={isSaving} type="submit">
-              {isSaving ? "Zapisuję…" : "Zapisz"}
+              {isSaving ? tx("Zapisuję…") : tx("Zapisz")}
             </Button>
           </div>
         </form>

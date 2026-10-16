@@ -9,7 +9,6 @@ import {
   within,
 } from "@testing-library/react";
 import type {
-  Collision,
   CollisionDetection,
   DragEndEvent,
   DragStartEvent,
@@ -27,20 +26,17 @@ import type { QueueRealtimeInvalidateReason } from "@/lib/queue-realtime";
 import type { QueueRealtimeConnectionStatus } from "@/lib/queue-realtime";
 
 const {
-  closestCorners,
   dnd,
   getQueue,
   moveRequest,
-  pointerWithin,
+  placeRequest,
   realtime,
   runAction,
   fairPreview,
   fairApply,
-  sortableKeyboardCoordinates,
   toastInfo,
   toastSuccess,
 } = vi.hoisted(() => ({
-    closestCorners: vi.fn(),
     dnd: {
       collisionDetection: null as CollisionDetection | null,
       contextId: null as string | null,
@@ -50,7 +46,7 @@ const {
     },
     getQueue: vi.fn(),
     moveRequest: vi.fn(),
-    pointerWithin: vi.fn(),
+    placeRequest: vi.fn(),
     realtime: {
       invalidate: null as
         | ((
@@ -63,13 +59,11 @@ const {
     runAction: vi.fn(),
     fairPreview: vi.fn(),
     fairApply: vi.fn(),
-    sortableKeyboardCoordinates: vi.fn(),
     toastInfo: vi.fn(),
     toastSuccess: vi.fn(),
   }));
 
 vi.mock("@dnd-kit/core", () => ({
-  closestCorners,
   DndContext: ({
     children,
     collisionDetection,
@@ -91,8 +85,10 @@ vi.mock("@dnd-kit/core", () => ({
   },
   DragOverlay: ({ children }: { children: ReactNode }) => <>{children}</>,
   KeyboardSensor: class KeyboardSensor {},
-  pointerWithin,
-  PointerSensor: class PointerSensor {},
+  MouseSensor: class MouseSensor {},
+  TouchSensor: class TouchSensor {},
+  MeasuringStrategy: { Always: 0 },
+  useDraggable: () => ({ attributes: {}, isDragging: false, listeners: {}, setActivatorNodeRef: vi.fn(), setNodeRef: vi.fn() }),
   useDroppable: () => ({ isOver: false, setNodeRef: vi.fn() }),
   useSensor: vi.fn(
     (
@@ -108,25 +104,6 @@ vi.mock("@dnd-kit/core", () => ({
   useSensors: vi.fn((...sensors: unknown[]) => sensors),
 }));
 
-vi.mock("@dnd-kit/sortable", () => ({
-  SortableContext: ({ children }: { children: ReactNode }) => <>{children}</>,
-  sortableKeyboardCoordinates,
-  useSortable: () => ({
-    attributes: {},
-    isDragging: false,
-    listeners: {},
-    setActivatorNodeRef: vi.fn(),
-    setNodeRef: vi.fn(),
-    transform: null,
-    transition: undefined,
-  }),
-  verticalListSortingStrategy: vi.fn(),
-}));
-
-vi.mock("@dnd-kit/utilities", () => ({
-  CSS: { Transform: { toString: vi.fn(() => undefined) } },
-}));
-
 vi.mock("sonner", () => ({
   toast: { info: toastInfo, success: toastSuccess },
 }));
@@ -134,6 +111,7 @@ vi.mock("sonner", () => ({
 vi.mock("@/components/operator/event-queue-api", () => ({
   getDashboardEventQueue: getQueue,
   moveDashboardEventQueueRequest: moveRequest,
+  placeDashboardEventQueueRequest: placeRequest,
   runDashboardEventQueueAction: runAction,
   previewDashboardFairQueue: fairPreview,
   applyDashboardFairQueue: fairApply,
@@ -163,7 +141,6 @@ const statuses: DashboardEventQueueRequestStatus[] = [
 
 describe("EventQueuePanel", () => {
   beforeEach(() => {
-    closestCorners.mockReset();
     dnd.collisionDetection = null;
     dnd.contextId = null;
     dnd.keyboardCoordinates = null;
@@ -171,12 +148,11 @@ describe("EventQueuePanel", () => {
     dnd.dragEnd = null;
     dnd.dragStart = null;
     moveRequest.mockReset();
-    pointerWithin.mockReset();
+    placeRequest.mockReset();
     realtime.invalidate = null;
     realtime.status = "live";
     runAction.mockReset();
     fairPreview.mockReset(); fairApply.mockReset();
-    sortableKeyboardCoordinates.mockReset();
     toastInfo.mockReset();
     toastSuccess.mockReset();
   });
@@ -434,313 +410,85 @@ describe("EventQueuePanel", () => {
     duplicateOutsidePanel.remove();
   });
 
-  it("returns keyboard focus to the source lane after a failed DnD mutation", async () => {
+  it("rolls back an atomic drop after a stale conflict and restores focus", async () => {
     const pending = makeItem(1, "pending");
-    const mutation = deferred<{ request: DashboardEventQueueItemDto }>();
-
-    runAction.mockImplementation(() => mutation.promise);
-    getQueue.mockResolvedValue({ items: [pending] });
-    renderPanel([pending]);
-
-    act(() => {
-      dnd.dragEnd?.({
-        active: {
-          data: {
-            current: { type: "request", requestId: 1, lane: "pending" },
-          },
-        },
-        over: {
-          data: { current: { type: "lane", lane: "approved" } },
-        },
-      } as unknown as DragEndEvent);
-    });
-
-    const optimisticRow = within(
-      document.querySelector('[data-queue-lane="approved"]')!,
-    ).getByRole("article", { name: "Zgłoszenie: Singer 1 — Song 1" });
-    await waitFor(() => expect(optimisticRow).toHaveFocus());
-
-    await act(async () => {
-      mutation.reject(
-        new OperatorClientError(409, "QUEUE_ACTION_CONFLICT", "Conflict"),
-      );
-      await Promise.resolve();
-    });
-
-    const rolledBackRow = within(
-      document.querySelector('[data-queue-lane="pending"]')!,
-    ).getByRole("article", { name: "Zgłoszenie: Singer 1 — Song 1" });
-    await waitFor(() => expect(rolledBackRow).toHaveFocus());
+    const mutation = deferred<{ request: DashboardEventQueueItemDto; items: DashboardEventQueueItemDto[] }>();
+    placeRequest.mockReturnValue(mutation.promise);
+    getQueue.mockResolvedValue({ items: [pending] }); renderPanel([pending]);
+    dragTo(1, "pending", "approved");
+    await waitFor(() => expect(placeRequest).toHaveBeenCalledOnce());
+    expect(within(document.querySelector('[data-queue-lane="approved"]')!).getByText("Singer 1")).toBeVisible();
+    await act(async () => { mutation.reject(new OperatorClientError(409, "QUEUE_PLACEMENT_STALE", "Conflict")); });
+    await waitFor(() => expect(within(document.querySelector('[data-queue-lane="pending"]')!).getByText("Singer 1")).toBeVisible());
+    await waitFor(() => expect(screen.getByRole("article", { name: "Zgłoszenie: Singer 1 — Song 1" })).toHaveFocus());
+    expect(screen.getByText(/Kolejka została zmieniona przez innego operatora/)).toBeVisible();
   });
 
-  it("preserves the source card geometry in the drag overlay across responsive queue layouts", () => {
+  it("preserves source geometry, responsive board and unique request IDs", () => {
     renderPanel([makeItem(1, "rejected")]);
-
-    const board = document.querySelector("[data-queue-board]");
-    const rejectedLane = document.querySelector(
-      '[data-queue-lane="rejected"]',
-    );
-
-    expect(board).toHaveClass(
-      "grid-cols-1",
-      "@min-[48rem]/queue:grid-cols-2",
-    );
-    expect(dnd.contextId).toBe(
-      "event-queue:organization-test:123e4567-e89b-42d3-a456-426614174000",
-    );
-    expect(board).not.toHaveClass("grid-cols-2", "lg:grid-cols-2");
-    expect(rejectedLane).toHaveClass("col-span-full");
-
-    act(() => {
-      dnd.dragStart?.({
-        active: {
-          data: {
-            current: { type: "request", requestId: 1, lane: "rejected" },
-          },
-        },
-      } as unknown as DragStartEvent);
-    });
-
-    const overlay = document.querySelector("[data-queue-drag-overlay]");
-
-    expect(overlay).toHaveClass(
-      "h-full",
-      "w-full",
-      "[&>article]:h-full",
-    );
-    expect(overlay?.className).not.toContain("w-[min(");
-    expect(overlay?.className).not.toContain("rotate-");
-    expect(document.querySelectorAll('[data-queue-request-id="1"]')).toHaveLength(
-      1,
-    );
+    expect(document.querySelector("[data-queue-board]")).toHaveClass("grid-cols-1", "@min-[48rem]/queue:grid-cols-2");
+    expect(document.querySelector('[data-queue-lane="rejected"]')).toHaveClass("col-span-full");
+    startDrag(1, "rejected");
+    expect(document.querySelector("[data-queue-drag-overlay]")).toHaveClass("h-full", "w-full", "[&>article]:h-full");
+    expect(document.querySelectorAll('[data-queue-request-id="1"]')).toHaveLength(1);
   });
 
-  it("restores focus immediately after a no-op drop without stealing it on a later refresh", async () => {
-    const rejected = makeItem(1, "rejected");
-    getQueue.mockResolvedValue({
-      items: [{ ...rejected, version: rejected.version + 1 }],
-    });
-    renderPanel([rejected]);
-
-    act(() => {
-      dnd.dragEnd?.({
-        active: {
-          data: {
-            current: { type: "request", requestId: 1, lane: "rejected" },
-          },
-        },
-        over: {
-          data: {
-            current: {
-              type: "request",
-              requestId: 1,
-              lane: "rejected",
-            },
-          },
-        },
-      } as unknown as DragEndEvent);
-    });
-
-    const requestRow = screen.getByRole("article", {
-      name: "Zgłoszenie: Singer 1 — Song 1",
-    });
-    await waitFor(() => expect(requestRow).toHaveFocus());
-
-    const refreshButton = screen.getByRole("button", { name: "Odśwież" });
-    refreshButton.focus();
-    await act(async () => {
-      await realtime.invalidate?.("queue", new AbortController().signal);
-    });
-
-    expect(refreshButton).toHaveFocus();
+  it("does not mutate outside slots or for invalid same-lane status drops", async () => {
+    renderPanel([makeItem(1, "rejected")]); dragTo(1, "rejected", "rejected", 1, false);
+    await act(async () => { await Promise.resolve(); }); expect(placeRequest).not.toHaveBeenCalled();
+    act(() => dnd.dragEnd?.({ active: { data: { current: { type: "request", requestId: 1, lane: "rejected" } } }, over: null } as unknown as DragEndEvent));
+    expect(placeRequest).not.toHaveBeenCalled();
   });
 
-  it("uses the pointer position for collisions and falls back for keyboard dragging", () => {
-    renderPanel([makeItem(1, "rejected")]);
-
-    const pointerCollisions = [
-      { id: "queue-lane:approved" },
-    ] as Collision[];
-    const keyboardCollisions = [
-      { id: "queue-lane:pending" },
-    ] as Collision[];
-    const activeContainer = { id: "queue-request:1" };
-    const targetContainer = { id: "queue-lane:pending" };
-    const args = {
-      active: { id: activeContainer.id },
-      droppableContainers: [activeContainer, targetContainer],
-    } as unknown as Parameters<CollisionDetection>[0];
-
-    pointerWithin.mockReturnValueOnce(pointerCollisions).mockReturnValueOnce([]);
-    closestCorners.mockReturnValue(keyboardCollisions);
-
-    expect(dnd.collisionDetection?.(args)).toBe(pointerCollisions);
-    expect(closestCorners).not.toHaveBeenCalled();
-    expect(dnd.collisionDetection?.(args)).toBe(keyboardCollisions);
-    expect(closestCorners).toHaveBeenCalledWith({
-      ...args,
-      droppableContainers: [targetContainer],
-    });
+  it("requires cancel-first confirmation for a dragged rejection, then one confirmed placement", async () => {
+    const source = makeItem(1, "approved"), rejected = { ...source, status: "rejected" as const, version: 2, position: 0 };
+    getQueue.mockResolvedValue({ items: [rejected] }); placeRequest.mockResolvedValue({ request: rejected, items: [rejected] }); renderPanel([source]);
+    dragTo(1, "approved", "rejected"); expect(screen.getByRole("alertdialog")).toBeVisible(); expect(placeRequest).not.toHaveBeenCalled();
+    await act(async () => { await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve())); });
+    fireEvent.click(screen.getByRole("button", { name: "Anuluj" })); expect(placeRequest).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("article", { name: "Zgłoszenie: Singer 1 — Song 1" })).toHaveFocus());
+    dragTo(1, "approved", "rejected"); fireEvent.click(screen.getByRole("button", { name: "Odrzuć zgłoszenie" }));
+    await waitFor(() => expect(placeRequest).toHaveBeenCalledExactlyOnceWith("organization-test", "123e4567-e89b-42d3-a456-426614174000", 1, expect.objectContaining({ lane: "rejected", confirmed: true })));
+    expect(runAction).not.toHaveBeenCalled(); expect(moveRequest).not.toHaveBeenCalled();
   });
 
-  it("moves vertically through request cards in the current lane before another lane", () => {
-    renderPanel([
-      makeItem(1, "approved"),
-      makeItem(2, "approved"),
-      makeItem(3, "approved"),
-      makeItem(4, "rejected"),
-    ]);
-    sortableKeyboardCoordinates.mockReturnValue({ x: 999, y: 999 });
-
-    const containers = [
-      keyboardRequestContainer(1, "approved", queueRect(0, 0)),
-      keyboardRequestContainer(2, "approved", queueRect(0, 100)),
-      keyboardRequestContainer(3, "approved", queueRect(0, 200)),
-      keyboardRequestContainer(4, "rejected", queueRect(120, 50)),
-      keyboardLaneContainer("approved", queueRect(0, 0, 100, 300)),
-      keyboardLaneContainer("rejected", queueRect(120, 0, 100, 300)),
-    ];
-
-    expect(
-      runKeyboardCoordinates("ArrowDown", 1, "approved", containers),
-    ).toEqual({ x: 0, y: 100 });
-    expect(
-      runKeyboardCoordinates("ArrowDown", 2, "approved", containers),
-    ).toEqual({ x: 0, y: 200 });
-    expect(sortableKeyboardCoordinates).not.toHaveBeenCalled();
+  it.each([["pending", "approved"], ["rejected", "pending"], ["rejected", "approved"]] as const)("atomically places %s into empty %s", async (sourceLane, lane) => {
+    const source = makeItem(1, sourceLane), target = { ...source, status: lane, position: lane === "approved" ? 1 : 0, version: 2 };
+    placeRequest.mockResolvedValue({ request: target, items: [target] }); getQueue.mockResolvedValue({ items: [target] }); renderPanel([source]);
+    dragTo(1, sourceLane, lane); await waitFor(() => expect(placeRequest).toHaveBeenCalledOnce());
+    expect(within(document.querySelector(`[data-queue-lane="${lane}"]`)!).getByText("Singer 1")).toBeVisible();
+    expect(runAction).not.toHaveBeenCalled(); expect(moveRequest).not.toHaveBeenCalled();
   });
 
-  it("moves from the end of a lane into an empty lane drop zone", () => {
-    renderPanel([makeItem(1, "approved")]);
-    const containers = [
-      keyboardRequestContainer(1, "approved", queueRect(0, 0)),
-      keyboardLaneContainer("approved", queueRect(0, 0, 100, 100)),
-      keyboardLaneContainer("rejected", queueRect(0, 200, 100, 200)),
-    ];
-
-    expect(
-      runKeyboardCoordinates("ArrowDown", 1, "approved", containers),
-    ).toEqual({ x: 0, y: 200 });
+  it("returns full canonical positions with one placement call, without separate action and move", async () => {
+    const source = makeItem(1, "pending"), other = makeItem(2, "approved"), moved = { ...source, status: "approved" as const, position: 1, version: 2 };
+    const canonical = [moved, { ...other, position: 2, version: 2 }];
+    placeRequest.mockResolvedValue({ request: moved, items: canonical }); getQueue.mockResolvedValue({ items: canonical }); renderPanel([source, other]);
+    dragTo(1, "pending", "approved"); await waitFor(() => expect(placeRequest).toHaveBeenCalledOnce());
+    expect(runAction).not.toHaveBeenCalled(); expect(moveRequest).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.querySelectorAll('[data-queue-lane="approved"] [data-queue-request-id]')).toHaveLength(2));
+    expect(within(document.querySelector('[data-queue-request-id="2"]')!).getByText("Pozycja: 2")).toBeVisible();
   });
 
-  it.each([
-    ["rejected", "approved", "approve"],
-    ["rejected", "pending", "restore"],
-    ["approved", "rejected", "reject"],
-  ] as const)(
-    "moves a request from %s to an empty %s lane",
-    async (sourceLane, targetLane, expectedAction) => {
-      const source = makeItem(1, sourceLane);
-      const target = {
-        ...source,
-        status: targetLane,
-        position: targetLane === "approved" ? 1 : 0,
-        version: 2,
-      };
+  it("aborts an active gesture on Realtime and refreshes without mutation", async () => {
+    const source = makeItem(1, "approved"); getQueue.mockResolvedValue({ items: [{ ...source, version: 2 }] }); renderPanel([source]);
+    startDrag(1, "approved"); expect(document.querySelector("[data-queue-drag-overlay]")).toBeInTheDocument();
+    const obsoleteEnd = dnd.dragEnd;
+    await act(async () => { await realtime.invalidate?.("queue", new AbortController().signal); });
+    expect(document.querySelector("[data-queue-drag-overlay]")).not.toBeInTheDocument();
+    expect(screen.getByText(/Kolejka została zaktualizowana/)).toBeVisible(); expect(placeRequest).not.toHaveBeenCalled();
+    act(() => obsoleteEnd?.({ active: { data: { current: { type: "request", requestId: 1, lane: "approved" } } },
+      over: { data: { current: { type: "slot", lane: "rejected", position: 1, allowed: true } } } } as unknown as DragEndEvent));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(placeRequest).not.toHaveBeenCalled();
+  });
 
-      runAction.mockResolvedValue({ request: target });
-      moveRequest.mockResolvedValue({ moved: true, request: target });
-      getQueue.mockResolvedValue({ items: [target] });
-      renderPanel([source]);
-
-      act(() => {
-        dnd.dragEnd?.({
-          active: {
-            data: {
-              current: { type: "request", requestId: 1, lane: sourceLane },
-            },
-          },
-          over: {
-            data: {
-              current: { type: "lane", lane: targetLane },
-            },
-          },
-        } as unknown as DragEndEvent);
-      });
-
-      expect(
-        within(
-          document.querySelector(`[data-queue-lane="${targetLane}"]`)!,
-        ).getByText("Singer 1"),
-      ).toBeInTheDocument();
-      await waitFor(() =>
-        expect(runAction).toHaveBeenCalledWith(
-          "organization-test",
-          "123e4567-e89b-42d3-a456-426614174000",
-          1,
-          expectedAction,
-        ),
-      );
-    },
-  );
-
-  it("moves a dragged request between lanes immediately and persists it in the background", async () => {
-    const pending = makeItem(1, "pending");
-    const approved = makeItem(2, "approved");
-    const accepted = {
-      ...pending,
-      status: "approved" as const,
-      position: 2,
-      version: 2,
-    };
-    const moved = { ...accepted, position: 1, version: 3 };
-    let confirmAction!: (value: {
-      request: DashboardEventQueueItemDto;
-    }) => void;
-
-    runAction.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          confirmAction = resolve;
-        }),
-    );
-    moveRequest.mockResolvedValue({ moved: true, request: moved });
-    getQueue.mockResolvedValue({
-      items: [moved, { ...approved, position: 2 }],
-    });
-    renderPanel([pending, approved]);
-
-    act(() => {
-      dnd.dragEnd?.({
-        active: {
-          data: {
-            current: { type: "request", requestId: 1, lane: "pending" },
-          },
-        },
-        over: {
-          data: {
-            current: { type: "request", requestId: 2, lane: "approved" },
-          },
-        },
-      } as unknown as DragEndEvent);
-    });
-
-    expect(
-      within(document.querySelector('[data-queue-lane="approved"]')!).getByText(
-        "Singer 1",
-      ),
-    ).toBeInTheDocument();
-    await waitFor(() =>
-      expect(runAction).toHaveBeenCalledWith(
-        "organization-test",
-        "123e4567-e89b-42d3-a456-426614174000",
-        1,
-        "approve",
-      ),
-    );
-    expect(moveRequest).not.toHaveBeenCalled();
-
-    confirmAction({ request: accepted });
-
-    await waitFor(() =>
-      expect(moveRequest).toHaveBeenCalledWith(
-        "organization-test",
-        "123e4567-e89b-42d3-a456-426614174000",
-        1,
-        { targetPosition: 1 },
-      ),
-    );
-    await waitFor(() => expect(getQueue).toHaveBeenCalledOnce());
+  it("keeps an active gesture when a reconnect refetch has the same canonical revision", async () => {
+    const source = makeItem(1, "approved"); getQueue.mockResolvedValue({ items: [source] }); renderPanel([source]);
+    startDrag(1, "approved");
+    await act(async () => { await realtime.invalidate?.("reconnect", new AbortController().signal); });
+    expect(document.querySelector("[data-queue-drag-overlay]")).toBeInTheDocument();
+    expect(placeRequest).not.toHaveBeenCalled();
   });
 
   it("requires destructive confirmation before rejecting a request", async () => {
@@ -1520,105 +1268,6 @@ function settleDeferred<T>(
   }
 }
 
-type KeyboardTestLane = "pending" | "approved" | "rejected";
-type KeyboardTestRect = ReturnType<typeof queueRect>;
-type KeyboardTestContainer = {
-  id: string;
-  data: {
-    current:
-      | { type: "request"; requestId: number; lane: KeyboardTestLane }
-      | { type: "lane"; lane: KeyboardTestLane };
-  };
-  disabled: boolean;
-  rect: KeyboardTestRect;
-};
-
-function queueRect(
-  left: number,
-  top: number,
-  width = 100,
-  height = 40,
-) {
-  return {
-    left,
-    top,
-    right: left + width,
-    bottom: top + height,
-    width,
-    height,
-  };
-}
-
-function keyboardRequestContainer(
-  requestId: number,
-  lane: KeyboardTestLane,
-  rect: KeyboardTestRect,
-): KeyboardTestContainer {
-  return {
-    id: `queue-request:${requestId}`,
-    data: { current: { type: "request", requestId, lane } },
-    disabled: false,
-    rect,
-  };
-}
-
-function keyboardLaneContainer(
-  lane: KeyboardTestLane,
-  rect: KeyboardTestRect,
-): KeyboardTestContainer {
-  return {
-    id: `queue-lane:${lane}`,
-    data: { current: { type: "lane", lane } },
-    disabled: false,
-    rect,
-  };
-}
-
-function runKeyboardCoordinates(
-  code: string,
-  overRequestId: number,
-  lane: KeyboardTestLane,
-  containers: KeyboardTestContainer[],
-) {
-  const active = containers.find(
-    (container) =>
-      container.data.current.type === "request" &&
-      container.data.current.requestId === 1,
-  );
-  const over = containers.find(
-    (container) => container.id === `queue-request:${overRequestId}`,
-  );
-
-  if (!active || !over || !dnd.keyboardCoordinates) {
-    throw new Error("Keyboard DnD test context is incomplete.");
-  }
-
-  return dnd.keyboardCoordinates(
-    new KeyboardEvent("keydown", { code }),
-    {
-      context: {
-        active: {
-          id: active.id,
-          data: {
-            current: { type: "request", requestId: 1, lane },
-          },
-        },
-        collisionRect: over.rect,
-        droppableContainers: {
-          getEnabled: () => containers,
-        },
-        droppableRects: new Map(
-          containers.map((container) => [container.id, container.rect]),
-        ),
-        over: {
-          id: over.id,
-          data: over.data,
-        },
-      },
-    } as unknown as Parameters<KeyboardCoordinateGetter>[1],
-  );
-}
-
 function makeItem(
   id: number,
   status: DashboardEventQueueRequestStatus,
@@ -1645,4 +1294,12 @@ function makeItem(
       durationSeconds: 180,
     },
   };
+}
+
+function startDrag(requestId: number, lane: "pending" | "approved" | "rejected") {
+  act(() => dnd.dragStart?.({ active: { data: { current: { type: "request", requestId, lane } } } } as unknown as DragStartEvent));
+}
+function dragTo(requestId: number, source: "pending" | "approved" | "rejected", lane: "pending" | "approved" | "rejected", position = 1, allowed = true) {
+  startDrag(requestId, source);
+  act(() => dnd.dragEnd?.({ active: { data: { current: { type: "request", requestId, lane: source } } }, over: { data: { current: { type: "slot", lane, position, allowed } } } } as unknown as DragEndEvent));
 }

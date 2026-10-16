@@ -1,11 +1,15 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import Image from "next/image";
 import Link from "next/link";
 
 import styles from "./public.module.css";
 
 export function PublicRequestPage() {
+  const tx = useUiText();
+
 
   return (
     <main className={styles.publicPage}>
@@ -14,7 +18,7 @@ export function PublicRequestPage() {
           <Link
             className={styles.brand}
             href="/"
-            aria-label="Przejdź na stronę główną"
+            aria-label={tx("Przejdź na stronę główną")}
           >
             <Image
               className={styles.brandLogo}
@@ -25,7 +29,7 @@ export function PublicRequestPage() {
             />
           </Link>
           </header>
-          <h1>Zeskanuj KOD QR w barze.</h1>
+          <h1>{tx("Zeskanuj KOD QR w barze.")}</h1>
       </div>
     </main>
   );

@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import {
   Building2Icon,
   CalendarCheckIcon,
@@ -21,6 +23,8 @@ export function AdminOverview({
 }: {
   metrics: PlatformAdminOverviewMetrics;
 }) {
+  const tx = useUiText();
+
   const cards = [
     {
       label: "Aktywni użytkownicy",
@@ -57,16 +61,14 @@ export function AdminOverview({
   return (
     <div className="grid gap-7">
       <header className="grid gap-1">
-        <p className="m-0 text-sm font-medium text-primary">Platforma</p>
+        <p className="m-0 text-sm font-medium text-primary">{tx("Platforma")}</p>
         <h1 className="m-0 text-2xl font-semibold tracking-normal sm:text-3xl">
-          Overview
-        </h1>
+          {tx("Overview")}</h1>
         <p className="m-0 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Bezpieczny, tylko do odczytu obraz bieżącego stanu platformy.
-        </p>
+          {tx("Bezpieczny, tylko do odczytu obraz bieżącego stanu platformy.")}</p>
       </header>
 
-      <section aria-label="Metryki platformy" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <section aria-label={tx("Metryki platformy")} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map(({ label, value, description, icon: Icon }) => (
           <Card key={label} className="min-h-40">
             <CardHeader>
@@ -87,13 +89,12 @@ export function AdminOverview({
         <div className="flex items-center gap-2">
           <ShieldCheckIcon className="text-primary" aria-hidden="true" />
           <h2 id="platform-role-breakdown" className="m-0 text-lg font-semibold">
-            Aktywne role platformowe
-          </h2>
+            {tx("Aktywne role platformowe")}</h2>
         </div>
         <dl className="grid gap-2 sm:grid-cols-3">
-          <RoleCount label="Właściciele" value={metrics.activePlatformMemberships.platform_owner} />
-          <RoleCount label="Administratorzy" value={metrics.activePlatformMemberships.platform_admin} />
-          <RoleCount label="Wsparcie" value={metrics.activePlatformMemberships.support} />
+          <RoleCount label={tx("Właściciele")} value={metrics.activePlatformMemberships.platform_owner} />
+          <RoleCount label={tx("Administratorzy")} value={metrics.activePlatformMemberships.platform_admin} />
+          <RoleCount label={tx("Wsparcie")} value={metrics.activePlatformMemberships.support} />
         </dl>
       </section>
     </div>

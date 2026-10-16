@@ -9,7 +9,7 @@ import {
   type ISingImportSummary,
 } from "./ising-import-adapter.ts";
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 export function loadISingImportOptions(
   env: NodeJS.ProcessEnv,

@@ -1,10 +1,15 @@
-import dotenv from "dotenv";
+import { assertNoCloudEnvironmentFiles } from "../../scripts/local-environment-files.ts";
+
+assertNoCloudEnvironmentFiles();
+
+import { assertLocalE2ETarget } from "../../src/lib/local-target.ts";
 import { existsSync, readFileSync } from "node:fs";
 
-dotenv.config();
+// Credentials must be injected by the isolated runner, never loaded from root .env.
+assertLocalE2ETarget(process.env);
 
-export const E2E_AUTH_STATE_PATH = ".auth/operator.json";
-export const E2E_DASHBOARD_AUTH_STATUS_PATH = ".auth/dashboard-status.json";
+export const E2E_AUTH_STATE_PATH = ".auth/local-isolated/operator.json";
+export const E2E_DASHBOARD_AUTH_STATUS_PATH = ".auth/local-isolated/dashboard-status.json";
 export const DEFAULT_E2E_BASE_URL = "http://localhost:3000";
 
 export type DashboardAuthSetupStatus =

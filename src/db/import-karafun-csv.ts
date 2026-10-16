@@ -25,7 +25,7 @@ type ImportSummary = {
   errors: number;
 };
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 const summary: ImportSummary = {
   processed: 0,

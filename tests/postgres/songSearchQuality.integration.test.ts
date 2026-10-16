@@ -77,7 +77,7 @@ test("professional song search corpus ranks normal human queries prominently", a
 
   try {
     await installPostgresCompatibilityFixture(sql);
-    await applyPostgresMigrations(sql, 27);
+    await applyPostgresMigrations(sql, process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 31 : 27);
     await seedSongs(sql);
 
     await withApplicationDatabase(harness, async () => {
@@ -116,22 +116,21 @@ test("professional song search corpus ranks normal human queries prominently", a
         ["ising", "karafun"],
       );
 
-      for (const unsupportedQuery of [
+      // These identities are absent from this Latin corpus; Unicode itself is supported.
+      for (const absentOrEmptyQuery of [
         "Кино",
         "Океан Ельзи",
         "Ляпис Трубецкой",
         "Μίκης Θεοδωράκης",
-        "ØØ",
-        "ßß",
         "🎤🎶",
         "---...!!!",
       ]) {
         const response = await publicSearchRoute.GET(
           new Request(
-            `http://localhost/api/public/songs/search?q=${encodeURIComponent(unsupportedQuery)}`,
+            `http://localhost/api/public/songs/search?q=${encodeURIComponent(absentOrEmptyQuery)}`,
           ),
         );
-        assert.equal(response.status, 200, unsupportedQuery);
+        assert.equal(response.status, 200, absentOrEmptyQuery);
         assert.deepEqual(await response.json(), {
           items: [],
           nextCursor: null,
@@ -148,7 +147,7 @@ test("professional song search corpus ranks normal human queries prominently", a
         const startedAt = performance.now();
         const results = await searchItems(query);
         const milliseconds = Number((performance.now() - startedAt).toFixed(2));
-        const candidateCount = await countMeasurementCandidates(sql, query);
+        const candidateCount = process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? null : await countMeasurementCandidates(sql, query);
         const apiStartedAt = performance.now();
         const response = await publicSearchRoute.GET(
           new Request(`http://localhost/api/public/songs/search?q=${encodeURIComponent(query)}`),

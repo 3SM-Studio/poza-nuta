@@ -1,7 +1,7 @@
 import type { KaraFunCsvRow } from "./karafun-csv";
-import { normalizeSongSearchText } from "../lib/song-search.ts";
+import { normalizeLegacySongSearchText as normalizeSongSearchText } from "../lib/song-search.ts";
 
-export { normalizeSongSearchText } from "../lib/song-search.ts";
+export { normalizeLegacySongSearchText as normalizeSongSearchText } from "../lib/song-search.ts";
 
 export type KaraFunSongPayload = {
   source: "karafun";

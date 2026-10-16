@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -22,6 +24,8 @@ export function ParticipantJoinGate({
   sessionToken: string;
   eventName?: string;
 }) {
+  const tx = useUiText();
+
   const router = useRouter();
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -53,14 +57,13 @@ export function ParticipantJoinGate({
   );
 
   return (
-    <PublicSessionEntryShell eyebrow="Dołączasz do karaoke" title={eventName ?? "Sesja karaoke"} titleId="participant-join-title">
+    <PublicSessionEntryShell eyebrow={tx("Dołączasz do karaoke")} title={eventName ?? tx("Sesja karaoke")} titleId="participant-join-title">
       <div className="px-6 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-8 sm:py-7">
-        <h2 className="text-center text-xl font-extrabold tracking-[-0.03em] sm:text-2xl">Jak mamy Cię podpisać?</h2>
-        <p className="mt-1.5 mb-5 text-center text-sm text-muted-foreground">Ta nazwa będzie widoczna w kolejce wydarzenia.</p>
+        <h2 className="text-center text-xl font-extrabold tracking-[-0.03em] sm:text-2xl">{tx("Jak mamy Cię podpisać?")}</h2>
+        <p className="mt-1.5 mb-5 text-center text-sm text-muted-foreground">{tx("Ta nazwa będzie widoczna w kolejce wydarzenia.")}</p>
           <form className="grid gap-1.5" onSubmit={handleSubmit}>
             <label className="sr-only" htmlFor="participant-display-name">
-              Imię lub ksywka
-            </label>
+              {tx("Imię lub ksywka")}</label>
             <Input
               id="participant-display-name"
               name="displayName"
@@ -76,7 +79,7 @@ export function ParticipantJoinGate({
               disabled={isSubmitting}
               autoFocus
               className="h-[3.2rem] border-border bg-secondary text-base"
-              placeholder="Twój nick"
+              placeholder={tx("Twój nick")}
               style={{ fontSize: "1rem" }}
             />
             <span className="text-right text-xs text-muted-foreground">
@@ -84,11 +87,11 @@ export function ParticipantJoinGate({
             </span>
             {error ? (
               <p className="text-sm text-destructive" id="participant-display-name-error" role="alert">
-                {error}
+                {tx(error)}
               </p>
             ) : null}
             <Button className="mt-1 h-12 rounded-full font-extrabold" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Dołączam…" : "Dołącz"}
+              {isSubmitting ? tx("Dołączam…") : tx("Dołącz")}
             </Button>
           </form>
           <ParticipantIdentityDialog sessionToken={sessionToken} authenticated={false} />

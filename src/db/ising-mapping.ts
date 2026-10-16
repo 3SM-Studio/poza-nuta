@@ -1,5 +1,5 @@
 import type { ISingApiSong } from "./ising-client.ts";
-import { normalizeSongSearchText } from "../lib/song-search.ts";
+import { normalizeLegacySongSearchText as normalizeSongSearchText } from "../lib/song-search.ts";
 
 export type { ISingApiSong } from "./ising-client.ts";
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -38,6 +40,8 @@ export function SessionCodeForm({
   onCodeChange?: (code: string) => void;
   onSubmitCode?: (code: string) => Promise<void> | void;
 }) {
+  const tx = useUiText();
+
   const router = useRouter();
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -106,13 +110,12 @@ export function SessionCodeForm({
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <div className="flex flex-col items-center gap-3">
         <Label className="sr-only" htmlFor="session-code">
-          Kod sesji
-        </Label>
+          {tx("Kod sesji")}</Label>
         <div className="w-fit" onPasteCapture={pasteCode}>
           <InputOTP
             className="text-base"
             id="session-code"
-            aria-label="Sześciocyfrowy kod sesji"
+            aria-label={tx("Sześciocyfrowy kod sesji")}
             value={code}
             onChange={updateCode}
             onKeyDown={submitOnEnter}
@@ -160,8 +163,7 @@ export function SessionCodeForm({
           id="session-code-description"
           className="text-center text-sm text-muted-foreground"
         >
-          Wpisz dokładnie 6 cyfr. Możesz wkleić cały kod naraz.
-        </p>
+          {tx("Wpisz dokładnie 6 cyfr. Możesz wkleić cały kod naraz.")}</p>
       </div>
       {message ? (
         <p
@@ -169,7 +171,7 @@ export function SessionCodeForm({
           className="text-center text-sm text-destructive"
           role="alert"
         >
-          {message}
+          {tx(message)}
         </p>
       ) : null}
       <Button
@@ -177,7 +179,7 @@ export function SessionCodeForm({
         type="submit"
         disabled={!complete || isPending}
       >
-        {isPending ? "Łączymy…" : "Dołącz"}
+        {isPending ? tx("Łączymy…") : tx("Dołącz")}
         {!isPending ? <ArrowRight aria-hidden="true" /> : null}
       </Button>
     </form>

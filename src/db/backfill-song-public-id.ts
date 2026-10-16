@@ -181,7 +181,7 @@ export function assertSongPublicIdBackfillTarget(databaseUrl: string, expectedPr
 }
 
 async function main() {
-  config({ path: [".env.local", ".env"], quiet: true });
+  config({ path: ".env.admin.local", quiet: true });
   const { batchSize, expectedProjectRef } = parseArguments(process.argv.slice(2));
   const databaseUrl = requireAdminDatabaseUrl();
   assertSongPublicIdBackfillTarget(databaseUrl, expectedProjectRef);

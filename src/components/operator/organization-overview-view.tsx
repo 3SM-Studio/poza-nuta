@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
@@ -49,7 +51,6 @@ import {
   getDashboardOrganizationNewEventPath,
   getDashboardOrganizationSettingsPath,
 } from "@/lib/dashboard-routes";
-import { formatWarsawDateTime } from "@/lib/warsaw-time";
 import type { DashboardOrganizationOverview } from "@/server/operator-api/organization-overview";
 
 export function OrganizationOverviewView({
@@ -57,6 +58,8 @@ export function OrganizationOverviewView({
 }: {
   overview: DashboardOrganizationOverview;
 }) {
+  const tx = useUiText();
+
   const settingsPath = getDashboardOrganizationSettingsPath(
     overview.organization.publicId,
   );
@@ -89,26 +92,24 @@ export function OrganizationOverviewView({
               {overview.organization.name}
             </h1>
             <p className="mt-1.5 break-all text-sm text-muted-foreground">
-              ID organizacji: {overview.organization.publicId}
+              {tx("ID organizacji: ")}{overview.organization.publicId}
             </p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
             <Badge variant="secondary">
               <UsersRound data-icon="inline-start" />
-              {formatRole(overview.organization.role)}
+              {tx(formatRole(overview.organization.role))}
             </Badge>
             <Button variant="outline" asChild>
               <Link href={settingsPath}>
                 <Settings2 data-icon="inline-start" />
-                Ustawienia
-              </Link>
+                {tx("Ustawienia")}</Link>
             </Button>
             {canManageEvents ? (
               <Button asChild>
                 <Link href={newEventPath}>
                   <Plus data-icon="inline-start" />
-                  Nowe wydarzenie
-                </Link>
+                  {tx("Nowe wydarzenie")}</Link>
               </Button>
             ) : null}
           </div>
@@ -117,17 +118,15 @@ export function OrganizationOverviewView({
         {hasPartialFailures ? (
           <Alert className="mb-4">
             <CircleAlert />
-            <AlertTitle>Część danych jest chwilowo niedostępna</AlertTitle>
+            <AlertTitle>{tx("Część danych jest chwilowo niedostępna")}</AlertTitle>
             <AlertDescription>
-              Możesz nadal korzystać z dostępnych sekcji. Brakujące dane nie są
-              zastępowane wartościami przykładowymi.
-            </AlertDescription>
+              {tx("Możesz nadal korzystać z dostępnych sekcji. Brakujące dane nie są zastępowane wartościami przykładowymi.")}</AlertDescription>
           </Alert>
         ) : null}
 
         <section
           className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-12"
-          aria-label="Przegląd organizacji"
+          aria-label={tx("Przegląd organizacji")}
         >
           <ActiveEventCard
             canManageEvents={canManageEvents}
@@ -168,6 +167,8 @@ function ActiveEventCard({
   newEventPath: string;
   overview: DashboardOrganizationOverview;
 }) {
+  const tx = useUiText();
+
   const { activeEvent } = overview;
 
   return (
@@ -178,18 +179,10 @@ function ActiveEventCard({
           role="heading"
           aria-level={2}
         >
-          {overview.partialFailures.activeEvent
-            ? "Nie udało się wczytać aktywnego wydarzenia"
-            : activeEvent
-              ? activeEvent.name
-              : "Brak aktywnego wydarzenia"}
+          {overview.partialFailures.activeEvent ? tx("Nie udało się wczytać aktywnego wydarzenia") : activeEvent ? activeEvent.name : tx("Brak aktywnego wydarzenia")}
         </CardTitle>
         <CardDescription>
-          {overview.partialFailures.activeEvent
-            ? "Nie możemy teraz potwierdzić, które wydarzenie jest aktywne."
-            : activeEvent
-              ? "Najważniejsze informacje potrzebne przed przejściem do obsługi wydarzenia."
-              : "Utwórz wydarzenie, aby przyjmować zgłoszenia i prowadzić kolejkę."}
+          {overview.partialFailures.activeEvent ? tx("Nie możemy teraz potwierdzić, które wydarzenie jest aktywne.") : activeEvent ? tx("Najważniejsze informacje potrzebne przed przejściem do obsługi wydarzenia.") : tx("Utwórz wydarzenie, aby przyjmować zgłoszenia i prowadzić kolejkę.")}
         </CardDescription>
         <CardAction>
           <Badge
@@ -208,44 +201,38 @@ function ActiveEventCard({
             ) : (
               <CalendarDays data-icon="inline-start" />
             )}
-            {overview.partialFailures.activeEvent
-              ? "Dane częściowe"
-              : activeEvent
-                ? "Aktywne"
-                : "Brak wydarzenia"}
+            {overview.partialFailures.activeEvent ? tx("Dane częściowe") : activeEvent ? tx("Aktywne") : tx("Brak wydarzenia")}
           </Badge>
         </CardAction>
       </CardHeader>
       <CardContent>
         {overview.partialFailures.activeEvent ? (
-          <SectionUnavailable message="Nie udało się potwierdzić stanu aktywnego wydarzenia. Lista wydarzeń pozostaje dostępna." />
+          <SectionUnavailable message={tx("Nie udało się potwierdzić stanu aktywnego wydarzenia. Lista wydarzeń pozostaje dostępna.")} />
         ) : activeEvent ? (
           <ItemGroup className="grid gap-3 sm:grid-cols-2">
             <InfoItem
-              description={activeEvent.venue ?? "Nie ustawiono miejsca"}
+              description={activeEvent.venue ?? tx("Nie ustawiono miejsca")}
               icon={MapPin}
-              title="Miejsce"
+              title={tx("Miejsce")}
             />
             <InfoItem
-              description={formatDateTime(activeEvent.startsAt)}
+              description={tx.date(activeEvent.startsAt)}
               icon={CalendarClock}
-              title="Start — czas polski"
+              title={tx("Start — czas polski")}
             />
             <InfoItem
               description={
-                activeEvent.publicQueueEnabled ? "Włączona" : "Wyłączona"
+                activeEvent.publicQueueEnabled ? tx("Włączona") : tx("Wyłączona")
               }
               icon={ListMusic}
-              title="Publiczna kolejka"
+              title={tx("Publiczna kolejka")}
             />
             <InfoItem
               description={
-                overview.partialFailures.counts
-                  ? "Chwilowo niedostępne"
-                  : formatNumber(overview.stats.pendingRequests)
+                overview.partialFailures.counts ? tx("Chwilowo niedostępne") : tx.number(overview.stats.pendingRequests)
               }
               icon={UsersRound}
-              title="Oczekujące zgłoszenia"
+              title={tx("Oczekujące zgłoszenia")}
             />
           </ItemGroup>
         ) : (
@@ -254,11 +241,9 @@ function ActiveEventCard({
               <EmptyMedia variant="icon">
                 <CalendarPlus />
               </EmptyMedia>
-              <EmptyTitle>Rozpocznij od pierwszego wydarzenia</EmptyTitle>
+              <EmptyTitle>{tx("Rozpocznij od pierwszego wydarzenia")}</EmptyTitle>
               <EmptyDescription>
-                {canManageEvents
-                  ? "Ustaw termin i widoczność, a następnie udostępnij uczestnikom kod sesji."
-                  : "Tworzenie wydarzeń wymaga roli właściciela lub menedżera organizacji."}
+                {canManageEvents ? tx("Ustaw termin i widoczność, a następnie udostępnij uczestnikom kod sesji.") : tx("Tworzenie wydarzeń wymaga roli właściciela lub menedżera organizacji.")}
               </EmptyDescription>
             </EmptyHeader>
             {canManageEvents ? (
@@ -266,8 +251,7 @@ function ActiveEventCard({
                 <Button asChild>
                   <Link href={newEventPath}>
                     <Plus data-icon="inline-start" />
-                    Utwórz wydarzenie
-                  </Link>
+                    {tx("Utwórz wydarzenie")}</Link>
                 </Button>
               </EmptyContent>
             ) : null}
@@ -276,14 +260,11 @@ function ActiveEventCard({
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-3">
         <span className="text-sm text-muted-foreground">
-          {overview.partialFailures.counts
-            ? "Liczba wydarzeń chwilowo niedostępna"
-            : `Wszystkie wydarzenia: ${formatNumber(overview.stats.totalEvents)}`}
+          {overview.partialFailures.counts ? tx("Liczba wydarzeń chwilowo niedostępna") : tx("Wszystkie wydarzenia: {v0}", {v0: tx.number(overview.stats.totalEvents)})}
         </span>
         <Button variant="outline" size="sm" asChild>
           <Link href={eventsPath}>
-            Zobacz wydarzenia
-            <ArrowRight data-icon="inline-end" />
+            {tx("Zobacz wydarzenia")}<ArrowRight data-icon="inline-end" />
           </Link>
         </Button>
       </CardFooter>
@@ -296,15 +277,15 @@ function QueueAttentionCard({
 }: {
   overview: DashboardOrganizationOverview;
 }) {
+  const tx = useUiText();
+
   return (
     <Card className="lg:col-span-1 xl:col-span-4">
       <CardHeader>
         <CardTitle role="heading" aria-level={2}>
-          Kolejka i zgłoszenia
-        </CardTitle>
+          {tx("Kolejka i zgłoszenia")}</CardTitle>
         <CardDescription>
-          Najważniejsze liczby do szybkiej oceny obciążenia operatora.
-        </CardDescription>
+          {tx("Najważniejsze liczby do szybkiej oceny obciążenia operatora.")}</CardDescription>
         <CardAction>
           <Badge
             variant={
@@ -315,33 +296,29 @@ function QueueAttentionCard({
                   : "secondary"
             }
           >
-            {overview.partialFailures.counts
-              ? "Dane częściowe"
-              : overview.stats.pendingRequests > 0
-                ? `${formatNumber(overview.stats.pendingRequests)} oczekuje`
-                : "Brak oczekujących"}
+            {overview.partialFailures.counts ? tx("Dane częściowe") : overview.stats.pendingRequests > 0 ? tx("{v0} oczekuje", {v0: tx.number(overview.stats.pendingRequests)}) : tx("Brak oczekujących")}
           </Badge>
         </CardAction>
       </CardHeader>
       <CardContent>
         {overview.partialFailures.counts ? (
-          <SectionUnavailable message="Statystyki kolejki nie odpowiedziały na czas. Spróbuj odświeżyć widok za chwilę." />
+          <SectionUnavailable message={tx("Statystyki kolejki nie odpowiedziały na czas. Spróbuj odświeżyć widok za chwilę.")} />
         ) : (
           <ItemGroup className="grid grid-cols-2 gap-3">
             <MetricItem
-              label="Dzisiaj"
+              label={tx("Dzisiaj")}
               value={overview.stats.requestsToday}
             />
             <MetricItem
-              label="Oczekujące"
+              label={tx("Oczekujące")}
               value={overview.stats.pendingRequests}
             />
             <MetricItem
-              label="Zaakceptowane"
+              label={tx("Zaakceptowane")}
               value={overview.stats.acceptedRequests}
             />
             <MetricItem
-              label="Wykonane"
+              label={tx("Wykonane")}
               value={overview.stats.performedRequests}
             />
           </ItemGroup>
@@ -349,9 +326,7 @@ function QueueAttentionCard({
       </CardContent>
       <CardFooter>
         <span className="text-sm text-muted-foreground">
-          {overview.partialFailures.counts
-            ? "Statystyki z 7 dni chwilowo niedostępne"
-            : `Ostatnie 7 dni: ${formatNumber(overview.stats.requestsLastSevenDays)} zgłoszeń`}
+          {overview.partialFailures.counts ? tx("Statystyki z 7 dni chwilowo niedostępne") : tx("Ostatnie 7 dni: {v0} zgłoszeń", {v0: tx.number(overview.stats.requestsLastSevenDays)})}
         </span>
       </CardFooter>
     </Card>
@@ -369,24 +344,24 @@ function RecentEventsCard({
   newEventPath: string;
   overview: DashboardOrganizationOverview;
 }) {
+  const tx = useUiText();
+
   return (
     <Card className="lg:col-span-1 xl:col-span-7">
       <CardHeader>
         <CardTitle role="heading" aria-level={2}>
-          Ostatnie wydarzenia
-        </CardTitle>
+          {tx("Ostatnie wydarzenia")}</CardTitle>
         <CardDescription>
-          Status, miejsce i termin ostatnio obsługiwanych wydarzeń.
-        </CardDescription>
+          {tx("Status, miejsce i termin ostatnio obsługiwanych wydarzeń.")}</CardDescription>
         <CardAction>
           <Button variant="outline" size="sm" asChild>
-            <Link href={eventsPath}>Pełna lista</Link>
+            <Link href={eventsPath}>{tx("Pełna lista")}</Link>
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent>
         {overview.partialFailures.recentEvents ? (
-          <SectionUnavailable message="Nie udało się wczytać ostatnich wydarzeń. Pozostałe sekcje są dostępne." />
+          <SectionUnavailable message={tx("Nie udało się wczytać ostatnich wydarzeń. Pozostałe sekcje są dostępne.")} />
         ) : overview.recentEvents.length > 0 ? (
           <ItemGroup>
             {overview.recentEvents.map((event) => (
@@ -399,18 +374,18 @@ function RecentEventsCard({
                     {event.name}
                   </ItemTitle>
                   <ItemDescription className="line-clamp-2 break-words">
-                    {event.venue ?? "Bez ustawionego miejsca"}
+                    {event.venue ?? tx("Bez ustawionego miejsca")}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions className="ml-auto flex-col items-end">
                   <Badge variant={getStatusBadgeVariant(event.status)}>
-                    {formatEventStatus(event.status)}
+                    {tx(formatEventStatus(event.status))}
                   </Badge>
                   <time
                     className="text-xs whitespace-nowrap text-muted-foreground"
                     dateTime={event.startsAt.toISOString()}
                   >
-                    {formatDate(event.startsAt)}
+                    {tx.date(event.startsAt, { dateStyle: "medium" })}
                   </time>
                 </ItemActions>
               </Item>
@@ -422,15 +397,14 @@ function RecentEventsCard({
               <EmptyMedia variant="icon">
                 <CalendarPlus />
               </EmptyMedia>
-              <EmptyTitle>Nie ma jeszcze wydarzeń</EmptyTitle>
+              <EmptyTitle>{tx("Nie ma jeszcze wydarzeń")}</EmptyTitle>
               <EmptyDescription>
-                Pierwsze wydarzenie pojawi się tutaj wraz ze statusem i datą.
-              </EmptyDescription>
+                {tx("Pierwsze wydarzenie pojawi się tutaj wraz ze statusem i datą.")}</EmptyDescription>
             </EmptyHeader>
             {canManageEvents ? (
               <EmptyContent>
                 <Button variant="outline" asChild>
-                  <Link href={newEventPath}>Utwórz pierwsze wydarzenie</Link>
+                  <Link href={newEventPath}>{tx("Utwórz pierwsze wydarzenie")}</Link>
                 </Button>
               </EmptyContent>
             ) : null}
@@ -448,19 +422,19 @@ function SongRankingCard({
   maxRequests: number;
   overview: DashboardOrganizationOverview;
 }) {
+  const tx = useUiText();
+
   return (
     <Card className="lg:col-span-2 xl:col-span-5">
       <CardHeader>
         <CardTitle role="heading" aria-level={2}>
-          Najczęściej zgłaszane piosenki
-        </CardTitle>
+          {tx("Najczęściej zgłaszane piosenki")}</CardTitle>
         <CardDescription>
-          Ranking pomaga rozpoznać repertuar najczęściej wybierany przez gości.
-        </CardDescription>
+          {tx("Ranking pomaga rozpoznać repertuar najczęściej wybierany przez gości.")}</CardDescription>
       </CardHeader>
       <CardContent>
         {overview.partialFailures.topRequestedSongs ? (
-          <SectionUnavailable message="Ranking utworów jest chwilowo niedostępny. Dane wydarzeń nie zostały utracone." />
+          <SectionUnavailable message={tx("Ranking utworów jest chwilowo niedostępny. Dane wydarzeń nie zostały utracone.")} />
         ) : overview.topRequestedSongs.length > 0 ? (
           <ItemGroup>
             {overview.topRequestedSongs.map((song) => (
@@ -478,12 +452,12 @@ function SongRankingCard({
                 </ItemContent>
                 <ItemActions className="ml-auto flex-col items-end gap-1.5">
                   <span className="font-semibold tabular-nums">
-                    {formatNumber(song.requestCount)}
+                    {tx.number(song.requestCount)}
                   </span>
                   <div
                     className="h-1.5 w-20 overflow-hidden rounded-full bg-muted sm:w-24"
                     role="progressbar"
-                    aria-label={`${song.title}: ${formatNumber(song.requestCount)} zgłoszeń`}
+                    aria-label={tx("{v0}: {v1} zgłoszeń", {v0: song.title, v1: tx.number(song.requestCount)})}
                     aria-valuemax={maxRequests}
                     aria-valuemin={0}
                     aria-valuenow={song.requestCount}
@@ -508,18 +482,16 @@ function SongRankingCard({
               <EmptyMedia variant="icon">
                 <Music2 />
               </EmptyMedia>
-              <EmptyTitle>Brak danych o popularnych utworach</EmptyTitle>
+              <EmptyTitle>{tx("Brak danych o popularnych utworach")}</EmptyTitle>
               <EmptyDescription>
-                Ranking pojawi się, gdy uczestnicy zaczną wysyłać zgłoszenia.
-              </EmptyDescription>
+                {tx("Ranking pojawi się, gdy uczestnicy zaczną wysyłać zgłoszenia.")}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}
       </CardContent>
       <CardFooter>
         <span className="text-sm text-muted-foreground">
-          Dane z ostatnich 30 dni
-        </span>
+          {tx("Dane z ostatnich 30 dni")}</span>
       </CardFooter>
     </Card>
   );
@@ -534,42 +506,41 @@ function OrganizationSummaryCard({
   overview: DashboardOrganizationOverview;
   settingsPath: string;
 }) {
+  const tx = useUiText();
+
   return (
     <Card className="lg:col-span-2 xl:col-span-12">
       <CardHeader>
         <CardTitle role="heading" aria-level={2}>
-          Organizacja w liczbach
-        </CardTitle>
+          {tx("Organizacja w liczbach")}</CardTitle>
         <CardDescription>
-          Najważniejsze informacje o zespole, wydarzeniach i katalogu.
-        </CardDescription>
+          {tx("Najważniejsze informacje o zespole, wydarzeniach i katalogu.")}</CardDescription>
         {canManageOrganization ? (
           <CardAction>
             <Button variant="ghost" size="sm" asChild>
               <Link href={settingsPath}>
                 <Settings2 data-icon="inline-start" />
-                Zarządzaj
-              </Link>
+                {tx("Zarządzaj")}</Link>
             </Button>
           </CardAction>
         ) : null}
       </CardHeader>
       <CardContent>
         {overview.partialFailures.counts ? (
-          <SectionUnavailable message="Nie udało się wczytać liczników organizacji. Ustawienia pozostają dostępne." />
+          <SectionUnavailable message={tx("Nie udało się wczytać liczników organizacji. Ustawienia pozostają dostępne.")} />
         ) : (
           <ItemGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricItem label="Członkowie" value={overview.stats.members} />
+            <MetricItem label={tx("Członkowie")} value={overview.stats.members} />
             <MetricItem
-              label="Wszystkie wydarzenia"
+              label={tx("Wszystkie wydarzenia")}
               value={overview.stats.totalEvents}
             />
             <MetricItem
-              label="Aktywne wydarzenia"
+              label={tx("Aktywne wydarzenia")}
               value={overview.stats.activeEvents}
             />
             <MetricItem
-              label="Utwory w globalnym katalogu"
+              label={tx("Utwory w globalnym katalogu")}
               value={overview.stats.catalogSongs}
             />
           </ItemGroup>
@@ -604,11 +575,12 @@ function InfoItem({
 }
 
 function MetricItem({ label, value }: { label: string; value: number }) {
+  const tx = useUiText();
   return (
     <Item role="listitem" variant="muted">
       <ItemContent>
         <span className="text-2xl font-semibold leading-none tabular-nums">
-          {formatNumber(value)}
+          {tx.number(value)}
         </span>
         <ItemDescription className="line-clamp-2 break-words">
           {label}
@@ -619,11 +591,13 @@ function MetricItem({ label, value }: { label: string; value: number }) {
 }
 
 function SectionUnavailable({ message }: { message: string }) {
+  const tx = useUiText();
+
   return (
     <Alert>
       <CircleAlert />
-      <AlertTitle>Dane chwilowo niedostępne</AlertTitle>
-      <AlertDescription>{message}</AlertDescription>
+      <AlertTitle>{tx("Dane chwilowo niedostępne")}</AlertTitle>
+      <AlertDescription>{tx(message)}</AlertDescription>
     </Alert>
   );
 }
@@ -662,18 +636,4 @@ function formatEventStatus(status: string) {
     default:
       return status;
   }
-}
-
-function formatDate(value: Date) {
-  return formatWarsawDateTime(value, {
-    dateStyle: "medium",
-  });
-}
-
-function formatDateTime(value: Date) {
-  return formatWarsawDateTime(value);
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("pl-PL").format(value);
 }

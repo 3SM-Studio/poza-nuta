@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -12,6 +14,8 @@ import { createClient as createSupabaseBrowserClient } from "../../lib/supabase/
 type FieldErrors = Record<string, string>;
 
 export function PlatformSetupSignupForm() {
+  const tx = useUiText();
+
   const [setupToken, setSetupToken] = useState("");
   const [email, setEmail] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -52,10 +56,9 @@ export function PlatformSetupSignupForm() {
   if (success) {
     return (
       <section className={"grid gap-4 [&_h2]:text-xl [&_h2]:font-semibold [&_p]:leading-relaxed [&_p]:text-muted-foreground"} role="status">
-        <h2>Sprawdz email</h2>
+        <h2>{tx("Sprawdz email")}</h2>
         <p>
-          Jesli token i email sa poprawne, wyslalismy link do konfiguracji.
-        </p>
+          {tx("Jesli token i email sa poprawne, wyslalismy link do konfiguracji.")}</p>
       </section>
     );
   }
@@ -63,7 +66,7 @@ export function PlatformSetupSignupForm() {
   return (
     <form className={"grid gap-4"} onSubmit={handleSubmit} noValidate>
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-invite-token">Token konfiguracji</label>
+        <label htmlFor="setup-invite-token">{tx("Token konfiguracji")}</label>
         <input
           id="setup-invite-token"
           name="setupToken"
@@ -75,11 +78,11 @@ export function PlatformSetupSignupForm() {
           required
           autoFocus
         />
-        <FieldError message={fieldErrors.setupToken} />
+        <FieldError message={tx(fieldErrors.setupToken)} />
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-email">Email</label>
+        <label htmlFor="setup-email">{tx("Email")}</label>
         <input
           id="setup-email"
           name="email"
@@ -90,12 +93,12 @@ export function PlatformSetupSignupForm() {
           disabled={isSubmitting}
           required
         />
-        <FieldError message={fieldErrors.email} />
+        <FieldError message={tx(fieldErrors.email)} />
       </div>
 
       {error ? (
         <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
-          {error}
+          {tx(error)}
         </p>
       ) : null}
 
@@ -104,13 +107,15 @@ export function PlatformSetupSignupForm() {
         type="submit"
         disabled={isSubmitting}
       >
-        {isSubmitting ? "Wysylanie..." : "Wyslij link konfiguracyjny"}
+        {isSubmitting ? tx("Wysylanie...") : tx("Wyslij link konfiguracyjny")}
       </button>
     </form>
   );
 }
 
 export function PlatformSetupFinalizeForm() {
+  const tx = useUiText();
+
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -179,7 +184,7 @@ export function PlatformSetupFinalizeForm() {
   return (
     <form className={"grid gap-4"} onSubmit={handleSubmit} noValidate>
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-password">Haslo</label>
+        <label htmlFor="setup-password">{tx("Haslo")}</label>
         <input
           id="setup-password"
           name="password"
@@ -192,21 +197,21 @@ export function PlatformSetupFinalizeForm() {
           required
           autoFocus
         />
-        <FieldError message={fieldErrors.password} />
+        <FieldError message={tx(fieldErrors.password)} />
         <ul
           className={"mt-0.5 grid list-none gap-1 p-0 text-xs leading-snug text-muted-foreground [&_li[data-met=true]]:text-foreground"}
-          aria-label="Wymagania hasla"
+          aria-label={tx("Wymagania hasla")}
         >
           {passwordRequirements.map((requirement) => (
             <li key={requirement.id} data-met={requirement.met}>
-              {requirement.label}
+              {tx(requirement.label)}
             </li>
           ))}
         </ul>
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-confirm-password">Potwierdz haslo</label>
+        <label htmlFor="setup-confirm-password">{tx("Potwierdz haslo")}</label>
         <input
           id="setup-confirm-password"
           name="confirmPassword"
@@ -218,11 +223,11 @@ export function PlatformSetupFinalizeForm() {
           minLength={8}
           required
         />
-        <FieldError message={fieldErrors.confirmPassword} />
+        <FieldError message={tx(fieldErrors.confirmPassword)} />
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-token">Token konfiguracji</label>
+        <label htmlFor="setup-token">{tx("Token konfiguracji")}</label>
         <input
           id="setup-token"
           name="setupToken"
@@ -233,11 +238,11 @@ export function PlatformSetupFinalizeForm() {
           disabled={isSubmitting}
           required
         />
-        <FieldError message={fieldErrors.setupToken} />
+        <FieldError message={tx(fieldErrors.setupToken)} />
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-display-name">Imie i nazwisko</label>
+        <label htmlFor="setup-display-name">{tx("Imie i nazwisko")}</label>
         <input
           id="setup-display-name"
           name="displayName"
@@ -248,11 +253,11 @@ export function PlatformSetupFinalizeForm() {
           disabled={isSubmitting}
           required
         />
-        <FieldError message={fieldErrors.displayName} />
+        <FieldError message={tx(fieldErrors.displayName)} />
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-workspace-name">Nazwa organizacji</label>
+        <label htmlFor="setup-workspace-name">{tx("Nazwa organizacji")}</label>
         <input
           id="setup-workspace-name"
           name="workspaceName"
@@ -262,11 +267,11 @@ export function PlatformSetupFinalizeForm() {
           disabled={isSubmitting}
           required
         />
-        <FieldError message={fieldErrors.workspaceName} />
+        <FieldError message={tx(fieldErrors.workspaceName)} />
       </div>
 
       <div className={"grid gap-2 [&_label]:text-sm [&_label]:font-semibold [&_input]:min-h-12 [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-input [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_input]:text-base [&_input]:outline-none focus-within:[&_input]:border-ring focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-ring/30"}>
-        <label htmlFor="setup-workspace-handle">Identyfikator organizacji</label>
+        <label htmlFor="setup-workspace-handle">{tx("Identyfikator organizacji")}</label>
         <input
           id="setup-workspace-handle"
           name="workspaceHandle"
@@ -276,12 +281,12 @@ export function PlatformSetupFinalizeForm() {
           disabled={isSubmitting}
           required
         />
-        <FieldError message={fieldErrors.workspaceHandle} />
+        <FieldError message={tx(fieldErrors.workspaceHandle)} />
       </div>
 
       {error ? (
         <p className={"m-0 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm leading-relaxed text-destructive"} role="alert">
-          {error}
+          {tx(error)}
         </p>
       ) : null}
 
@@ -290,20 +295,22 @@ export function PlatformSetupFinalizeForm() {
         type="submit"
         disabled={isSubmitting}
       >
-        {isSubmitting ? "Konfigurowanie..." : "Zakoncz konfiguracje"}
+        {isSubmitting ? tx("Konfigurowanie...") : tx("Zakoncz konfiguracje")}
       </button>
     </form>
   );
 }
 
 function FieldError({ message }: { message?: string }) {
+  const tx = useUiText();
+
   if (!message) {
     return null;
   }
 
   return (
     <p className={"m-0 text-sm leading-snug text-destructive"} role="alert">
-      {message}
+      {tx(message)}
     </p>
   );
 }

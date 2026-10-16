@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import useEmblaCarousel from "embla-carousel-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -19,6 +21,8 @@ export function EventCarousel({
   title,
   description,
 }: EventCarouselProps) {
+  const tx = useUiText();
+
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
@@ -61,7 +65,7 @@ export function EventCarousel({
             type="button"
             onClick={() => emblaApi?.scrollPrev()}
             disabled={!canScrollPrev}
-            aria-label={`Poprzednie: ${title}`}
+            aria-label={tx("Poprzednie: {v0}", {v0: title})}
           >
             ←
           </button>
@@ -70,7 +74,7 @@ export function EventCarousel({
             type="button"
             onClick={() => emblaApi?.scrollNext()}
             disabled={!canScrollNext}
-            aria-label={`Następne: ${title}`}
+            aria-label={tx("Następne: {v0}", {v0: title})}
           >
             →
           </button>

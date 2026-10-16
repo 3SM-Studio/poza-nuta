@@ -88,7 +88,7 @@ test("real PostgreSQL ranking flows through the API into SessionRequestPage pagi
 
   try {
     await installPostgresCompatibilityFixture(sql);
-    await applyPostgresMigrations(sql, 27);
+    await applyPostgresMigrations(sql, process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 31 : 27);
     await seedSqlApiUiSongs(sql);
 
     await withApplicationDatabase(harness, async () => {

@@ -1,5 +1,9 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function LoadingParticipants() {
-  return <div role="status" aria-label="Wczytywanie uczestników"><Skeleton className="h-72 w-full" /></div>;
+  const tx = useUiText();
+
+  return <div role="status" aria-label={tx("Wczytywanie uczestników")}><Skeleton className="h-72 w-full" /></div>;
 }

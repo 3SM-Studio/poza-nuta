@@ -11,7 +11,7 @@ import {
   resolveWorkspaceMemberLinkOptions,
 } from "./workspace-member-linking.ts";
 
-config({ path: [".env.local", ".env"], quiet: true });
+config({ path: ".env.admin.local", quiet: true });
 
 async function linkWorkspaceMember() {
   const databaseUrl = requireAdminDatabaseUrl();

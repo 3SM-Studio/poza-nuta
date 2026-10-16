@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -7,9 +9,12 @@ import { getDashboardOrganizationOverviewForAuthUser } from "@/server/operator-a
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 import { isTransientInfrastructureError } from "@/server/runtime-diagnostics";
 
-export const metadata: Metadata = {
-  title: "Organizacja | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Organizacja | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +27,8 @@ type OrganizationPageProps = {
 export default async function DashboardOrganizationPage({
   params,
 }: OrganizationPageProps) {
+  const tx = await getUiText();
+
   const { organizationId } = await params;
   let overview: Awaited<
     ReturnType<typeof getDashboardOrganizationOverviewForAuthUser>
@@ -36,7 +43,7 @@ export default async function DashboardOrganizationPage({
   } catch (error) {
     if (isTransientInfrastructureError(error)) {
       return (
-        <DashboardRuntimeError title="Nie udało się wczytać organizacji" />
+        <DashboardRuntimeError title={tx("Nie udało się wczytać organizacji")} />
       );
     }
 

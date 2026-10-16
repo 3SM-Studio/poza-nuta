@@ -1,3 +1,5 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
 import { AudioLines, Disc3, MicVocal, Music4, Radio, Waves } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -65,13 +67,15 @@ export function SessionSongArtwork({ className, decorative = true, priority = fa
   priority?: boolean;
   song: SongArtworkIdentity;
 }) {
+  const tx = useUiText();
+
   const recipe = getSongArtworkRecipe(song);
   const sourceMark = SOURCE_MARKS[song.source ?? "unknown"];
 
   return (
     <div
       aria-hidden={decorative || undefined}
-      aria-label={decorative ? undefined : "Artwork utworu"}
+      aria-label={decorative ? undefined : tx("Artwork utworu")}
       className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-xl text-white shadow-[0_8px_18px_rgba(10,7,35,.24)]", recipe.surfaceClassName, className)}
       data-artwork-recipe={recipe.id}
       data-artwork-priority={priority ? "high" : undefined}

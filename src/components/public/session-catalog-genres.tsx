@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import Link from "next/link";
 import { ArrowLeft, Disc3, Sparkles, type LucideIcon } from "lucide-react";
 
@@ -25,16 +27,18 @@ export function SessionCatalogGenres({
   onBack: () => void;
   sessionToken: string;
 }) {
+  const tx = useUiText();
+
   return (
     <section aria-labelledby="catalog-genres-heading" className="mb-7">
       <div className="mb-5 flex items-center gap-2">
-        <Button aria-label="Wróć do odkrywania" className="size-11 rounded-full" onClick={onBack} size="icon" type="button" variant="ghost">
+        <Button aria-label={tx("Wróć do odkrywania")} className="size-11 rounded-full" onClick={onBack} size="icon" type="button" variant="ghost">
           <ArrowLeft />
         </Button>
-        <h1 className="text-2xl font-extrabold tracking-[-0.04em]" id="catalog-genres-heading">Gatunki</h1>
+        <h1 className="text-2xl font-extrabold tracking-[-0.04em]" id="catalog-genres-heading">{tx("Gatunki")}</h1>
       </div>
       {genres.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">Brak gatunków w katalogu.</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">{tx("Brak gatunków w katalogu.")}</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {genres.map((genre, index) => (
@@ -47,10 +51,12 @@ export function SessionCatalogGenres({
 }
 
 function GenreCard({ genre, index, sessionToken }: { genre: SongDiscoveryCategory; index: number; sessionToken: string }) {
+  const tx = useUiText();
+
   const Icon: LucideIcon = index % 2 === 0 ? Disc3 : Sparkles;
   return (
     <Link
-      aria-label={`${genre.label}, ${genre.count} piosenek`}
+      aria-label={`${genre.label}, ${tx.count("catalogSong", genre.count)}`}
       className={`group relative flex aspect-square overflow-hidden rounded-xl bg-gradient-to-br ${CARD_GRADIENTS[index % CARD_GRADIENTS.length]} p-3 text-primary-foreground shadow-[0_12px_28px_oklch(0_0_0_/_28%)] transition-transform duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/60`}
       href={buildSessionGenreCatalogHref(sessionToken, genre.value)}
       prefetch={false}
@@ -59,7 +65,7 @@ function GenreCard({ genre, index, sessionToken }: { genre: SongDiscoveryCategor
       <Icon aria-hidden="true" className="relative size-7 opacity-85" strokeWidth={1.7} />
       <span className="relative mt-auto min-w-0">
         <span className="block line-clamp-2 text-sm font-extrabold leading-tight tracking-[-0.02em]">{genre.label}</span>
-        <span className="mt-1 block truncate text-xs font-medium text-white/90">{genre.count} piosenek</span>
+        <span className="mt-1 block truncate text-xs font-medium text-white/90">{genre.count} {tx(" piosenek")}</span>
       </span>
     </Link>
   );

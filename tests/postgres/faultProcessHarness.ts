@@ -1,15 +1,22 @@
 import { spawn, execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { assertLocalDatabaseTarget } from "../../src/lib/local-target.ts";
+import { cleanToolEnvironment } from "../../scripts/isolated-environment.ts";
 
 // Do not intercept uncaughtException/unhandledRejection. Only the OS process
 // boundary can establish that the actual runtime survived a driver fault.
 export function runFaultProcess(input: {
   args: string[]; env?: Partial<NodeJS.ProcessEnv>; timeoutMs: number; artifact: string;
 }) {
+  const databaseUrl = input.env?.SLICE4_FAULT_DATABASE_URL ?? input.env?.DATABASE_URL;
+  for (const key of ['SLICE4_FAULT_DATABASE_URL', 'DATABASE_URL']) {
+    if (input.env?.[key]) assertLocalDatabaseTarget(input.env[key]);
+  }
   return new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null; timedOut: boolean; output: string }>((resolveResult, reject) => {
-    const child = spawn(process.execPath, input.args, {
-      cwd: process.cwd(), env: { ...process.env, ...input.env }, windowsHide: true,
+    const child = spawn(process.execPath, ['--import', './scripts/test-target-bootstrap.ts', ...input.args], {
+      cwd: process.cwd(), env: { ...cleanToolEnvironment(process.env), ...input.env,
+        KUNESTU_FAULT_TEST_PORT: databaseUrl ? new URL(databaseUrl).port : undefined }, windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "", timedOut = false;

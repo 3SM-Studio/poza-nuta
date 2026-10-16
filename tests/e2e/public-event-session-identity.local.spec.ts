@@ -69,7 +69,7 @@ test.describe("Fair Queue with local Supabase Auth", () => {
       await expect.poll(fairNames).toEqual(["Fair E2E C", "Fair E2E A", "Fair E2E B", "Fair E2E A"]);
       // Use the shared scroll-aware pointer helper; A has two distinct songs.
       await dashboard.setViewportSize({ width: 1440, height: 1800 });
-      const moved = dashboard.waitForResponse(response => new URL(response.url()).pathname.startsWith(apiPath) && new URL(response.url()).pathname.endsWith("/move") && response.status() === 200);
+      const moved = dashboard.waitForResponse(response => new URL(response.url()).pathname.startsWith(apiPath) && new URL(response.url()).pathname.endsWith("/placement") && response.status() === 200);
       await dragQueueRequest({ page: dashboard, sourceLane: "approved", requestName: "Fair E2E A",
         requestTitle: "E2E Second Song", targetLane: "approved", targetRequestName: "Fair E2E C" });
       await moved;
@@ -207,13 +207,14 @@ test.describe("public event and session identity with local Supabase Auth", () =
     await dragQueueRequest({
       page,
       sourceLane: "approved",
-      requestName: pendingName,
+      requestName: orderBefore.at(-1)!,
       targetLane: "approved",
-      targetRequestName: rejectedName,
+      targetRequestName: orderBefore[0],
     });
     await expect
       .poll(() => queueRequestNamesInLane(approvedLane))
       .not.toEqual(orderBefore);
+    expect(await queueRequestNamesInLane(approvedLane)).toEqual([...orderBefore].reverse());
     const persistedOrder = await queueRequestNamesInLane(approvedLane);
     await expect
       .poll(async () =>
@@ -264,9 +265,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
         `^Przeciągnij zgłoszenie: ${escapeRegExp(keyboardReorderName)}`,
       ),
     });
-    await keyboardReorderHandle.focus();
-    await keyboardReorderHandle.press("Space");
-    await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
+    await liftQueueKeyboard(page, keyboardReorderHandle);
     await page.keyboard.press("ArrowDown");
     await page.evaluate(
       () =>
@@ -292,14 +291,14 @@ test.describe("public event and session identity with local Supabase Auth", () =
         `^Przeciągnij zgłoszenie: ${escapeRegExp(keyboardReorderName)}`,
       ),
     });
-    await keyboardHandle.focus();
-    await keyboardHandle.press("Space");
-    await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
-    const rejectedDropStatus = queueLane(page, "rejected").getByRole("status");
+    await liftQueueKeyboard(page, keyboardHandle);
+    const rejectedDropStatus = page.locator("[data-queue-drop-feedback]");
     await page.keyboard.press("ArrowDown");
     await page.evaluate(() => new Promise(requestAnimationFrame));
-    await expect(rejectedDropStatus).toContainText("Upuść w sekcji");
+    await expect(rejectedDropStatus).toContainText("wymagane potwierdzenie");
     await page.keyboard.press("Space");
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.getByRole("button", { name: "Odrzuć zgłoszenie", exact: true }).click();
     await expectQueueStatus(fixture, keyboardReorderName, "rejected");
     await expect(
       queueRequest(page, "rejected", keyboardReorderName),
@@ -315,10 +314,8 @@ test.describe("public event and session identity with local Supabase Auth", () =
         `^Przeciągnij zgłoszenie: ${escapeRegExp(keyboardNeighborName)}`,
       ),
     });
-    await keyboardCancelHandle.focus();
-    await keyboardCancelHandle.press("Space");
-    await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
-    await keyboardCancelHandle.press("Escape");
+    await liftQueueKeyboard(page, keyboardCancelHandle);
+    await page.keyboard.press("Escape");
     await expect(page.locator("[data-queue-drag-overlay]")).toHaveCount(0);
     await expectQueueStatus(fixture, keyboardNeighborName, "approved");
     await expect(keyboardCancelSource).toBeFocused();
@@ -488,7 +485,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       return page.getByRole("dialog", { name: "Urządzenia i profile", exact: true });
     }
     async function closeIdentity(page: typeof owner) {
-      await page.getByRole("dialog", { name: "Urządzenia i profile", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
+      await page.getByRole("dialog", { name: "Urządzenia i profile", exact: true }).getByRole("button", { name: "Zamknij", exact: true }).click();
       await page.getByRole("button", { name: "Zamknij zmianę nicku" }).click();
     }
     try {
@@ -549,9 +546,13 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await queue.goto(`${eventPath}/queue`);
       async function perform(name: string, title: string) {
         const row = queue.locator("[data-queue-request-id]").filter({ hasText: name }).filter({ hasText: title });
-        await row.getByRole("button", { name: /^Zaakceptuj/ }).click();
-        await row.getByRole("button", { name: /^Rozpocznij/ }).click();
-        await row.getByRole("button", { name: /^Oznacz jako zagrane/ }).click();
+        for (const label of [/^Zaakceptuj/, /^Rozpocznij/, /^Oznacz jako zagrane/]) {
+          const saved = queue.waitForResponse(response => response.request().method() === "POST" &&
+            new URL(response.url()).pathname.endsWith("/action"));
+          await row.getByRole("button", { name: label }).click();
+          expect((await saved).status()).toBe(200);
+          await expect(queue.getByText("Trwa zapis…", { exact: true })).toHaveCount(0);
+        }
       }
       await perform("Slice Four Manual", "E2E Discovery Hit");
       await dashboard.getByRole("button", { name: "Połącz profile", exact: true }).click();
@@ -575,7 +576,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await mergeDialog.getByRole("button", { name: "Zatwierdź połączenie profili" }).click();
       await dashboard.getByRole("alertdialog").getByRole("button", { name: "Tak, połącz profile" }).click();
       await expect(mergeDialog.getByText("Profile zostały połączone. Historia i zgłoszenia zachowane.")).toBeVisible();
-      await mergeDialog.getByRole("button", { name: "Close", exact: true }).click();
+      await mergeDialog.getByRole("button", { name: "Zamknij", exact: true }).click();
       await expect(dashboard.getByRole("button", { name: "Wybierz uczestnika: Slice Four Manual", exact: true })).toHaveCount(0);
       const retained = await fixture.readParticipantRequests("Slice Four Owner");
       expect(retained.length).toBe(3); expect(retained.filter(row => row.status === "done").length).toBe(1);
@@ -726,7 +727,11 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await expect(dashboard.getByRole("alert").filter({ hasText: "Ta osoba ma już 2 aktywne zgłoszenia" })).toBeVisible();
 
       await queuePage.goto(`${eventPath}/queue`);
-      const queueRow = queuePage.locator("[data-queue-request-id]").filter({ hasText: "Slice Two Mobile" }).filter({ hasText: "E2E Song" });
+      const activeQueuePanel = queuePage.locator("[data-event-queue-panel]:visible");
+      await expect(activeQueuePanel).toHaveCount(1);
+      await expect(activeQueuePanel.locator('[data-realtime-status="live"]')).toBeVisible();
+      const queueRow = activeQueuePanel.locator("[data-queue-request-id]").filter({ hasText: "Slice Two Mobile" }).filter({ hasText: "E2E Song" });
+      await expect(queueRow).toHaveCount(1);
       await expect(queueRow).toBeVisible();
       await queueRow.getByRole("button", { name: /^Zaakceptuj/ }).click();
       await queueRow.getByRole("button", { name: /^Rozpocznij/ }).click();
@@ -1029,7 +1034,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await page.goto(sessionPath);
       await page.getByRole("link", { name: "Zobacz wszystkie gatunki" }).click();
       await expect(page).toHaveURL(`${sessionPath}/catalog/genres`);
-      await page.getByRole("link", { name: `Rock, ${LOCAL_E2E_ROCK_SONG_COUNT} piosenek` }).click();
+      await page.getByRole("link", { name: `Rock, ${LOCAL_E2E_ROCK_SONG_COUNT} piosenki`, exact: true }).click();
       await expect(page).toHaveURL(`${sessionPath}/catalog?filter=genre%3Arock`);
       await page.goBack();
       await expect(page).toHaveURL(`${sessionPath}/catalog/genres`);
@@ -1558,7 +1563,7 @@ async function submitParticipantSong(
   await page.getByRole("button", { name: "Dodaj do kolejki" }).click();
   const successToast = page.locator("[data-sonner-toast]").filter({ hasText: "Dodano zgłoszenie" });
   await expect(successToast).toBeVisible();
-  await successToast.getByRole("button", { name: "Close toast" }).click();
+  await successToast.getByRole("button", { name: "Zamknij powiadomienie", exact: true }).click();
   await expect(successToast).toBeHidden();
   await openMyRequests(page);
   await expect(
@@ -1662,7 +1667,7 @@ async function dragQueueRequest({
   });
   const target = targetRequestName
     ? queueRequest(page, targetLane, targetRequestName)
-    : queueLane(page, targetLane);
+    : queueLane(page, targetLane).locator("[data-queue-drop-body]");
 
   await expect(source).toBeVisible();
   await expect(target).toBeVisible();
@@ -1724,30 +1729,32 @@ async function dragQueueRequest({
 
   if (cancel) {
     await page.keyboard.press("Escape");
+    await page.mouse.up();
     await expect(overlay).toHaveCount(0);
     return;
   }
 
   const viewport = page.viewportSize();
   if (viewport) {
-    const maxScrollAttempts = verifyAutoScroll ? 30 : 12;
-    for (let attempt = 0; attempt < maxScrollAttempts; attempt += 1) {
+    const scrollDeadline = Date.now() + 8_000;
+    const safeTop = viewport.height * 0.35, safeBottom = viewport.height * 0.65;
+    while (Date.now() < scrollDeadline) {
       targetBox = await target.boundingBox();
       const targetDropY = targetBox
-        ? targetBox.y + Math.min(targetBox.height / 2, 120)
+        ? targetBox.y + (targetRequestName ? targetBox.height / 4 : Math.min(targetBox.height / 2, 120))
         : null;
       if (
         targetBox &&
         targetDropY !== null &&
-        targetDropY >= 8 &&
-        targetDropY <= viewport.height - 8
+        targetDropY >= safeTop &&
+        targetDropY <= safeBottom
       ) {
         break;
       }
 
       await page.mouse.move(
         grabPoint.x,
-        targetBox && targetBox.y < 0 ? 8 : viewport.height - 8,
+        targetDropY !== null && targetDropY < safeTop ? 8 : viewport.height - 8,
         { steps: 4 },
       );
       await page.evaluate(
@@ -1775,7 +1782,8 @@ async function dragQueueRequest({
 
   const targetPoint = {
     x: targetBox.x + targetBox.width / 2,
-    y: targetBox.y + Math.min(targetBox.height / 2, 120),
+    // Named-card helpers deliberately mean BEFORE, independent of card height.
+    y: targetBox.y + (targetRequestName ? targetBox.height / 4 : Math.min(targetBox.height / 2, 120)),
   };
   await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 12 });
   await page.evaluate(
@@ -1801,7 +1809,13 @@ async function dragQueueRequest({
     );
   }
 
+  await expect(page.locator("[data-queue-insertion-indicator]")).toHaveAttribute("data-target-lane", targetLane);
+  await expect(page.locator("[data-queue-insertion-indicator]")).toHaveAttribute("data-drop-allowed", "true");
   await page.mouse.up();
+  if (targetLane === "rejected") {
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.getByRole("button", { name: "Odrzuć zgłoszenie", exact: true }).click();
+  }
   await expect(overlay).toHaveCount(0);
 }
 
@@ -1849,4 +1863,194 @@ async function waitForEventMutationOrActionError({
       `${actionName} failed through the UI: ${message ?? "safe action error"}`,
     );
   }
+}
+
+
+test.describe("Enterprise DnD contract", () => {
+  let fixture: LocalSupabaseFixture;
+  test.setTimeout(240_000);
+  test.beforeAll(async () => { fixture = await createLocalSupabaseFixture(); });
+  test.afterAll(async () => { await fixture?.cleanup(); });
+
+  test("Enterprise desktop slots match persistence, confirmation, scroll, keyboard, rollback and concurrent operators", async ({ browser }) => {
+    await fixture.seedDragQueue();
+    const context = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
+    const page = await context.newPage(), other = await context.newPage();
+    page.setDefaultTimeout(15_000); other.setDefaultTimeout(15_000);
+    const path = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+    const api = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+    await signInLocalOperator(page, fixture); await page.goto(path); await other.goto(path);
+    const row = (name: string) => page.locator('[data-queue-request-id]').filter({ has: page.locator('strong', { hasText: new RegExp(`^${name}$`) }) });
+    const names = () => queueRequestNamesInLane(queueLane(page, "approved"));
+    const canonical = async () => (await fixture.readQueueRows()).filter(row => row.status === "approved").sort((a,b) => a.position-b.position).map(row => row.displayName);
+    let placements = 0; page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/placement')) placements++; });
+    const begin = async (name: string) => {
+      await page.bringToFront();
+      await page.waitForLoadState('networkidle');
+      const handle = row(name).getByRole('button', { name: /^Przeciągnij/ }); await handle.scrollIntoViewIfNeeded();
+      await expect(handle).toBeEnabled(); const box = (await handle.boundingBox())!;
+      expect(await handle.evaluate(element => {
+        const rect=element.getBoundingClientRect();
+        return element.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2));
+      })).toBe(true);
+      await page.mouse.move(box.x+box.width/2, box.y+box.height/2); await page.mouse.down();
+      await page.mouse.move(box.x+box.width/2+12, box.y+box.height/2+8, { steps: 4 });
+      await expect(page.locator('[data-queue-drag-overlay]')).toBeVisible();
+    };
+    const pointAt = async (target: import('@playwright/test').Locator, fraction = 0.25) => {
+      // Scroll while the real sensor remains active. Every final target uses new viewport geometry.
+      await target.evaluate(element => element.scrollIntoView({ block: 'center' }));
+      const box = (await target.boundingBox())!;
+      await page.mouse.move(box.x+box.width/2,box.y+Math.min(box.height-1,Math.max(1,box.height*fraction)),{steps:12});
+      await expect(page.locator('[data-queue-insertion-indicator]')).toBeVisible();
+    };
+    const drop = async (name: string, targetName: string, fraction: number, expectedPosition: number) => {
+      await begin(name); await pointAt(row(targetName), fraction);
+      const indicator=page.locator('[data-queue-insertion-indicator]');
+      await expect(indicator).toHaveAttribute('data-target-position',String(expectedPosition));
+      const order=await names(); const expected=order.filter(value=>value!==name); expected.splice(expectedPosition-1,0,name);
+      const written=page.waitForResponse(response=>response.url().endsWith('/placement')&&response.request().method()==='POST');
+      await page.mouse.up(); expect((await written).status()).toBe(200);
+      await expect.poll(names).toEqual(expected); await expect.poll(canonical).toEqual(expected);
+      await expect(page.getByText('Zmiana kolejki zapisana.',{exact:true})).toBeVisible();
+    };
+    try {
+      // Tall Drag 2 and short Drag 6 must use their own midpoint, in both directions.
+      expect((await row('Drag 2').boundingBox())!.height).toBeGreaterThan((await row('Drag 1').boundingBox())!.height+100);
+      await drop('Drag 1','Drag 6',0.95,6);
+      await drop('Drag 1','Drag 2',0.05,1);
+      await drop('Drag 3','Drag 2',0.05,2);
+      await drop('Drag 3','Drag 2',0.95,3);
+      await drop('Drag 4','Drag 6',0.05,5);
+      await begin('Drag 4');
+      await row('Drag 2').evaluate(element=>element.scrollIntoView({block:'center'}));
+      const upper=(await row('Drag 1').boundingBox())!, lower=(await row('Drag 2').boundingBox())!;
+      await page.mouse.move(lower.x+lower.width/2,(upper.y+upper.height+lower.y)/2,{steps:10});
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','2');
+      await page.mouse.up(); await expect.poll(async()=> (await canonical())[1]).toBe('Drag 4');
+      await drop('Drag 4','Drag 6',0.05,5);
+      await begin('Drag Pending'); await pointAt(row('Drag 2'),0.95);
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','3');
+      await page.mouse.up(); await expect.poll(canonical).toEqual(['Drag 1','Drag 2','Drag Pending','Drag 3','Drag 5','Drag 4','Drag 6']);
+      await expect.poll(names).toEqual(await canonical());
+      // Header and outside never resolve to the nearest lane. No write.
+      let previous=placements;
+      await begin('Drag 1'); const header=queueLane(page,'approved').locator('header'); await header.evaluate(element=>element.scrollIntoView({block:'center'}));
+      const hb=(await header.boundingBox())!; await page.mouse.move(hb.x+hb.width/2,hb.y+5,{steps:8});
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveCount(0); await page.mouse.up(); expect(placements).toBe(previous);
+      await begin('Drag 1'); await page.mouse.move(1,1,{steps:10}); await expect(page.locator('[data-queue-insertion-indicator]')).toHaveCount(0); await page.mouse.up(); expect(placements).toBe(previous);
+      // Empty rejected lane; cancel first, then explicit confirmation.
+      await begin('Drag 1'); await pointAt(queueLane(page,'rejected').locator('[data-queue-drop-body]'),0.5); await page.mouse.up();
+      await expect(page.getByRole('alertdialog')).toBeVisible(); expect(placements).toBe(previous);
+      await page.getByRole('button',{name:'Anuluj',exact:true}).click(); expect(placements).toBe(previous);
+      await begin('Drag 1'); await pointAt(queueLane(page,'rejected').locator('[data-queue-drop-body]'),0.5); await page.mouse.up();
+      await page.getByRole('button',{name:'Odrzuć zgłoszenie',exact:true}).click(); await expectQueueStatus(fixture,'Drag 1','rejected');
+      await expect(row('Drag 1').getByRole('button',{name:/^Przeciągnij/})).toBeVisible();
+      await begin('Drag 1'); await pointAt(queueLane(page,'pending').locator('[data-queue-drop-body]'),0.5); await page.mouse.up(); await expectQueueStatus(fixture,'Drag 1','pending');
+      previous=placements; await begin('Drag 1'); await pointAt(queueLane(page,'pending').locator('[data-queue-drop-body]'),0.5);
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-drop-allowed','false');
+      await page.mouse.up(); expect(placements).toBe(previous);
+      // Wait for the lifted state before sending another key (the native sensor
+      // attaches its document key listener after the activating Space event).
+      const handle=row('Drag 2').getByRole('button',{name:/^Przeciągnij/});
+      const liftKeyboard=async()=>{
+        await expect(page.locator('[data-queue-drag-overlay]')).toHaveCount(0);
+        await handle.scrollIntoViewIfNeeded(); await handle.focus(); await handle.press('Space');
+        await expect(page.locator('[data-queue-drag-overlay]')).toBeVisible();
+        await page.evaluate(()=>new Promise(requestAnimationFrame));
+      };
+      await liftKeyboard(); await page.keyboard.press('Escape'); await expect(page.locator('[data-queue-drag-overlay]')).toHaveCount(0);
+      await expect(row('Drag 2')).toBeFocused(); await liftKeyboard(); await page.keyboard.press('End');
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','6'); await page.keyboard.press('Space');
+      await expect.poll(async()=> (await canonical()).at(-1)).toBe('Drag 2');
+      await liftKeyboard(); await page.keyboard.press('Home');
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','1'); await page.keyboard.press('Space');
+      await expect.poll(async()=> (await canonical())[0]).toBe('Drag 2');
+      await liftKeyboard(); await page.keyboard.press('End');
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','6'); await page.keyboard.press('Space');
+      await expect.poll(async()=> (await canonical()).at(-1)).toBe('Drag 2');
+      // Backend 500 -> optimistic rollback and canonical recovery, no stale success.
+      await page.route('**/placement',route=>route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE',message:'Retry.'}})}),{times:1});
+      const beforeFailure=await canonical(); await begin('Drag 3'); await pointAt(row('Drag 2'),0.95); await page.mouse.up();
+      await expect(page.getByText('Nie udało się zapisać zmiany',{exact:true})).toBeVisible(); await expect.poll(names).toEqual(beforeFailure); expect(await canonical()).toEqual(beforeFailure);
+      // Two tabs/operators: real Realtime invalidates a gesture and does not write it.
+      await expect(page.locator('[data-realtime-status]')).toHaveAttribute('data-realtime-status','live');
+      await other.reload(); const third=other.locator('[data-queue-request-id]').filter({hasText:'Drag 3'});
+      previous=placements; await begin('Drag 3');
+      await third.getByRole('button',{name:/^Przesuń zgłoszenie w dół/}).click();
+      await expect(page.locator('[data-queue-drag-overlay]')).toHaveCount(0); await page.mouse.up(); expect(placements).toBe(previous);
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+      await expect.poll(names).toEqual(await canonical());
+      await other.reload(); await begin('Drag 4');
+      await other.getByRole('button',{name:'Ułóż sprawiedliwie',exact:true}).click();
+      await other.getByRole('button',{name:'Zastosuj kolejność',exact:true}).click();
+      await expect(page.locator('[data-queue-drag-overlay]')).toHaveCount(0); await page.mouse.up();
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+      await expect.poll(names).toEqual(await canonical());
+      // A concurrent write after pointer-up but before the server obtains the mutex.
+      // The actual gesture still sends its frozen version and must get a 409.
+      await page.waitForLoadState('networkidle'); await other.reload();
+      const beforeConflict=await names(); const sourceName=beforeConflict[0], targetName=beforeConflict.at(-1)!;
+      const competitor=(await fixture.readQueueRows()).find(row=>row.displayName===beforeConflict[1])!;
+      await page.route('**/placement',async route=>{
+        expect((await other.request.post(`${api}/requests/${competitor.requestId}/move`,{data:{direction:'up'}})).status()).toBe(200);
+        await route.continue();
+      },{times:1});
+      await begin(sourceName); await pointAt(row(targetName),0.95);
+      const conflict=page.waitForResponse(response=>response.url().endsWith('/placement'));
+      await page.mouse.up(); const stale=await conflict;
+      expect(stale.status()).toBe(409); expect((await stale.json()).error.code).toBe('QUEUE_PLACEMENT_STALE');
+      await expect(page.getByText(/Kolejka została zmieniona przez innego operatora/)).toBeVisible();
+      await expect.poll(names).toEqual(await canonical());
+      await page.reload(); await expect.poll(names).toEqual(await canonical());
+      expect(await row('Drag Now').getByRole('button',{name:/^Przeciągnij/}).count()).toBe(0);
+      await page.screenshot({path:'.artifacts/dnd-desktop-final.png',fullPage:true});
+    } finally { await context.close(); }
+  });
+
+  test("Enterprise emulated touch separates scrolling and long press, autoscrolls and supports tablet orientations", async ({ browser }) => {
+    await fixture.seedDragQueue(12);
+    const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+    const page=await context.newPage(); await signInLocalOperator(page,fixture);
+    page.setDefaultTimeout(15_000);
+    await page.goto(`/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`);
+    const session=await context.newCDPSession(page);
+    const touch=async(type:'touchStart'|'touchMove'|'touchEnd',x=0,y=0)=>session.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x,y,id:1,radiusX:5,radiusY:5}]});
+    const approved=queueLane(page,'approved');
+    try {
+      await approved.locator('[data-queue-request-id]').first().scrollIntoViewIfNeeded();
+      const b=(await approved.locator('[data-queue-request-id]').first().boundingBox())!;
+      const scrollBefore=await page.evaluate(()=>window.scrollY);
+      await touch('touchStart',b.x+40,b.y+80); for(let i=1;i<=8;i++){await touch('touchMove',b.x+40,b.y+80-i*20);await page.waitForTimeout(25);} await touch('touchEnd');
+      expect(await page.evaluate(()=>window.scrollY)).toBeGreaterThan(scrollBefore); await expect(page.locator('[data-queue-drag-overlay]')).toHaveCount(0);
+      const source=approved.locator('[data-queue-request-id]').filter({has:page.locator('strong',{hasText:/^Drag 1$/})});
+      const handle=source.getByRole('button',{name:/^Przeciągnij/}); await handle.scrollIntoViewIfNeeded(); const h=(await handle.boundingBox())!;
+      const x=h.x+h.width/2,y=h.y+h.height/2;
+      await touch('touchStart',x,y); await page.waitForTimeout(300); await touch('touchMove',x,y+14);
+      await expect(page.locator('[data-queue-drag-overlay]')).toBeVisible();
+      const before=await page.evaluate(()=>window.scrollY);
+      await touch('touchMove',x,830); await page.waitForTimeout(650);
+      expect(await page.evaluate(()=>window.scrollY)).toBeGreaterThan(before);
+      // Move the target into view while the actual touch sensor remains active.
+      const target=approved.locator('[data-queue-request-id]').filter({has:page.locator('strong',{hasText:/^Drag 4$/})});
+      await target.evaluate(element=>element.scrollIntoView({block:'center'})); const t=(await target.boundingBox())!;
+      await touch('touchMove',t.x+t.width/2,t.y+t.height-5);
+      await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','4');
+      await touch('touchEnd'); await expect.poll(async()=>(await fixture.readQueueRows()).find(row=>row.displayName==='Drag 1')!.position).toBe(4);
+      await page.reload(); await expect(approved.locator('[data-queue-request-id]').nth(3)).toContainText('Drag 1');
+      for(const viewport of [{width:768,height:1024},{width:1024,height:768}]){
+        await page.setViewportSize(viewport); await expect(page.locator('[data-queue-board]')).toBeVisible();
+        expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+      }
+      await page.emulateMedia({reducedMotion:'reduce'}); await page.setViewportSize({width:390,height:844});
+      await page.screenshot({path:'.artifacts/dnd-mobile-final.png',fullPage:true});
+    } finally { await context.close(); }
+  });
+});
+
+async function liftQueueKeyboard(page: import("@playwright/test").Page, handle: import("@playwright/test").Locator) {
+  await expect(page.locator("[data-queue-drag-overlay]")).toHaveCount(0);
+  await handle.focus(); await handle.press("Space");
+  await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
+  await page.evaluate(() => new Promise(requestAnimationFrame));
 }

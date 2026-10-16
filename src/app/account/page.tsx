@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 
 import { Badge } from "@/components/ui/badge";
@@ -14,13 +16,18 @@ import {
   requireOperatorSession,
 } from "@/server/operator-api/supabase-session";
 
-export const metadata: Metadata = {
-  title: "Moje konto | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Moje konto | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
+  const tx = await getUiText();
+
   const session = await requireOperatorSession("account.profile");
   const {
     data: { user },
@@ -32,50 +39,47 @@ export default async function AccountPage() {
       <section className={"mx-auto w-full min-w-0 max-w-[72rem]"}>
         <header className={"mb-4 flex min-w-0 flex-col gap-4 py-1 sm:flex-row sm:items-center sm:justify-between [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight lg:[&_h1]:text-3xl"}>
           <div>
-            <h1>Moje konto</h1>
+            <h1>{tx("Moje konto")}</h1>
             <p className={"mt-1.5 text-sm text-muted-foreground"}>
-              Dane logowania z Supabase Auth i lokalnego operatora.
-            </p>
+              {tx("Dane logowania z Supabase Auth i lokalnego operatora.")}</p>
           </div>
         </header>
 
         <div className={"grid min-w-0 gap-4"}>
           <Card>
             <CardHeader>
-              <CardTitle>Profil użytkownika</CardTitle>
+              <CardTitle>{tx("Profil użytkownika")}</CardTitle>
               <CardDescription>
-                Dane tylko do odczytu. Edycja profilu będzie dostępna w
-                późniejszym etapie.
-              </CardDescription>
+                {tx("Dane tylko do odczytu. Edycja profilu będzie dostępna w późniejszym etapie.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <dl className={"grid grid-cols-1 gap-3 sm:grid-cols-2 [&_div]:rounded-md [&_div]:bg-muted/40 [&_div]:p-3 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-muted-foreground [&_dd]:mt-1 [&_dd]:text-sm [&_dd]:font-semibold"}>
                 <div>
-                  <dt>Email</dt>
-                  <dd>{session.authUser.email ?? "Brak emaila"}</dd>
+                  <dt>{tx("Email")}</dt>
+                  <dd>{session.authUser.email ?? tx("Brak emaila")}</dd>
                 </div>
                 <div>
-                  <dt>Auth user ID</dt>
+                  <dt>{tx("Auth user ID")}</dt>
                   <dd className={"min-w-0 break-all [overflow-wrap:anywhere]"}>{session.authUser.id}</dd>
                 </div>
                 <div>
-                  <dt>Imię i nazwisko</dt>
+                  <dt>{tx("Imię i nazwisko")}</dt>
                   <dd>{getOperatorDisplayName(session.operator)}</dd>
                 </div>
                 <div>
-                  <dt>Techniczna nazwa operatora</dt>
+                  <dt>{tx("Techniczna nazwa operatora")}</dt>
                   <dd>{session.operator.name}</dd>
                 </div>
                 <div>
-                  <dt>Status operatora</dt>
+                  <dt>{tx("Status operatora")}</dt>
                   <dd>
                     <Badge>
-                      {session.operator.active ? "Aktywny" : "Nieaktywny"}
+                      {session.operator.active ? tx("Aktywny") : tx("Nieaktywny")}
                     </Badge>
                   </dd>
                 </div>
                 <div>
-                  <dt>Lokalny operator ID</dt>
+                  <dt>{tx("Lokalny operator ID")}</dt>
                   <dd>{session.operator.id}</dd>
                 </div>
               </dl>
@@ -84,11 +88,9 @@ export default async function AccountPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Metody logowania</CardTitle>
+              <CardTitle>{tx("Metody logowania")}</CardTitle>
               <CardDescription>
-                Widok techniczny aktualnych metod Supabase Auth. Tokeny i
-                sekrety nie są wyświetlane.
-              </CardDescription>
+                {tx("Widok techniczny aktualnych metod Supabase Auth. Tokeny i sekrety nie są wyświetlane.")}</CardDescription>
             </CardHeader>
             <CardContent>
               {identities.length > 0 ? (
@@ -101,14 +103,14 @@ export default async function AccountPage() {
                       <Badge>{identity.provider}</Badge>
                       <dl>
                         <div>
-                          <dt>Identity ID</dt>
+                          <dt>{tx("Identity ID")}</dt>
                           <dd className={"min-w-0 break-all [overflow-wrap:anywhere]"}>
-                            {identity.identityId ?? identity.id ?? "Brak"}
+                            {identity.identityId ?? identity.id ?? tx("Brak")}
                           </dd>
                         </div>
                         <div>
-                          <dt>Utworzono</dt>
-                          <dd>{identity.createdAt ?? "Brak danych"}</dd>
+                          <dt>{tx("Utworzono")}</dt>
+                          <dd>{identity.createdAt ? tx.date(identity.createdAt) : tx("Brak danych")}</dd>
                         </div>
                       </dl>
                     </div>
@@ -116,8 +118,7 @@ export default async function AccountPage() {
                 </div>
               ) : (
                 <p className={"mt-1.5 text-sm text-muted-foreground"}>
-                  Supabase nie zwrócił listy metod logowania.
-                </p>
+                  {tx("Supabase nie zwrócił listy metod logowania.")}</p>
               )}
             </CardContent>
           </Card>

@@ -5,10 +5,12 @@ import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 
 import postgres from "postgres";
+import { assertLocalDatabaseTarget, registerPostgresTestPort, unregisterPostgresTestPort } from "../../src/lib/local-target.ts";
 
 const execFileAsync = promisify(execFile);
 const migrationJournalPath = "drizzle/meta/_journal.json";
 const commandTimeoutMs = 120_000;
+const ownedPorts = new Map<string, number>();
 
 export const POSTGRES_TEST_IMAGE = "postgres:17-alpine";
 
@@ -119,6 +121,8 @@ export async function startPostgresTestHarness(
     const portMatch = portOutput.match(/127\.0\.0\.1:(\d+)/);
     assert.ok(portMatch, "Docker did not publish PostgreSQL on 127.0.0.1");
 
+    registerPostgresTestPort(Number(portMatch[1]));
+    ownedPorts.set(containerName, Number(portMatch[1]));
     return {
       containerName,
       host: "127.0.0.1",
@@ -141,6 +145,9 @@ export async function removePostgresTestHarness(
       throw error;
     }
   }
+  const port = ownedPorts.get(containerName);
+  if (port !== undefined) unregisterPostgresTestPort(port);
+  ownedPorts.delete(containerName);
 }
 
 export async function postgresTestContainerExists(
@@ -159,6 +166,7 @@ export function createPostgresTestClient(
   database: string,
   maximumConnections = 2,
 ): postgres.Sql {
+  assertLocalDatabaseTarget(`postgres://${harness.host}:${harness.port}/${database}`);
   return postgres({
     host: harness.host,
     port: harness.port,

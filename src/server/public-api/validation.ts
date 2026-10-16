@@ -1,4 +1,5 @@
-import { normalizeSongSearchQuery } from "../../lib/song-search.ts";
+import { isMeaningfulSongSearch, normalizeSongSearchQuery, normalizeLegacySongSearchText } from "../../lib/song-search.ts";
+import { isUnicodeSongSearchEnabled } from "../../lib/song-search-engine.ts";
 import {
   decodeSongSearchCursor,
   type SongSearchCursor,
@@ -22,11 +23,7 @@ export function validateSearchQuery(
 ): ValidationResult<string | null> {
   const query = input?.trim() ?? "";
 
-  if (query.length < MIN_SEARCH_QUERY_LENGTH) {
-    return { success: true, data: null };
-  }
-
-  if (query.length > MAX_SEARCH_QUERY_LENGTH) {
+  if ((input?.length ?? 0) > MAX_SEARCH_QUERY_LENGTH || /\p{Mark}{17}/u.test(query)) {
     return {
       success: false,
       issues: [
@@ -42,7 +39,7 @@ export function validateSearchQuery(
 
   return {
     success: true,
-    data: normalizedQuery.length >= MIN_SEARCH_QUERY_LENGTH ? normalizedQuery : null,
+    data: isMeaningfulSongSearch(normalizedQuery) ? normalizedQuery : null,
   };
 }
 
@@ -61,7 +58,7 @@ export function validateSongSearchRequest(
   }
 
   const cursor = queryValidation.data
-    ? decodeSongSearchCursor(cursorInput, queryValidation.data)
+    ? decodeSongSearchCursor(cursorInput, queryValidation.data, isUnicodeSongSearchEnabled() ? 2 : 1)
     : null;
   if (!cursor) {
     return {
@@ -77,5 +74,5 @@ export function validateSongSearchRequest(
 }
 
 export function normalizeSearchQuery(input: string) {
-  return normalizeSongSearchQuery(input);
+  return isUnicodeSongSearchEnabled() ? normalizeSongSearchQuery(input) : normalizeLegacySongSearchText(input, "NFKD");
 }

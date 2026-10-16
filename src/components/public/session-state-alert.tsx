@@ -1,3 +1,6 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
+import { localizeUiRecord } from "@/i18n/text";
 import {
   CircleAlertIcon,
   CopyXIcon,
@@ -90,6 +93,9 @@ const presentations = {
 } as const;
 
 export function SessionStateAlert({ kind }: { kind: SessionStateAlertKind }) {
+  const tx = useUiText();
+  const presentations = localizeUiRecord(getI18nRecord_presentations(), tx);
+
   const presentation = presentations[kind];
   const Icon = presentation.icon;
 
@@ -101,3 +107,5 @@ export function SessionStateAlert({ kind }: { kind: SessionStateAlertKind }) {
     </Alert>
   );
 }
+
+function getI18nRecord_presentations() { return presentations; }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
@@ -65,6 +67,8 @@ function DashboardShellContent({
   email,
   canAccessAdmin,
 }: DashboardShellProps) {
+  const tx = useUiText();
+
   const pathname = usePathname();
   const eventContext = useEventSidebarContext();
   const organizationId = getSelectedOrganizationId(pathname);
@@ -89,7 +93,8 @@ function DashboardShellContent({
           organizationId,
           organizationName: currentOrganization.name,
           eventId,
-          eventName: currentEvent?.name ?? "Wydarzenie",
+          eventName: currentEvent?.name ?? tx("Wydarzenie"),
+          tx,
         })
       : undefined;
 
@@ -103,7 +108,7 @@ function DashboardShellContent({
           organization={currentOrganization}
           event={
             eventId
-              ? { eventId, name: currentEvent?.name ?? "Wydarzenie" }
+              ? { eventId, name: currentEvent?.name ?? tx("Wydarzenie") }
               : null
           }
           organizations={organizations}
@@ -112,8 +117,8 @@ function DashboardShellContent({
           canAccessAdmin={canAccessAdmin}
         />
       }
-      section="Panel organizatora"
-      title={title}
+      section={tx("Panel organizatora")}
+      title={tx(title)}
       {...(eventBreadcrumbs ? { headerBreadcrumbs: eventBreadcrumbs } : {})}
     >
       {children}
@@ -155,31 +160,33 @@ function getEventBreadcrumbs({
   organizationName,
   eventId,
   eventName,
+  tx,
 }: {
   pathname: string;
   organizationId: string;
   organizationName: string;
   eventId: string;
   eventName: string;
+  tx: (source: string) => string;
 }) {
   const eventPath = getDashboardOrganizationEventPath(organizationId, eventId);
   const eventSection = getEventSectionLabel(pathname, organizationId);
   const isOverview = pathname === eventPath || pathname === `${eventPath}/`;
 
   return [
-    { label: "Panel organizatora", href: "/dashboard" },
+    { label: tx("Panel organizatora"), href: "/dashboard" },
     {
       label: organizationName,
       href: getDashboardOrganizationPath(organizationId),
     },
     {
-      label: "Wydarzenia",
+      label: tx("Wydarzenia"),
       href: getDashboardOrganizationEventsPath(organizationId),
     },
     isOverview
       ? { label: eventName }
       : { label: eventName, href: eventPath },
-    ...(isOverview || !eventSection ? [] : [{ label: eventSection }]),
+    ...(isOverview || !eventSection ? [] : [{ label: tx(eventSection) }]),
   ];
 }
 

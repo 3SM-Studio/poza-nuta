@@ -1,3 +1,5 @@
+
+import { getUiText } from "@/i18n/server";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
@@ -13,9 +15,12 @@ import {
 } from "@/server/operator-api/organizations";
 import { requireOperatorSession } from "@/server/operator-api/supabase-session";
 
-export const metadata: Metadata = {
-  title: "Udostępnij wydarzenie | Poza Nutą",
+export async function generateMetadata(): Promise<Metadata> {
+  const tx = await getUiText();
+  return {
+  title: tx("Udostępnij wydarzenie | Poza Nutą"),
 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +31,8 @@ type OrganizationEventSharePageProps = {
 export default async function OrganizationEventSharePage({
   params,
 }: OrganizationEventSharePageProps) {
+  const tx = await getUiText();
+
   const { organizationId, eventId } = await params;
   const session = await requireOperatorSession();
   const routeResolution = await resolveDashboardEventRouteForAuthUser({
@@ -74,12 +81,9 @@ export default async function OrganizationEventSharePage({
     <div className="grid min-w-0 gap-4">
       <div className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground">
-          Kod i QR prowadzą wyłącznie do kanonicznej sesji wydarzenia.
-        </p>
+          {tx("Kod i QR prowadzą wyłącznie do kanonicznej sesji wydarzenia.")}</p>
         <p className="mt-1.5">
-          Ogólny kod wejścia prowadzi do formularza /join, w którym uczestnik
-          sam wpisuje kod właściwego wydarzenia.
-        </p>
+          {tx("Ogólny kod wejścia prowadzi do formularza /join, w którym uczestnik sam wpisuje kod właściwego wydarzenia.")}</p>
       </div>
 
       <EventSessionAccessPanel

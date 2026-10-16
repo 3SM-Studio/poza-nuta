@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/i18n/use-ui-text";
+
 import { useEffect, useRef, useState } from "react";
 import { Shuffle } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +16,8 @@ export function FairQueueControl({ organizationId, eventId, disabled, onApplied,
   onApplied: (items: DashboardEventQueueItemDto[]) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const tx = useUiText();
+
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<FairQueuePreview | null>(null);
   const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
@@ -64,7 +68,7 @@ export function FairQueueControl({ organizationId, eventId, disabled, onApplied,
       if (request.signal.aborted) return;
       onApplied(result.items);
       setOpen(false); setPreview(null);
-      toast.success(result.changed ? "Kolejka ułożona sprawiedliwie" : "Kolejka ma już proponowaną kolejność");
+      toast.success(tx(result.changed ? "Kolejka ułożona sprawiedliwie" : "Kolejka ma już proponowaną kolejność"));
     } catch (caught) {
       if (!request.signal.aborted) fail(caught, "Nie udało się potwierdzić zmiany. Pobierz nowy podgląd, aby sprawdzić zapisany stan.");
     } finally { finish(request); }
@@ -81,25 +85,23 @@ export function FairQueueControl({ organizationId, eventId, disabled, onApplied,
   }}>
     <DialogTrigger asChild>
       <Button type="button" variant="outline" disabled={disabled || busy !== null}>
-        <Shuffle aria-hidden="true" data-icon="inline-start" />Ułóż sprawiedliwie
-      </Button>
+        <Shuffle aria-hidden="true" data-icon="inline-start" />{tx("Ułóż sprawiedliwie")}</Button>
     </DialogTrigger>
     <DialogContent className="max-h-[85dvh] overflow-y-auto" showCloseButton={busy !== "apply"}>
       <DialogHeader>
-        <DialogTitle>Ułóż sprawiedliwie</DialogTitle>
+        <DialogTitle>{tx("Ułóż sprawiedliwie")}</DialogTitle>
         <DialogDescription>
-          Sprawdź proponowaną kolejność zaakceptowanych utworów. Zastosowanie zastąpi ręczne ustawienie; aktualny występ pozostanie na miejscu.
-        </DialogDescription>
+          {tx("Sprawdź proponowaną kolejność zaakceptowanych utworów. Zastosowanie zastąpi ręczne ustawienie; aktualny występ pozostanie na miejscu.")}</DialogDescription>
       </DialogHeader>
-      {busy === "preview" ? <p role="status">Przygotowywanie podglądu…</p> : null}
-      {error ? <Alert variant="destructive"><AlertTitle>Nie zastosowano podglądu</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
+      {busy === "preview" ? <p role="status">{tx("Przygotowywanie podglądu…")}</p> : null}
+      {error ? <Alert variant="destructive"><AlertTitle>{tx("Nie zastosowano podglądu")}</AlertTitle><AlertDescription>{tx(error)}</AlertDescription></Alert> : null}
       {preview ? <>
         <p className="text-sm text-muted-foreground" role="status">
-          {!preview.changes.length ? "Brak zaakceptowanych utworów do ułożenia." : changed ? "Pozycje przed zmianą → proponowane pozycje" : "Kolejka ma już proponowaną kolejność."}
+          {!preview.changes.length ? tx("Brak zaakceptowanych utworów do ułożenia.") : changed ? tx("Pozycje przed zmianą → proponowane pozycje") : tx("Kolejka ma już proponowaną kolejność.")}
         </p>
-        <ol className="grid gap-2" aria-label="Proponowana kolejność">
+        <ol className="grid gap-2" aria-label={tx("Proponowana kolejność")}>
           {preview.changes.map(row => <li key={row.id} className="flex min-w-0 items-start gap-3 rounded-lg border p-3" data-fair-request-id={row.id}>
-            <span className="shrink-0 tabular-nums" aria-label={`Pozycja ${row.from}, proponowana ${row.to}`}>{row.from} → {row.to}</span>
+            <span className="shrink-0 tabular-nums" aria-label={tx("Pozycja {v0}, proponowana {v1}", {v0: row.from, v1: row.to})}>{row.from} → {row.to}</span>
             <span className="min-w-0 break-words"><span className="block font-medium">{row.songTitle}</span><span className="text-sm text-muted-foreground">{row.displayName}</span></span>
           </li>)}
         </ol>
@@ -108,10 +110,9 @@ export function FairQueueControl({ organizationId, eventId, disabled, onApplied,
         <Button type="button" variant="outline" disabled={busy === "apply"} onClick={() => {
           controller.current?.abort(); controller.current = null;
           setBusy(null); onBusyChange(false); setOpen(false); setPreview(null); setError(null);
-        }}>Anuluj</Button>
-        {!preview ? <Button type="button" disabled={disabled || busy !== null} onClick={() => void loadPreview()}>Odśwież podgląd</Button> :
-          <Button type="button" disabled={disabled || busy !== null || !preview.changes.length} onClick={() => void apply()}>
-            {busy === "apply" ? "Zapisywanie…" : "Zastosuj kolejność"}
+        }}>{tx("Anuluj")}</Button>
+        {!preview ? <Button type="button" disabled={disabled || busy !== null} onClick={() => void loadPreview()}>{tx("Odśwież podgląd")}</Button> : <Button type="button" disabled={disabled || busy !== null || !preview.changes.length} onClick={() => void apply()}>
+            {busy === "apply" ? tx("Zapisywanie…") : tx("Zastosuj kolejność")}
           </Button>}
       </DialogFooter>
     </DialogContent>

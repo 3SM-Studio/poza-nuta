@@ -1,3 +1,6 @@
+
+import { useUiText } from "@/i18n/use-ui-text";
+import { localizeUiRecord } from "@/i18n/text";
 import {
   BanIcon,
   CheckIcon,
@@ -60,6 +63,9 @@ export function RequestStatusBadge({
   status: DashboardEventQueueRequestStatus;
   className?: string;
 }) {
+  const tx = useUiText();
+  const presentations = localizeUiRecord(getI18nRecord_presentations(), tx);
+
   const presentation = presentations[status];
   const Icon = presentation.icon;
 
@@ -70,7 +76,9 @@ export function RequestStatusBadge({
       data-request-status={status}
     >
       <Icon aria-hidden="true" data-icon="inline-start" />
-      {presentation.label}
+      {tx(presentation.label)}
     </Badge>
   );
 }
+
+function getI18nRecord_presentations() { return presentations; }

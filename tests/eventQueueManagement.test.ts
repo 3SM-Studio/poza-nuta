@@ -108,9 +108,9 @@ test("queue feedback is immediate and keeps destructive confirmation", () => {
     "utf8",
   );
 
-  assert.match(panel, /toast\.success\("Kolejka zaktualizowana"/);
+  assert.match(panel, /toast\.success\(tx\("Kolejka zaktualizowana"/);
   assert.match(panel, /<AlertDialog key=\{action\}>/);
-  assert.match(panel, /<AlertDialogCancel>Anuluj<\/AlertDialogCancel>/);
+  assert.match(panel, /<AlertDialogCancel>\{tx\("Anuluj"\)\}<\/AlertDialogCancel>/);
   assert.match(panel, /<RequestStatusBadge status=\{item\.status\}/);
   assert.doesNotMatch(panel, /setMessage\(/);
   assert.doesNotMatch(panel, /Zmieniono status|Zapisywanie\.\.\./);

@@ -26,6 +26,10 @@ export function AppThemeProvider({
       storageKey={APP_THEME_STORAGE_KEY}
       disableTransitionOnChange
       forcedTheme={isParticipantExperience ? "dark" : undefined}
+      // The bootstrap executes while parsing SSR HTML. React never executes
+      // inline scripts created on client remounts; represent those as inert data.
+      // next-themes effects still apply stored/system/forced themes normally.
+      scriptProps={{ type: typeof window === "undefined" ? "text/javascript" : "application/json" }}
     >
       <TooltipProvider>{children}</TooltipProvider>
     </ThemeProvider>
