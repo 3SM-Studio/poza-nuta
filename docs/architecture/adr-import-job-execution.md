@@ -301,7 +301,7 @@ the job, another worker may reclaim it after lease expiry.
 - [ ] Lease expiry and crash recovery on the same job ID.
 - [ ] Cooperative cancellation between bounded batches.
 - [ ] Explicit system audit actor and atomic success/failure audit.
-- [ ] PostgreSQL 15 and PostgreSQL 17 integration coverage.
+- [ ] PostgreSQL 17 integration coverage (sole supported engine since Participant Slice 3).
 - [ ] No raw errors, credentials, Auth data or private artifact locations in
       durable records or logs.
 - [ ] One-active-per-source protection test.

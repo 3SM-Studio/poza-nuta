@@ -25,6 +25,7 @@ import {
   getDashboardOrganizationsPath,
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventParticipantsPath,
   getDashboardOrganizationEventSettingsPath,
   getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
@@ -130,6 +131,11 @@ export function getOrganizerNavigationGroups({
             ),
             label: "Kolejka",
             icon: ListMusicIcon,
+          },
+          {
+            href: getDashboardOrganizationEventParticipantsPath(organizationId, event.eventId),
+            label: "Uczestnicy",
+            icon: UsersIcon,
           },
           ...(canShareDashboardOrganizationEvent(event.role)
             ? [

@@ -12,6 +12,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { ParticipantIdentityDialog } from "./participant-identity-dialog";
 import {
   getParticipantNicknameLength,
   normalizeParticipantNickname,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/participant-nickname";
 
 type ParticipantProfileDrawerProps = {
+  sessionToken?: string;
   error: string | null;
   isOpen: boolean;
   isSaving: boolean;
@@ -29,6 +31,7 @@ type ParticipantProfileDrawerProps = {
 };
 
 export function ParticipantProfileDrawer({
+  sessionToken,
   error,
   isOpen,
   isSaving,
@@ -93,6 +96,7 @@ export function ParticipantProfileDrawer({
             </Button>
           </div>
         </form>
+        {sessionToken ? <div className="px-6 pb-6"><ParticipantIdentityDialog sessionToken={sessionToken} authenticated /></div> : null}
       </DrawerContent>
     </Drawer>
   );

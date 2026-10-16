@@ -5,6 +5,7 @@ type DashboardHomeOrganization = {
 export type DashboardOrganizationEventRouteSuffix =
   | "detail"
   | "queue"
+  | "participants"
   | "share"
   | "settings";
 
@@ -55,6 +56,10 @@ export function getDashboardOrganizationEventSharePath(
   return `${getDashboardOrganizationEventPath(organizationId, eventId)}/share`;
 }
 
+export function getDashboardOrganizationEventParticipantsPath(organizationId: string, eventId: number | string) {
+  return `${getDashboardOrganizationEventPath(organizationId, eventId)}/participants`;
+}
+
 export function getDashboardOrganizationEventSettingsPath(
   organizationId: string,
   eventId: number | string,
@@ -68,6 +73,8 @@ export function getDashboardOrganizationEventCompatibilityRedirectPath(
   suffix: DashboardOrganizationEventRouteSuffix,
 ) {
   switch (suffix) {
+    case "participants":
+      return getDashboardOrganizationEventParticipantsPath(organizationId, eventPublicId);
     case "queue":
       return getDashboardOrganizationEventQueuePath(
         organizationId,

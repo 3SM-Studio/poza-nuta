@@ -106,7 +106,7 @@ istotnym wzroście katalogu lub p95 latency.
 
 - unit/contract: query validation, hard limit, filter-bound cursor i canonical
   public route rate limiting;
-- PostgreSQL 15/17: default browse, keyset pagination, stable sort, invalid
+- PostgreSQL 17: default browse, keyset pagination, stable sort, invalid
   cursor, max limit, search, filtry, empty result, lifecycle i invalid token;
 - component: URL state, clear, race safety, load more, empty/error oraz submit
   i duplicate feedback;

@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { test, vi } from "vitest";
 
 import {
+  applyPostgresMigration,
   applyPostgresMigrations,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
@@ -14,7 +15,7 @@ import {
 
 vi.mock("server-only", () => ({}));
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 
 for (const image of images) {
   test(`${image}: participant song discovery stays bounded and lifecycle-safe`, async () => {
@@ -27,6 +28,7 @@ for (const image of images) {
     try {
       await installPostgresCompatibilityFixture(sql);
       await applyPostgresMigrations(sql, 24);
+      await applyPostgresMigration(sql, 30);
       const fixture = await seedFixture(sql);
 
       await withApplicationDatabase(harness, async () => {

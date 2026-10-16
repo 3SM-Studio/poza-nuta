@@ -95,6 +95,7 @@ import {
   type DashboardEventQueueItemDto,
 } from "./event-queue-api";
 import { useDashboardQueueRealtime } from "./use-dashboard-queue-realtime";
+import { FairQueueControl } from "./fair-queue-control";
 
 const actionLabels: Record<DashboardEventQueueAction, string> = {
   approve: "Zaakceptuj",
@@ -326,6 +327,10 @@ export function EventQueuePanel({
   const [errorSource, setErrorSource] = useState<
     "mutation" | "refresh" | null
   >(null);
+  const errorSourceRef = useRef(errorSource);
+  useEffect(() => {
+    errorSourceRef.current = errorSource;
+  }, [errorSource]);
   const [queueClosedDetected, setQueueClosedDetected] = useState(false);
   const queuePanelRef = useRef<HTMLElement | null>(null);
   const focusRequestIdRef = useRef<number | null>(null);
@@ -342,6 +347,8 @@ export function EventQueuePanel({
   const realtimeRefreshInFlightRef = useRef(false);
   const realtimeRefreshQueuedRef = useRef(false);
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const [fairQueueBusy, setFairQueueBusy] = useState(false);
+  const fairQueueBusyRef = useRef(false);
   const refreshFromRealtimeRef = useRef<
     | ((
         reason: QueueRefreshReason,
@@ -397,7 +404,7 @@ export function EventQueuePanel({
     useSensor(KeyboardSensor, { coordinateGetter: queueKeyboardCoordinates }),
   );
   const canMutate =
-    canManage && lifecycle === "active" && !queueClosedDetected;
+    canManage && lifecycle === "active" && !queueClosedDetected && !fairQueueBusy;
   const pendingMutationCount = queueState.pendingOperations.length;
   const currentItem = useMemo(
     () => items.find((item) => item.status === "now") ?? null,
@@ -472,7 +479,7 @@ export function EventQueuePanel({
       signal: AbortSignal,
     ) => {
       if (
-        queueStateRef.current.pendingOperations.length > 0 ||
+        fairQueueBusyRef.current || queueStateRef.current.pendingOperations.length > 0 ||
         realtimeRefreshInFlightRef.current
       ) {
         realtimeRefreshQueuedRef.current = true;
@@ -506,8 +513,12 @@ export function EventQueuePanel({
         }
 
         replaceQueueBase(response.items);
-        setError(null);
-        setErrorSource(null);
+        // A background invalidation must not dismiss feedback about a denied
+        // operator action. The next action or explicit refresh clears it.
+        if (errorSourceRef.current !== "mutation") {
+          setError(null);
+          setErrorSource(null);
+        }
       } catch (caughtError) {
         if (
           signal.aborted ||
@@ -608,6 +619,7 @@ export function EventQueuePanel({
   async function refreshQueue({
     announceSuccess = true,
   }: { announceSuccess?: boolean } = {}): Promise<boolean> {
+    if (fairQueueBusyRef.current) return false;
     const canonicalGeneration = beginCanonicalRequest();
     const mutationVersionAtStart = localMutationVersionRef.current;
     const controller = new AbortController();
@@ -703,7 +715,7 @@ export function EventQueuePanel({
           action,
         );
 
-        confirmOptimisticOperation(operation.id, result.request);
+        confirmOptimisticOperation(operation.id, result.request, result.items);
       } catch (caughtError) {
         await handleMutationError(caughtError, operation.id);
       }
@@ -925,7 +937,7 @@ export function EventQueuePanel({
     operationId: number,
   ) {
     const queueWasClosed = isEventQueueClosedError(caughtError);
-    const activeDuplicate = isActiveQueueDuplicateError(caughtError);
+    const activeDuplicate = isQueueAdmissionConflictError(caughtError);
 
     if (queueWasClosed) {
       queueClosedRef.current = true;
@@ -1010,6 +1022,7 @@ export function EventQueuePanel({
   function confirmOptimisticOperation(
     operationId: number,
     confirmedRequest: DashboardEventQueueItemDto,
+    canonicalItems?: DashboardEventQueueItemDto[],
   ) {
     operationFocusRequestIdsRef.current.delete(operationId);
     updateQueueState((currentState) => {
@@ -1022,7 +1035,7 @@ export function EventQueuePanel({
       }
 
       return {
-        baseItems: reconcileDashboardEventQueueItem(
+        baseItems: canonicalItems ?? reconcileDashboardEventQueueItem(
           applyQueueOptimisticOperation(currentState.baseItems, operation),
           confirmedRequest,
         ),
@@ -1070,7 +1083,7 @@ export function EventQueuePanel({
   }
 
   function canRunMutationTask() {
-    return mutationAllowedByPropsRef.current && !queueClosedRef.current;
+    return mutationAllowedByPropsRef.current && !queueClosedRef.current && !fairQueueBusyRef.current;
   }
 
   return (
@@ -1137,11 +1150,30 @@ export function EventQueuePanel({
               Błąd synchronizacji
             </Badge>
           ) : null}
+          {canManage ? <FairQueueControl
+            organizationId={organizationId}
+            eventId={eventId}
+            disabled={lifecycle !== "active" || queueClosedDetected || pendingMutationCount > 0 || isRefreshing}
+            onBusyChange={busy => {
+              fairQueueBusyRef.current = busy;
+              setFairQueueBusy(busy);
+              if (busy) {
+                localMutationVersionRef.current += 1;
+                beginCanonicalRequest();
+              } else {
+                realtimeRefreshQueuedRef.current = true;
+                flushQueuedRealtimeRefresh();
+              }
+            }}
+            onApplied={canonicalItems => {
+              if (mountedRef.current) replaceQueueBase(canonicalItems);
+            }}
+          /> : null}
           <Button
             variant="outline"
             type="button"
             onClick={() => void refreshQueue()}
-            disabled={isRefreshing}
+            disabled={isRefreshing || fairQueueBusy}
           >
             <RefreshCw
               aria-hidden="true"
@@ -1841,6 +1873,8 @@ function getClientErrorMessage(error: unknown) {
       return "Zgłoszenie zostało w międzyczasie zmienione. Odśwież kolejkę.";
     case "QUEUE_ACTIVE_DUPLICATE":
       return "Ta osoba ma już aktywne zgłoszenie tej piosenki.";
+    case "SESSION_REQUEST_LIMIT_REACHED":
+      return "Ta osoba ma już 2 aktywne zgłoszenia. Zakończ, odrzuć lub anuluj jedno z nich przed przywróceniem kolejnego.";
     case "QUEUE_REQUEST_NOT_REORDERABLE":
       return "Można zmieniać kolejność tylko zaakceptowanych zgłoszeń.";
     case "EVENT_QUEUE_CLOSED":
@@ -1876,10 +1910,10 @@ function isEventQueueClosedError(error: unknown) {
   );
 }
 
-function isActiveQueueDuplicateError(error: unknown) {
+function isQueueAdmissionConflictError(error: unknown) {
   return (
     error instanceof OperatorClientError &&
-    error.code === "QUEUE_ACTIVE_DUPLICATE"
+    (error.code === "QUEUE_ACTIVE_DUPLICATE" || error.code === "SESSION_REQUEST_LIMIT_REACHED")
   );
 }
 

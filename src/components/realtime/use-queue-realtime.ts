@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getDashboardQueueRealtimeTopic,
+  getDashboardParticipantsRealtimeTopic,
+  isDashboardParticipantsChangedPayload,
+  participantsRealtimeEvent,
   getPublicQueueRealtimeInvalidateReason,
   getPublicQueueRealtimeTopic,
   isDashboardQueueChangedPayload,
@@ -13,7 +16,7 @@ import {
   type QueueRealtimeInvalidateReason,
 } from "@/lib/queue-realtime";
 
-type QueueRealtimeAudience = "dashboard" | "public";
+type QueueRealtimeAudience = "dashboard" | "public" | "participants";
 
 export function useQueueRealtime({
   audience,
@@ -48,7 +51,9 @@ export function useQueueRealtime({
     const realtimeIdentity = identity;
     const supabase = createClient();
     const topic =
-      audience === "dashboard"
+      audience === "participants"
+        ? getDashboardParticipantsRealtimeTopic(realtimeIdentity as number)
+        : audience === "dashboard"
         ? getDashboardQueueRealtimeTopic(realtimeIdentity as number)
         : getPublicQueueRealtimeTopic(realtimeIdentity as string);
     let active = true;
@@ -102,9 +107,11 @@ export function useQueueRealtime({
             private: true,
           },
         })
-        .on("broadcast", { event: queueRealtimeEvent }, (message) => {
+        .on("broadcast", { event: audience === "participants" ? participantsRealtimeEvent : queueRealtimeEvent }, (message) => {
           const reason =
-            audience === "dashboard"
+            audience === "participants"
+              ? isDashboardParticipantsChangedPayload(message.payload, realtimeIdentity as number) ? "queue" : null
+              : audience === "dashboard"
               ? isDashboardQueueChangedPayload(
                   message.payload,
                   realtimeIdentity as number,

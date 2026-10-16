@@ -19,6 +19,7 @@ export type SessionStateAlertKind =
   | "rate_limited"
   | "service_unavailable"
   | "duplicate_request"
+  | "request_limit"
   | "canonical_unavailable"
   | "qr_unavailable";
 
@@ -65,6 +66,13 @@ const presentations = {
     title: "To zgłoszenie już czeka",
     description:
       "Ta osoba ma już aktywne zgłoszenie tej piosenki. Poczekaj na decyzję operatora.",
+    variant: "default",
+  },
+  request_limit: {
+    icon: ListXIcon,
+    title: "Masz już 2 aktywne zgłoszenia",
+    description:
+      "Kolejną piosenkę dodasz po zakończeniu występu, odrzuceniu lub anulowaniu zgłoszenia.",
     variant: "default",
   },
   canonical_unavailable: {

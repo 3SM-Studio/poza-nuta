@@ -23,7 +23,7 @@ import {
   withPostgresClone,
 } from "./postgresTestHarness.ts";
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 const acceptedCodes = ["004271", "654321", "999999"];
 const rejectedRuntimeCodes = [
   "12345",

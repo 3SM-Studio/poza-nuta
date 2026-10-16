@@ -1,0 +1,55 @@
+// @vitest-environment jsdom
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ParticipantIdentityDialog } from "@/components/public/participant-identity-dialog";
+import { ParticipantMergePanel } from "@/components/operator/participant-merge-panel";
+import type { ParticipantMergeView } from "@/lib/participant-linking";
+const { api, operatorApi, refresh } = vi.hoisted(() => ({ api: vi.fn(), operatorApi: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("@/components/public/session-api", () => ({ sessionIdentityApi: api }));
+vi.mock("@/components/operator/event-participants-api", () => ({ participantApi: operatorApi }));
+const id = "48dce444-432f-4fb9-b920-7d4810c9b683";
+const view: ParticipantMergeView = { id, source: { displayName: "Manual", activeCount: 1, requests: [] }, target: { displayName: "Mobile", activeCount: 0, requests: [] }, sourceConsentRequired: false, sourceConsented: false, targetConsented: true, expiresAt: "2099-10-16T20:00:00Z", completedAt: null, cancelledAt: null, stale: false, conflict: null };
+describe("Participant identity confirmation UI", () => {
+  beforeEach(() => { vi.resetAllMocks(); });
+  it("prepares a device and requires a separate explicit finish; displays the comparison code", async () => {
+    api.mockImplementation((_token: string, _operation: string, body?: { action: string }) => Promise.resolve(body?.action === "prepare" ? { link: { id, comparisonCode: "123456", expiresAt: view.expiresAt, status: "waiting_approval" } } : { issued: [], received: null }));
+    render(<ParticipantIdentityDialog sessionToken="event" authenticated={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Połącz istniejące urządzenie" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Przygotuj połączenie" })).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Jednorazowy kod z zaufanego urządzenia"), { target: { value: "temporary-invitation" } });
+    fireEvent.click(screen.getByRole("button", { name: "Przygotuj połączenie" }));
+    expect(await screen.findByLabelText("Kod potwierdzenia")).toHaveTextContent("123456");
+    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Jednorazowy kod z zaufanego urządzenia")).toHaveValue("");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Zakończ połączenie" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Zakończ połączenie" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    expect(api).toHaveBeenCalledWith("event", "linking", { action: "finish", id });
+  });
+  it("shows two histories, tests confirmation cancel before final merge, and keeps the proposal", async () => {
+    operatorApi.mockResolvedValue(view);
+    let finishRefresh!: () => void;
+    const complete = vi.fn(() => new Promise<void>(resolve => { finishRefresh = resolve; }));
+    render(<ParticipantMergePanel base="/participants" participants={[1, 2].map((id, index) => ({ id, displayName: index ? "Mobile" : "Manual", joinedAt: view.expiresAt, activeCount: 0, completedCount: 0, hasPerformed: false, online: false, onlineUntil: null }))} onCompleted={complete} />);
+    fireEvent.click(screen.getByRole("button", { name: "Połącz profile" }));
+    fireEvent.change(screen.getByLabelText("Profil źródłowy (zachowamy historię)"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Profil docelowy (pozostanie ten nick)"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Utwórz propozycję połączenia" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Zatwierdź połączenie profili" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Zatwierdź połączenie profili" }));
+    const confirmation = screen.getByRole("alertdialog");
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Wróć bez łączenia" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(operatorApi).toHaveBeenCalledTimes(1); expect(complete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Zatwierdź połączenie profili" }));
+    operatorApi.mockResolvedValueOnce({ targetParticipantId: 2 });
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Tak, połącz profile" }));
+    await waitFor(() => expect(complete).toHaveBeenCalledWith(2));
+    expect(screen.queryByText("Profile zostały połączone. Historia i zgłoszenia zachowane.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Close$/ })).not.toBeInTheDocument();
+    await act(async () => { finishRefresh(); });
+    expect(await screen.findByText("Profile zostały połączone. Historia i zgłoszenia zachowane.")).toBeVisible();
+    expect(operatorApi).toHaveBeenCalledWith(`/participants/merges/${id}`, { method: "POST", body: JSON.stringify({ action: "complete" }) });
+  });
+});

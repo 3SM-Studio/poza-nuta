@@ -13,6 +13,7 @@ import {
 } from "@/lib/participant-nickname";
 import { joinSession, SessionClientError } from "./session-api";
 import { PublicSessionEntryShell } from "./public-session-entry-shell";
+import { ParticipantIdentityDialog } from "./participant-identity-dialog";
 
 export function ParticipantJoinGate({
   sessionToken,
@@ -90,6 +91,7 @@ export function ParticipantJoinGate({
               {isSubmitting ? "Dołączam…" : "Dołącz"}
             </Button>
           </form>
+          <ParticipantIdentityDialog sessionToken={sessionToken} authenticated={false} />
       </div>
     </PublicSessionEntryShell>
   );

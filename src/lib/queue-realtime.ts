@@ -1,4 +1,16 @@
 export const queueRealtimeEvent = "queue_changed";
+export const participantsRealtimeEvent = "participants_changed";
+
+export function getDashboardParticipantsRealtimeTopic(eventId: number) {
+  assertEventId(eventId);
+  return `dashboard:event:${eventId}:participants`;
+}
+
+export function isDashboardParticipantsChangedPayload(payload: unknown, eventId: number) {
+  return isRecord(payload) && payload.type === participantsRealtimeEvent &&
+    payload.eventId === eventId && isDashboardQueueRealtimeOperation(payload.operation) &&
+    typeof payload.changedAt === "string";
+}
 
 export type QueueRealtimeConnectionStatus =
   | "connecting"

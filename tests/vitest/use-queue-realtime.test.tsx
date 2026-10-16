@@ -50,6 +50,21 @@ describe("useQueueRealtime", () => {
     );
   });
 
+  it("subscribes to participant invalidations and rejects payloads for another event", async () => {
+    const onInvalidate = vi.fn().mockResolvedValue(undefined);
+    renderHook(() => useQueueRealtime({ audience: "participants", identity: 7, onInvalidate }));
+    await waitFor(() => expect(realtime.subscribe).not.toBeNull());
+    expect(realtime.channel.on).toHaveBeenCalledWith("broadcast", { event: "participants_changed" }, expect.any(Function));
+    await act(async () => {
+      realtime.broadcast?.({ payload: { type: "participants_changed", eventId: 8, operation: "INSERT", changedAt: "now" } });
+    });
+    expect(onInvalidate).not.toHaveBeenCalled();
+    await act(async () => {
+      realtime.broadcast?.({ payload: { type: "participants_changed", eventId: 7, operation: "INSERT", changedAt: "now" } });
+    });
+    expect(onInvalidate).toHaveBeenCalledWith("queue", expect.any(AbortSignal));
+  });
+
   it("unions queued invalidations while keeping one refresh in flight", async () => {
     const firstRefresh = deferred<void>();
     const onInvalidate = vi

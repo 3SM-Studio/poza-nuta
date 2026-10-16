@@ -11,6 +11,7 @@ apps/*/node_modules/
 # Build output and platform state
 dist/
 .next/
+.next-p3-e2e/
 out/
 .vercel/
 
@@ -34,6 +35,7 @@ next-env.d.ts
 .auth/
 test-results/
 playwright-report/
+.playwright-p3-e2e/
 .artifacts/
 
 # Local archives

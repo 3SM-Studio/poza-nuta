@@ -82,7 +82,7 @@ afterEach(() => {
 test("real PostgreSQL ranking flows through the API into SessionRequestPage pagination", async () => {
   const harness = await startPostgresTestHarness(
     "pozanuta-search-sql-api-ui",
-    "postgres:15-alpine",
+    "postgres:17-alpine",
   );
   const sql = createPostgresTestClient(harness, "postgres", 4);
 

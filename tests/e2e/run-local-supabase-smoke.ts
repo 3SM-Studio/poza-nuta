@@ -3,6 +3,7 @@ import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import postgres from "postgres";
 
 const SUPABASE_CLI_VERSION = "2.109.1";
 const PROJECT_ID = "pozanuta-p3-e2e";
@@ -57,6 +58,12 @@ try {
     await runSupabaseHidden(["status", "--output", "env"]),
   );
   const databaseUrl = requireStatusValue(status, "DB_URL");
+  const versionClient = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
+  try {
+    const [engine] = await versionClient`select current_setting('server_version_num')::integer as version`;
+    if (engine.version < 170000 || engine.version >= 180000) throw new Error("Local smoke requires PostgreSQL 17.");
+    console.log(`[local-e2e] Verified PostgreSQL engine ${engine.version}.`);
+  } finally { await versionClient.end({ timeout: 5 }); }
   const publishableKey =
     status.PUBLISHABLE_KEY ?? status.ANON_KEY ?? null;
   const secretKey = status.SECRET_KEY ?? status.SERVICE_ROLE_KEY ?? null;

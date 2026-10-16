@@ -1,0 +1,4 @@
+# Unified-diff context blank lines contain one required space.
+# Preserve LF bytes required by the pnpm patch hash on Windows checkouts.
+# Retain other whitespace checks.
+patches/postgres@3.4.9.patch text eol=lf whitespace=-blank-at-eol

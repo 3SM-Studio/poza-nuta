@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import type { ParticipantRequest } from "./session-api";
+import { countActiveParticipantRequests, PARTICIPANT_ACTIVE_REQUEST_LIMIT } from "@/lib/participant-request-policy";
 
 export function SessionParticipantRequests({
   cancellingRequestId,
@@ -35,6 +36,11 @@ export function SessionParticipantRequests({
         <div>
           <h2 className="text-3xl font-extrabold tracking-[-0.04em]" id="participant-requests-heading">Moje zgłoszenia</h2>
           {requests ? <p className="mt-1 text-sm text-muted-foreground">{formatRequestCount(requests.length)}</p> : null}
+          {requests ? (
+            <p className="mt-1 text-sm text-muted-foreground" role="status">
+              Aktywne zgłoszenia: {countActiveParticipantRequests(requests)}/{PARTICIPANT_ACTIVE_REQUEST_LIMIT}
+            </p>
+          ) : null}
         </div>
         <Button onClick={onRefresh} size="sm" type="button" variant="ghost">Odśwież</Button>
       </div>
@@ -58,7 +64,7 @@ export function SessionParticipantRequests({
                   </p>
                 ) : null}
               </div>
-              {request.status === "pending" ? (
+              {request.status === "pending" && request.canCancel ? (
                 <AlertDialog
                   onOpenChange={(open) => {
                     if (cancellingRequestId !== null) return;

@@ -5,6 +5,7 @@ import type postgres from "postgres";
 import { test, vi } from "vitest";
 
 import {
+  applyPostgresMigration,
   applyPostgresMigrations,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
@@ -23,6 +24,7 @@ test("same-event queue mutations wait on the targeted session mutex while a diff
   try {
     await installPostgresCompatibilityFixture(observer);
     await applyPostgresMigrations(observer, 24);
+    await applyPostgresMigration(observer, 30);
     const fixture = await seedFixture(observer);
     process.env.DATABASE_URL = `postgres://postgres:${encodeURIComponent(harness.password)}@${harness.host}:${harness.port}/postgres`;
     const { getDb } = await import("../../src/server/db.ts");
@@ -103,6 +105,7 @@ test("participation avoids the queue mutex while public create and operator queu
   try {
     await installPostgresCompatibilityFixture(observer);
     await applyPostgresMigrations(observer, 24);
+    await applyPostgresMigration(observer, 30);
     const fixture = await seedFixture(observer);
     process.env.DATABASE_URL = `postgres://postgres:${encodeURIComponent(harness.password)}@${harness.host}:${harness.port}/postgres`;
     const { getDb } = await import("../../src/server/db.ts");
@@ -256,6 +259,7 @@ test("public request races preserve current participant names, active uniqueness
   try {
     await installPostgresCompatibilityFixture(observer);
     await applyPostgresMigrations(observer, 24);
+    await applyPostgresMigration(observer, 30);
     const fixture = await seedFixture(observer);
     process.env.DATABASE_URL = `postgres://postgres:${encodeURIComponent(harness.password)}@${harness.host}:${harness.port}/postgres`;
     const { getDb } = await import("../../src/server/db.ts");
@@ -587,6 +591,7 @@ test("event-without-session fallback serializes identity creation and a later se
   try {
     await installPostgresCompatibilityFixture(observer);
     await applyPostgresMigrations(observer, 24);
+    await applyPostgresMigration(observer, 30);
     const fixture = await seedFixture(observer);
     const [legacyEvent] = await observer<{ id: number; public_id: string }[]>`
       INSERT INTO public.events (

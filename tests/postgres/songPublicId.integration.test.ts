@@ -18,7 +18,7 @@ import {
   startPostgresTestHarness,
 } from "./postgresTestHarness.ts";
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 test("song public ID backfill orders batches by the numeric song ID", { timeout: 600_000 }, async () => {

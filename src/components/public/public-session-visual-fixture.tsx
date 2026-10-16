@@ -135,6 +135,7 @@ const fixtureParticipantRequests = [
     status: "pending" as const,
     queuePosition: null,
     isNext: false,
+    canCancel: true,
     createdAt: "2026-09-15T18:00:00.000Z",
   },
 ];

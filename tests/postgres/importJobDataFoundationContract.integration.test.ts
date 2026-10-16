@@ -28,14 +28,14 @@ type SeededContractData = {
   jobIds: number[];
 };
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 const createdAt = "2026-07-16T10:00:00Z";
 const startedAt = "2026-07-16T10:01:00Z";
 const terminalAt = "2026-07-16T10:02:00Z";
 const updatedAt = "2026-07-16T10:03:00Z";
 
 test(
-  "0018 finalizes the import job data contract on PostgreSQL 15 and 17",
+  "0018 finalizes the import job data contract on PostgreSQL 17",
   { timeout: 1_200_000 },
   async (context) => {
     for (const image of images) {
@@ -47,7 +47,7 @@ test(
 );
 
 async function verifyContractOnImage(image: (typeof images)[number]) {
-  const version = image.startsWith("postgres:15") ? "15" : "17";
+  const version = "17";
   const harness = await startPostgresTestHarness(
     `pozanuta-import-job-contract-pg${version}`,
     image,

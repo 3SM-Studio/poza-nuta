@@ -81,6 +81,7 @@ describe("shared application shell", () => {
   it.each([
     ["Przegląd", eventPath],
     ["Kolejka", `${eventPath}/queue`],
+    ["Uczestnicy", `${eventPath}/participants`],
     ["Link i QR", `${eventPath}/share`],
     ["Ustawienia", `${eventPath}/settings`],
   ])("keeps one event navigation set and marks %s active", async (label, href) => {
@@ -96,7 +97,7 @@ describe("shared application shell", () => {
     const eventLinks = eventNavigation
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href")?.startsWith(eventPath));
-    expect(eventLinks).toHaveLength(4);
+    expect(eventLinks).toHaveLength(5);
     expect(eventNavigation.getByRole("link", { name: label })).toHaveAttribute(
       "aria-current",
       "page",
@@ -117,6 +118,7 @@ describe("shared application shell", () => {
     expect(
       eventNavigation.getByRole("link", { name: "Ustawienia" }),
     ).toHaveAttribute("href", `${eventPath}/settings`);
+    expect(eventNavigation.getByRole("link", { name: "Uczestnicy" })).toHaveAttribute("href", `${eventPath}/participants`);
     expect(
       eventNavigation.getByRole("link", { name: "Powrót do wydarzeń" }),
     ).toBeVisible();

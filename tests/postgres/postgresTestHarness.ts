@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 const migrationJournalPath = "drizzle/meta/_journal.json";
 const commandTimeoutMs = 120_000;
 
-export const POSTGRES_TEST_IMAGE = "postgres:15-alpine";
+export const POSTGRES_TEST_IMAGE = "postgres:17-alpine";
 
 export type SqlExecutor = postgres.Sql | postgres.TransactionSql;
 
@@ -77,7 +77,7 @@ export async function startPostgresTestHarness(
   image = POSTGRES_TEST_IMAGE,
 ): Promise<PostgresTestHarness> {
   assert.match(namePrefix, /^[a-z0-9-]+$/);
-  assert.match(image, /^postgres:(?:15|17)-alpine$/);
+  assert.match(image, /^postgres:17-alpine$/);
   const containerName = `${namePrefix}-${randomUUID()}`;
   const passwordBytes = randomBytes(32);
   const password = passwordBytes.toString("base64url");

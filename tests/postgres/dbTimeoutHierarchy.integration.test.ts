@@ -22,6 +22,7 @@ import {
   withRuntimeDiagnostics,
 } from "../../src/server/runtime-diagnostics.ts";
 import {
+  applyPostgresMigration,
   applyPostgresMigrations,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
@@ -76,6 +77,7 @@ test("a contended public mutation fails with PostgreSQL lock timeout before the 
   try {
     await installPostgresCompatibilityFixture(observer);
     await applyPostgresMigrations(observer, 24);
+    await applyPostgresMigration(observer, 30);
     const fixture = await seedPublicSessionFixture(observer);
     process.env.DATABASE_URL = `postgres://postgres:${encodeURIComponent(harness.password)}@${harness.host}:${harness.port}/postgres`;
     const { getDb } = await import("../../src/server/db.ts");

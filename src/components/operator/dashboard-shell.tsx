@@ -9,6 +9,7 @@ import {
   getDashboardOrganizationsPath,
   getDashboardOrganizationEventPath,
   getDashboardOrganizationEventQueuePath,
+  getDashboardOrganizationEventParticipantsPath,
   getDashboardOrganizationEventSettingsPath,
   getDashboardOrganizationEventSharePath,
   getDashboardOrganizationEventsPath,
@@ -185,6 +186,9 @@ function getEventBreadcrumbs({
 function getEventSectionLabel(pathname: string, organizationId: string) {
   const eventId = getSelectedEventId(pathname);
   if (!eventId) return null;
+
+  const participantsPath = getDashboardOrganizationEventParticipantsPath(organizationId, eventId);
+  if (pathname === participantsPath || pathname === `${participantsPath}/`) return "Uczestnicy";
 
   if (
     pathname ===

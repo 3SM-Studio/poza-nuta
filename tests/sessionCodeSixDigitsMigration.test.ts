@@ -133,13 +133,15 @@ test("legacy audit code is not read by application runtime", () => {
   }
 });
 
-test("0027 is the latest journal entry", () => {
+test("0027 remains the canonical six-digit migration in the journal", () => {
   const journal = JSON.parse(
     readFileSync("drizzle/meta/_journal.json", "utf8"),
   ) as { entries: Array<{ idx: number; tag: string }> };
 
-  assert.deepEqual(journal.entries.at(-1), {
-    ...journal.entries.at(-1),
+  const entry = journal.entries.find(({ idx }) => idx === 27);
+  assert.ok(entry);
+  assert.deepEqual(entry, {
+    ...entry,
     idx: 27,
     tag: "0027_session_code_6_digits",
   });

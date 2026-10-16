@@ -17,6 +17,7 @@ describe("SessionStateAlert", () => {
     ["rate_limited", "Zbyt wiele prób"],
     ["service_unavailable", "Sesja chwilowo niedostępna"],
     ["duplicate_request", "To zgłoszenie już czeka"],
+    ["request_limit", "Masz już 2 aktywne zgłoszenia"],
     ["canonical_unavailable", "Adres sesji niedostępny"],
     ["qr_unavailable", "Kod QR niedostępny"],
   ] satisfies [SessionStateAlertKind, string][])(

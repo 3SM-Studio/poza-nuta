@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { ParticipantJoinGate } from "@/components/public/participant-join-gate";
+import { ParticipantPresence } from "@/components/public/participant-presence";
 import { SessionRequestPage } from "@/components/public/session-request-page";
 import { PublicSessionLifecycle } from "@/components/public/public-session-lifecycle";
 import type { SessionEvent } from "@/components/public/session-api";
@@ -67,12 +68,15 @@ export default async function PublicSessionLayout({
   }
 
   return (
+    <>
+    {participant ? <ParticipantPresence sessionToken={token} /> : null}
     <SessionRequestPage
       event={serializeSessionEvent(access.event)}
       participantDisplayName={participant?.displayName}
       sessionToken={token}
       discovery={pageData?.discovery ?? undefined}
     />
+    </>
   );
 }
 

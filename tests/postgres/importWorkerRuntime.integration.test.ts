@@ -34,10 +34,10 @@ import {
   startPostgresTestHarness,
 } from "./postgresTestHarness.ts";
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 
 test(
-  "the iSing worker runtime executes durable jobs on PostgreSQL 15 and 17",
+  "the iSing worker runtime executes durable jobs on PostgreSQL 17",
   { timeout: 1_200_000 },
   async (context) => {
     for (const image of images) {
@@ -47,7 +47,7 @@ test(
 );
 
 async function verifyOnImage(image: (typeof images)[number]) {
-  const version = image.startsWith("postgres:15") ? "15" : "17";
+  const version = "17";
   const harness = await startPostgresTestHarness(
     `pozanuta-import-worker-runtime-pg${version}`,
     image,

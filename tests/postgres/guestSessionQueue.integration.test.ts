@@ -15,9 +15,18 @@ import {
 
 vi.mock("server-only", () => ({}));
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 
 for (const image of images) {
+test(`${image}: legacy active fixture preserves data when 0027 refuses remediation`, async () => {
+  // Roles are cluster-scoped: 0019's import_worker preflight requires a
+  // separate cluster, not a second database beside the runtime fixture.
+  const harness = await startPostgresTestHarness("pozanuta-guest-history", image);
+  const sql = createPostgresTestClient(harness, "postgres", 4);
+  try { await assertHistoricalMigrationBoundary(sql); }
+  finally { await sql.end({ timeout: 5 }); await removePostgresTestHarness(harness.containerName); }
+});
+
 test(`${image}: guest request and event-scoped organizer queue lifecycle`, async () => {
   const harness = await startPostgresTestHarness(
     "pozanuta-guest-session-queue",
@@ -30,18 +39,10 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
     | undefined;
 
   try {
+    // No active fixture exists until all current migrations have completed.
     await installPostgresCompatibilityFixture(sql);
-    await applyPostgresMigrations(sql, 21);
+    await applyPostgresMigrations(sql, 30);
     const legacyFixture = await seedLegacyActiveEvent(sql);
-    const legacyBefore = await eventDataFingerprint(sql, legacyFixture.workspaceId);
-    await assertMigrationFailFast(sql);
-    await applyPostgresMigration(sql, 22);
-    await applyPostgresMigration(sql, 23);
-    assert.deepEqual(
-      await eventDataFingerprint(sql, legacyFixture.workspaceId),
-      legacyBefore,
-    );
-    await applyPostgresMigration(sql, 24);
     const fixture = await seedFixture(sql);
     process.env.DATABASE_URL = makeDatabaseUrl(harness);
 
@@ -243,6 +244,32 @@ type LegacyFixture = {
   workspaceId: number;
   eventId: number;
 };
+
+async function assertHistoricalMigrationBoundary(sql: postgres.Sql) {
+  await installPostgresCompatibilityFixture(sql);
+  await applyPostgresMigrations(sql, 21);
+  const fixture = await seedLegacyActiveEvent(sql);
+  const legacyBefore = await eventDataFingerprint(sql, fixture.workspaceId);
+  await assertMigrationFailFast(sql);
+  await applyPostgresMigration(sql, 22);
+  await applyPostgresMigration(sql, 23);
+  assert.deepEqual(await eventDataFingerprint(sql, fixture.workspaceId), legacyBefore);
+  for (const migration of [24, 25, 26]) await applyPostgresMigration(sql, migration);
+  const fingerprint = async () => (await sql`select
+    (select jsonb_agg(to_jsonb(e) order by id) from public.events e) as events,
+    (select jsonb_agg(to_jsonb(s) order by id) from public.event_sessions s) as sessions,
+    (select jsonb_agg(to_jsonb(c) order by id) from public.event_session_codes c) as codes,
+    (select jsonb_agg(to_jsonb(r) order by id) from public.song_requests r) as requests,
+    (select jsonb_agg(pg_get_constraintdef(oid) order by conname) from pg_constraint where conrelid='public.events'::regclass) as constraints`)[0];
+  const before = await fingerprint();
+  await assert.rejects(applyPostgresMigration(sql, 27), (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error && error.code === "55000" &&
+    "constraint_name" in error && error.constraint_name === "session_code_legacy_active_event_preflight");
+  assert.deepEqual(await fingerprint(), before, "Expected 0027 refusal must preserve every legacy row and schema constraint");
+  const [active] = await sql`select status,closed_at,session_code from public.events where id=${fixture.eventId}`;
+  assert.equal(active.status, "active"); assert.equal(active.closed_at, null);
+  assert.match(active.session_code, /^[0-9]{8}$/);
+}
 
 async function seedLegacyActiveEvent(sql: postgres.Sql): Promise<LegacyFixture> {
   const authUserId = randomUUID();

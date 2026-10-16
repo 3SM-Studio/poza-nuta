@@ -16,7 +16,7 @@ import {
 
 vi.mock("server-only", () => ({}));
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 const concurrencyDeadlineMs = 5_000;
 
 for (const image of images) {
@@ -102,6 +102,22 @@ for (const image of images) {
       await assertConstraintContract(sql);
       await assertRotationContract(sql, fixture.eventIds[0]);
       await assertConcurrentIdentityGeneration(harness, sql, fixture.workspaceId);
+      // The assertions above intentionally exercise the historical 0021 schema.
+      // Runtime contracts below use today's six-digit code generator. Apply
+      // the real remediation only after meeting its closed-event preflight,
+      // then restore this isolated fixture's lifecycle (never production data).
+      const lifecycle = await sql`select id, status, starts_at, auto_close_at, ends_at,
+        closed_at, close_reason, is_active_public_event from public.events`;
+      await sql`update public.events set status = 'closed', is_active_public_event = false,
+        closed_at = clock_timestamp(), close_reason = 'manual'`;
+      await applyPostgresMigration(sql, 27);
+      await applyPostgresMigration(sql, 30);
+      for (const event of lifecycle) {
+        await sql`update public.events set status = ${event.status}, starts_at = ${event.starts_at},
+          auto_close_at = ${event.auto_close_at}, ends_at = ${event.ends_at}, closed_at = ${event.closed_at},
+          close_reason = ${event.close_reason}, is_active_public_event = ${event.is_active_public_event}
+          where id = ${event.id}`;
+      }
       await assertPublicApiDtoContract(harness, fixture);
       await assertConcurrentRotation(harness, fixture);
       await assertLifecycleContract(harness, sql, fixture);

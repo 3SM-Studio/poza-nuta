@@ -8,6 +8,133 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+test.describe("Fair Queue with local Supabase Auth", () => {
+  let fixture: LocalSupabaseFixture;
+
+  test.setTimeout(240_000);
+
+  test.beforeAll(async () => {
+    fixture = await createLocalSupabaseFixture();
+  });
+
+  test.afterAll(async () => {
+    await fixture?.cleanup();
+  });
+
+  test("Fair Queue karaoke preserves manual decisions, previews, rejects stale state and synchronizes Realtime on desktop and mobile", async ({ browser }) => {
+    await fixture.resetQueue();
+    const contexts = await Promise.all([41, 42, 43, 44, 45].map(ip => browser.newContext({
+      viewport: { width: 1440, height: 1100 }, extraHTTPHeaders: { "x-forwarded-for": `203.0.113.${ip}` },
+    })));
+    const [dashboardContext, ac, bc, cc, dc] = contexts;
+    const dashboard = await dashboardContext.newPage(), a = await ac.newPage(), b = await bc.newPage(), c = await cc.newPage(), d = await dc.newPage();
+    const eventPath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+    const apiPath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+    const errors: string[] = [];
+    for (const page of [dashboard, a, b, c, d]) observeBrowserErrors(page, errors, new Set([`${apiPath}/fair`]));
+    const join = async (page: typeof a, name: string) => {
+      await page.goto(`/join/${fixture.sessionCode}`);
+      await page.getByLabel("Imię lub ksywka").fill(name);
+      await page.getByRole("button", { name: "Dołącz", exact: true }).click();
+      await expectParticipantProfileControl(page);
+    };
+    const requestRow = (name: string, title: string) => dashboard.locator("[data-queue-request-id]").filter({ hasText: name }).filter({ hasText: title });
+    const action = async (name: string, title: string, label: string) => {
+      const saved = dashboard.waitForResponse(response => new URL(response.url()).pathname.startsWith(apiPath) &&
+        new URL(response.url()).pathname.endsWith("/action") && response.request().method() === "POST" && response.status() === 200);
+      await requestRow(name, title).getByRole("button", { name: new RegExp(`^${label}`) }).click();
+      await saved;
+      await expect(dashboard.getByText("Trwa zapis…", { exact: true })).toHaveCount(0);
+    };
+    const fairNames = async () => (await queueRequestNamesInLane(queueLane(dashboard, "approved"))).filter(name => name.startsWith("Fair E2E"));
+    try {
+      await signInLocalOperator(dashboard, fixture); await dashboard.goto(eventPath);
+      await expect(dashboard.locator('[data-realtime-status="live"]')).toBeVisible();
+      // Complete the unrelated legacy fixture using the normal operator UI.
+      await queueRequest(dashboard, "approved", fixture.queueRequestNames.approved).getByRole("button", { name: /^Oznacz jako zagrane/ }).click();
+      await expect(queueLane(dashboard, "approved").locator("[data-queue-request-id]")).toHaveCount(0);
+      await join(a, "Fair E2E A"); await join(b, "Fair E2E B"); await join(c, "Fair E2E C");
+      for (const [page, name, repeats] of [[a, "Fair E2E A", 2], [b, "Fair E2E B", 1]] as const) {
+        for (let i = 0; i < repeats; i++) {
+          await submitParticipantSong(page, "E2E Song");
+          await action(name, "E2E Song", "Zaakceptuj");
+          await action(name, "E2E Song", "Rozpocznij występ");
+          await action(name, "E2E Song", "Oznacz jako zagrane");
+        }
+      }
+      await submitParticipantSong(a, "E2E Song"); await action("Fair E2E A", "E2E Song", "Zaakceptuj");
+      await submitParticipantSong(a, "E2E Second Song"); await action("Fair E2E A", "E2E Second Song", "Zaakceptuj");
+      await submitParticipantSong(b, "E2E Song"); await action("Fair E2E B", "E2E Song", "Zaakceptuj");
+      await submitParticipantSong(c, "E2E Song"); await action("Fair E2E C", "E2E Song", "Zaakceptuj");
+      await expect.poll(fairNames).toEqual(["Fair E2E C", "Fair E2E A", "Fair E2E B", "Fair E2E A"]);
+      // Use the shared scroll-aware pointer helper; A has two distinct songs.
+      await dashboard.setViewportSize({ width: 1440, height: 1800 });
+      const moved = dashboard.waitForResponse(response => new URL(response.url()).pathname.startsWith(apiPath) && new URL(response.url()).pathname.endsWith("/move") && response.status() === 200);
+      await dragQueueRequest({ page: dashboard, sourceLane: "approved", requestName: "Fair E2E A",
+        requestTitle: "E2E Second Song", targetLane: "approved", targetRequestName: "Fair E2E C" });
+      await moved;
+      await expect.poll(async () => queueLane(dashboard, "approved").locator("[data-queue-request-id]").first().textContent()).toContain("E2E Second Song");
+      await dashboard.setViewportSize({ width: 1440, height: 1100 });
+      const manuallyOrdered = (await fixture.readQueueRows()).filter(row => row.status === "approved").sort((x, y) => x.position - y.position).map(row => row.requestId);
+      await join(d, "Fair E2E D"); await submitParticipantSong(d, "E2E Song"); await action("Fair E2E D", "E2E Song", "Zaakceptuj");
+      const afterInsert = (await fixture.readQueueRows()).filter(row => row.status === "approved").sort((x, y) => x.position - y.position);
+      expect(afterInsert.filter(row => row.displayName !== "Fair E2E D").map(row => row.requestId)).toEqual(manuallyOrdered);
+      await dashboard.getByRole("button", { name: "Ułóż sprawiedliwie", exact: true }).click();
+      const dialog = dashboard.getByRole("dialog", { name: "Ułóż sprawiedliwie", exact: true });
+      await expect(dialog.getByRole("list", { name: "Proponowana kolejność" }).locator("li")).toHaveCount(5);
+      await dialog.getByRole("button", { name: "Anuluj" }).click();
+      expect((await fixture.readQueueRows()).filter(row => row.status === "approved").sort((x, y) => x.position - y.position).map(row => row.requestId)).toEqual(afterInsert.map(row => row.requestId));
+      await dashboard.setViewportSize({ width: 390, height: 844 });
+      await dashboard.getByRole("button", { name: "Ułóż sprawiedliwie", exact: true }).click();
+      await expect(dialog.getByRole("button", { name: "Zastosuj kolejność" })).toBeEnabled();
+      expect(await dashboard.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      // A real concurrent operator write invalidates the displayed revision.
+      const concurrent = await dashboardContext.request.post(`${apiPath}/requests/${afterInsert[0].requestId}/move`, {
+        headers: { origin: new URL(dashboard.url()).origin }, data: { targetPosition: 5 },
+      });
+      expect(concurrent.status()).toBe(200);
+      await dialog.getByRole("button", { name: "Zastosuj kolejność" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("Kolejka zmieniła się od podglądu");
+      await dialog.getByRole("button", { name: "Odśwież podgląd" }).click();
+      await expect(dialog.locator("[data-fair-request-id]")).toHaveCount(5);
+      const proposedIds = await dialog.locator("[data-fair-request-id]").evaluateAll(nodes => nodes.map(node => Number(node.getAttribute("data-fair-request-id"))));
+      await c.getByRole("tab", { name: /^Kolejka/ }).click();
+      const publicQueue = c.locator('aside[aria-label="Kolejka sesji"]:visible');
+      const publicNames = async () => (await publicQueue.locator("article").allTextContents()).map(text => text.match(/Fair E2E [A-D]/)?.[0]);
+      const beforeSortNames = (await fixture.readQueueRows()).filter(row => row.status === "approved").sort((x, y) => x.position - y.position).map(row => row.displayName);
+      await expect.poll(publicNames).toEqual(beforeSortNames);
+      const refetch = c.waitForResponse(response => new URL(response.url()).pathname === `/api/s/${fixture.publicToken}/queue` && response.status() === 200);
+      const started = Date.now();
+      await dialog.getByRole("button", { name: "Zastosuj kolejność" }).click(); await refetch;
+      await expect(dialog).toHaveCount(0);
+      const persisted = () => fixture.readQueueRows().then(rows => rows.filter(row => row.status === "approved").sort((x, y) => x.position - y.position).map(row => Number(row.requestId)));
+      await expect.poll(persisted).toEqual(proposedIds);
+      await expect.poll(fairNames).toEqual(["Fair E2E C", "Fair E2E D", "Fair E2E B", "Fair E2E A", "Fair E2E A"]);
+      await expect.poll(() => publicQueue.locator("article").allTextContents()).toEqual(expect.arrayContaining([expect.stringContaining("Fair E2E C")]));
+      await expect.poll(publicNames).toEqual(["Fair E2E C", "Fair E2E D", "Fair E2E B", "Fair E2E A", "Fair E2E A"]);
+      console.log(`[fair-queue] Realtime apply-to-public refetch: ${Date.now() - started} ms`);
+      await dashboard.setViewportSize({ width: 1440, height: 1100 });
+      await action("Fair E2E C", "E2E Song", "Rozpocznij występ");
+      await action("Fair E2E C", "E2E Song", "Oznacz jako zagrane");
+      await submitParticipantSong(c, "E2E Second Song"); await action("Fair E2E C", "E2E Second Song", "Zaakceptuj");
+      expect((await fairNames())[0]).toBe("Fair E2E D");
+      // Expected 409 was already asserted; no unrelated browser/runtime error.
+      expect(errors).toEqual([]);
+      const beforeConnectionFailure = await fixture.readQueueRows();
+      await dashboard.route("**/queue/fair", route => route.abort("connectionreset"), { times: 1 });
+      await dashboard.getByRole("button", { name: "Ułóż sprawiedliwie", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("Nie udało się pobrać podglądu");
+      await expect(dialog.getByRole("button", { name: "Zastosuj kolejność" })).toHaveCount(0);
+      expect(await fixture.readQueueRows()).toEqual(beforeConnectionFailure);
+      await dialog.getByRole("button", { name: "Odśwież podgląd" }).click();
+      await expect(dialog.locator("[data-fair-request-id]")).toHaveCount(5);
+      await dialog.getByRole("button", { name: "Anuluj" }).click();
+      expect(await fixture.readQueueRows()).toEqual(beforeConnectionFailure);
+      expect(errors).toEqual(["Failed to load resource: net::ERR_CONNECTION_RESET"]);
+    } finally { await Promise.all(contexts.map(context => context.close())); }
+  });
+});
+
 test.describe("public event and session identity with local Supabase Auth", () => {
   let fixture: LocalSupabaseFixture;
 
@@ -344,6 +471,380 @@ test.describe("public event and session identity with local Supabase Auth", () =
     }
   });
 
+  test("links devices and claims manual and existing profiles with explicit confirmations", async ({ browser }) => {
+    const contexts = await Promise.all([89, 90, 91, 92].map(n => browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": `203.0.113.${n}` }, viewport: { width: n === 91 ? 390 : 1440, height: n === 91 ? 844 : 1100 } })));
+    const [dashboardContext, ownerContext, deviceContext, otherContext] = contexts;
+    const dashboard = await dashboardContext.newPage(), owner = await ownerContext.newPage(), device = await deviceContext.newPage(), other = await otherContext.newPage();
+    const queue = await dashboardContext.newPage();
+    const eventPath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}`;
+    const sessionPath = `/s/${fixture.publicToken}`;
+    const errors: string[] = [];
+    for (const page of [dashboard, owner, other, queue]) observeBrowserErrors(page, errors);
+    const deviceErrors: string[] = [];
+    observeBrowserErrors(device, deviceErrors);
+    async function openIdentity(page: typeof owner) {
+      await page.getByRole("button", { name: "Zmień swój nick", exact: true }).click();
+      await page.getByRole("button", { name: "Urządzenia i łączenie profili" }).click();
+      return page.getByRole("dialog", { name: "Urządzenia i profile", exact: true });
+    }
+    async function closeIdentity(page: typeof owner) {
+      await page.getByRole("dialog", { name: "Urządzenia i profile", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
+      await page.getByRole("button", { name: "Zamknij zmianę nicku" }).click();
+    }
+    try {
+      await signInLocalOperator(dashboard, fixture);
+      await dashboard.goto(`${eventPath}/participants`);
+      await owner.goto(`/join/${fixture.sessionCode}`);
+      await owner.getByLabel("Imię lub ksywka").fill("Slice Four Owner");
+      await owner.getByRole("button", { name: "Dołącz", exact: true }).click();
+      await submitParticipantSong(owner, "E2E Song"); await submitParticipantSong(owner, "E2E Second Song");
+      const trusted = await openIdentity(owner);
+      await trusted.getByRole("button", { name: "Połącz kolejne urządzenie", exact: true }).click();
+      const invitation = await trusted.getByLabel("Jednorazowy kod urządzenia").inputValue();
+      await device.goto(sessionPath);
+      await device.getByRole("button", { name: "Połącz istniejące urządzenie" }).click();
+      const receiving = device.getByRole("dialog", { name: "Połącz urządzenie", exact: true });
+      await receiving.getByLabel("Jednorazowy kod z zaufanego urządzenia").fill(invitation);
+      await receiving.getByRole("button", { name: "Przygotuj połączenie" }).click();
+      const code = await receiving.getByLabel("Kod potwierdzenia").textContent();
+      await trusted.getByRole("button", { name: "Sprawdź stan połączenia" }).click();
+      await trusted.getByLabel("Kod potwierdzenia z drugiego urządzenia").fill(code!);
+      await trusted.getByRole("button", { name: "Potwierdź to urządzenie" }).click();
+      await expect(trusted.getByText("Potwierdzono. Zakończ łączenie na drugim urządzeniu.")).toBeVisible();
+      // Commit on the real server, then sever the HTTP response. The bound
+      // receiver must recover the same credential, including if headers arrived.
+      await device.route("**/identity/linking", async route => {
+        const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+        if (body?.action === "finish") {
+          const serverResponse = await route.fetch();
+          expect(serverResponse.status()).toBe(200);
+          await route.abort("connectionreset");
+        } else await route.continue();
+      });
+      await receiving.getByRole("button", { name: "Zakończ połączenie" }).click();
+      await expect(receiving.getByRole("alert")).toContainText("Nie udało się wykonać operacji");
+      expect(deviceErrors).toEqual(["Failed to load resource: net::ERR_CONNECTION_RESET"]);
+      deviceErrors.length = 0;
+      await device.unroute("**/identity/linking");
+      await receiving.getByRole("button", { name: "Zakończ połączenie" }).click();
+      await expect(device.getByText("Aktywne zgłoszenia: 2/2", { exact: true }).first()).toBeVisible();
+      await closeIdentity(owner);
+      const cookiesA = await ownerContext.cookies(), cookiesB = await deviceContext.cookies();
+      const credentialA = cookiesA.find(cookie => cookie.name === "poza_nuta_participant"), credentialB = cookiesB.find(cookie => cookie.name === "poza_nuta_participant");
+      expect(Boolean(credentialA?.httpOnly && credentialB?.httpOnly && credentialA.value !== credentialB.value)).toBe(true);
+      expect(await fixture.readParticipantCredentialCount("Slice Four Owner")).toBe(2);
+      await expect.poll(async () => (await fixture.readParticipantPresence("Slice Four Owner")).liveConnections).toBe(2);
+      await device.reload();
+      await expect(device.getByText("Aktywne zgłoszenia: 2/2", { exact: true }).first()).toBeVisible();
+      expect(await device.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await dashboard.getByRole("button", { name: "Dodaj uczestnika", exact: true }).click();
+      const manualDialog = dashboard.getByRole("dialog", { name: "Dodaj uczestnika", exact: true });
+      await manualDialog.getByLabel("Nick uczestnika").fill("Slice Four Manual");
+      await manualDialog.getByRole("button", { name: "Utwórz uczestnika" }).click();
+      await dashboard.getByRole("button", { name: "Wybierz uczestnika: Slice Four Manual", exact: true }).click();
+      await dashboard.getByLabel("Tytuł lub wykonawca", { exact: true }).fill("E2E Discovery Hit");
+      await dashboard.getByRole("button", { name: "Szukaj w katalogu" }).click();
+      await dashboard.getByRole("radio", { name: "E2E Discovery Hit · E2E Discovery Artist", exact: true }).check();
+      await dashboard.getByRole("button", { name: "Dodaj zgłoszenie", exact: true }).click();
+      await queue.goto(`${eventPath}/queue`);
+      async function perform(name: string, title: string) {
+        const row = queue.locator("[data-queue-request-id]").filter({ hasText: name }).filter({ hasText: title });
+        await row.getByRole("button", { name: /^Zaakceptuj/ }).click();
+        await row.getByRole("button", { name: /^Rozpocznij/ }).click();
+        await row.getByRole("button", { name: /^Oznacz jako zagrane/ }).click();
+      }
+      await perform("Slice Four Manual", "E2E Discovery Hit");
+      await dashboard.getByRole("button", { name: "Połącz profile", exact: true }).click();
+      const mergeDialog = dashboard.getByRole("dialog", { name: "Połącz profile uczestnika", exact: true });
+      const chooseProfiles = async (source: string, target: string) => {
+        await mergeDialog.getByLabel("Profil źródłowy (zachowamy historię)").selectOption({ label: source });
+        await mergeDialog.getByLabel("Profil docelowy (pozostanie ten nick)").selectOption({ label: target });
+        await mergeDialog.getByRole("button", { name: "Utwórz propozycję połączenia" }).click();
+      };
+      await chooseProfiles("Slice Four Manual · aktywne 0/2", "Slice Four Owner · aktywne 2/2");
+      await expect(mergeDialog.getByText("E2E Discovery Hit · E2E Discovery Artist", { exact: true })).toBeVisible();
+      await expect(mergeDialog.getByRole("button", { name: "Zatwierdź połączenie profili" })).toBeDisabled();
+      const proof = await openIdentity(owner);
+      await proof.getByRole("button", { name: "Potwierdzam własność obu profili" }).click();
+      await expect(proof.getByText("Zgoda zapisana. Operator może dokończyć połączenie.")).toBeVisible();
+      await closeIdentity(owner);
+      await mergeDialog.getByRole("button", { name: "Odśwież potwierdzenia" }).click();
+      await mergeDialog.getByRole("button", { name: "Zatwierdź połączenie profili" }).click();
+      await dashboard.getByRole("alertdialog").getByRole("button", { name: "Wróć bez łączenia" }).click();
+      await expect(dashboard.getByRole("alertdialog")).toHaveCount(0);
+      await mergeDialog.getByRole("button", { name: "Zatwierdź połączenie profili" }).click();
+      await dashboard.getByRole("alertdialog").getByRole("button", { name: "Tak, połącz profile" }).click();
+      await expect(mergeDialog.getByText("Profile zostały połączone. Historia i zgłoszenia zachowane.")).toBeVisible();
+      await mergeDialog.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(dashboard.getByRole("button", { name: "Wybierz uczestnika: Slice Four Manual", exact: true })).toHaveCount(0);
+      const retained = await fixture.readParticipantRequests("Slice Four Owner");
+      expect(retained.length).toBe(3); expect(retained.filter(row => row.status === "done").length).toBe(1);
+      await other.goto(sessionPath); await other.getByLabel("Imię lub ksywka").fill("Slice Four Other"); await other.getByRole("button", { name: "Dołącz", exact: true }).click();
+      await submitParticipantSong(other, "E2E Discovery Hit");
+      try {
+        await expect(dashboard.getByRole("button", { name: "Wybierz uczestnika: Slice Four Other", exact: true })).toContainText("Aktywne: 1/2");
+      } catch (error) {
+        const diagnostic = await dashboard.evaluate(() => {
+          const button = document.querySelector('button[aria-label="Wybierz uczestnika: Slice Four Other"]');
+          const panel = document.querySelector('[aria-labelledby="event-participants-title"]');
+          return { otherInDom: !!button, hiddenAncestor: !!button?.closest('[aria-hidden="true"]'), panelHidden: !!panel?.closest('[aria-hidden="true"]'),
+            bodyPointerEvents: document.body.style.pointerEvents, dialogs: document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length,
+            rows: panel?.querySelectorAll('button[aria-label^="Wybierz uczestnika:"]').length,
+            filterEmpty: (document.querySelector('#participant-filter') as HTMLInputElement | null)?.value === "" };
+        });
+        await test.info().attach("participant-list-state", { body: JSON.stringify(diagnostic), contentType: "application/json" });
+        throw error;
+      }
+      await dashboard.getByRole("button", { name: "Połącz profile", exact: true }).click();
+      await chooseProfiles("Slice Four Owner · aktywne 2/2", "Slice Four Other · aktywne 1/2");
+      await expect(mergeDialog.getByRole("alert")).toContainText("więcej niż 2 aktywne");
+      for (const page of [owner, other]) { const dialog = await openIdentity(page); await dialog.getByRole("button", { name: "Potwierdzam własność obu profili" }).click(); await expect(dialog.getByText("Zgoda zapisana. Operator może dokończyć połączenie.")).toBeVisible(); await closeIdentity(page); }
+      await mergeDialog.getByRole("button", { name: "Odśwież potwierdzenia" }).click();
+      await expect(mergeDialog.getByRole("button", { name: "Zatwierdź połączenie profili" })).toBeDisabled();
+      await perform("Slice Four Owner", "E2E Song");
+      await mergeDialog.getByRole("button", { name: "Odśwież potwierdzenia" }).click();
+      await mergeDialog.getByRole("button", { name: "Zatwierdź połączenie profili" }).click();
+      await dashboard.getByRole("alertdialog").getByRole("button", { name: "Tak, połącz profile" }).click();
+      await expect(mergeDialog.getByText("Profile zostały połączone. Historia i zgłoszenia zachowane.")).toBeVisible();
+      await device.reload();
+      await expect(device.getByText("Aktywne zgłoszenia: 2/2", { exact: true }).first()).toBeVisible();
+      await expect.poll(async () => (await fixture.readParticipantPresence("Slice Four Other")).liveConnections).toBe(3);
+      expect((await fixture.readParticipantRequests("Slice Four Other")).length).toBe(4);
+      expect(errors).toEqual([]); expect(deviceErrors).toEqual([]);
+    } finally { await Promise.allSettled(contexts.map(context => context.close())); }
+  });
+
+  test("tracks participant presence across tabs, TTL without beacon, reconnect and reload", async ({ browser }) => {
+    const dashboardContext = await browser.newContext();
+    const participantContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const dashboard = await dashboardContext.newPage();
+    let participant = await participantContext.newPage();
+    const name = "Slice Three Presence";
+    const errors: string[] = [];
+    observeBrowserErrors(dashboard, errors); observeBrowserErrors(participant, errors);
+    try {
+      await signInLocalOperator(dashboard, fixture);
+      await dashboard.goto(`/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/participants`);
+      await expect(dashboard.locator('[data-participants-realtime="live"]')).toBeVisible();
+      await participant.goto(`/join/${fixture.sessionCode}`);
+      await participant.getByLabel("Imię lub ksywka").fill(name);
+      const started = performance.now();
+      await participant.getByRole("button", { name: "Dołącz" }).click();
+      const row = dashboard.getByRole("button", { name: `Wybierz uczestnika: ${name}`, exact: true });
+      await expect(row.locator('[data-participant-presence="online"]')).toBeVisible({ timeout: 5000 });
+      console.log(`[presence] QR join online: ${Math.round(performance.now() - started)} ms`);
+      await expect(row).toContainText("Aktywne: 0/2");
+      const initial = await fixture.readParticipantPresence(name);
+      expect(initial.liveConnections).toBe(1);
+      expect(await fixture.readParticipantRequests(name)).toEqual([]);
+      const second = await participantContext.newPage();
+      await second.goto(`/s/${fixture.publicToken}`);
+      await expect.poll(async () => (await fixture.readParticipantPresence(name)).liveConnections).toBe(2);
+      await participant.close();
+      await expect.poll(async () => (await fixture.readParticipantPresence(name)).liveConnections).toBe(1);
+      await expect(row.locator('[data-participant-presence="online"]')).toBeVisible();
+      await second.reload();
+      await expect.poll(async () => (await fixture.readParticipantPresence(name)).liveConnections).toBe(1);
+      expect((await fixture.readParticipantPresence(name)).memberId).toBe(initial.memberId);
+      await second.close();
+      await expect(row.locator('[data-participant-presence="offline"]')).toBeVisible({ timeout: 5000 });
+
+      participant = await participantContext.newPage();
+      await participant.goto(`/s/${fixture.publicToken}`);
+      await expect(row.locator('[data-participant-presence="online"]')).toBeVisible({ timeout: 5000 });
+      // Kill transport only: the page cannot send a heartbeat or a beacon. The
+      // dashboard's real deadline timer must ask the server and display offline.
+      await participantContext.setOffline(true);
+      const lostAt = performance.now();
+      await expect(row.locator('[data-participant-presence="offline"]')).toBeVisible({ timeout: 50_000 });
+      console.log(`[presence] TTL offline without beacon: ${Math.round(performance.now() - lostAt)} ms`);
+      const resumed = participant.waitForResponse(response => new URL(response.url()).pathname === `/api/s/${fixture.publicToken}/presence` && response.ok() && response.request().postDataJSON()?.action === "heartbeat");
+      await participantContext.setOffline(false);
+      await resumed;
+      await expect(row.locator('[data-participant-presence="online"]')).toBeVisible({ timeout: 5000 });
+      await expect.poll(async () => (await fixture.readParticipantPresence(name)).liveConnections).toBe(1);
+
+      // Simulate a browser accepting then losing its best-effort beacon. The
+      // real tab is closed; the server must still retain its lease until TTL.
+      await participant.evaluate(() => { navigator.sendBeacon = () => true; });
+      const closedAt = performance.now();
+      await participant.close();
+      expect((await fixture.readParticipantPresence(name)).liveConnections).toBe(1);
+      await expect(row.locator('[data-participant-presence="offline"]')).toBeVisible({ timeout: 50_000 });
+      const closeTtlMs = Math.round(performance.now() - closedAt);
+      expect(closeTtlMs).toBeGreaterThan(30_000);
+      console.log(`[presence] Closed tab without beacon offline: ${closeTtlMs} ms`);
+      expect((await fixture.readParticipantPresence(name)).memberId).toBe(initial.memberId);
+      await dashboard.setViewportSize({ width: 390, height: 844 });
+      expect(await dashboard.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(errors).toEqual([]);
+    } finally { await Promise.allSettled([participantContext.close(), dashboardContext.close()]); }
+  });
+
+  test("manages event participants and operator requests with real Realtime", async ({ browser }) => {
+    const dashboardContext = await browser.newContext();
+    const participantContext = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": "203.0.113.86" } });
+    const dashboard = await dashboardContext.newPage();
+    const participant = await participantContext.newPage();
+    const queuePage = await dashboardContext.newPage();
+    const browserErrors: string[] = [];
+    const expectedConflicts = new Set<string>();
+    observeBrowserErrors(dashboard, browserErrors, expectedConflicts);
+    observeBrowserErrors(participant, browserErrors);
+    observeBrowserErrors(queuePage, browserErrors);
+    try {
+      await signInLocalOperator(dashboard, fixture);
+      const eventPath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}`;
+      await dashboard.goto(`${eventPath}/participants`);
+      await expect(dashboard.getByRole("heading", { name: "Uczestnicy wydarzenia" })).toBeVisible();
+      await expect(dashboard.locator('[data-participants-realtime="live"]')).toBeVisible();
+      await participant.goto(`/join/${fixture.sessionCode}`);
+      await participant.getByLabel("Imię lub ksywka").fill("Slice Two Mobile");
+      const joinStartedAt = performance.now();
+      await participant.getByRole("button", { name: "Dołącz" }).click();
+      const mobileRow = dashboard.getByRole("button", { name: "Wybierz uczestnika: Slice Two Mobile" });
+      await expect(mobileRow).toBeVisible({ timeout: 5000 });
+      console.log(`[participant-management] Join invalidation: ${Math.round(performance.now() - joinStartedAt)} ms`);
+      await expect(mobileRow).toContainText("Aktywne: 0/2");
+      await mobileRow.click();
+
+      const addCatalogSong = async (title: string) => {
+        await dashboard.getByLabel("Tytuł lub wykonawca", { exact: true }).fill(title);
+        await dashboard.getByRole("button", { name: "Szukaj w katalogu" }).click();
+        await dashboard.getByRole("radio", { name: `${title} · ${title === "E2E Discovery Hit" ? "E2E Discovery Artist" : "E2E Artist"}`, exact: true }).check();
+        await dashboard.getByRole("button", { name: "Dodaj zgłoszenie", exact: true }).click();
+      };
+      await addCatalogSong("E2E Song");
+      await expect(mobileRow).toContainText("Aktywne: 1/2");
+      const [first] = await fixture.readParticipantRequests("Slice Two Mobile");
+      expect(first?.requestedBy).toBe("operator");
+      await submitParticipantSong(participant, "E2E Second Song");
+      await expect(mobileRow).toContainText("Aktywne: 2/2");
+      const requestApi = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/participants/${first!.eventParticipantId}/requests`;
+      expectedConflicts.add(requestApi);
+      await addCatalogSong("E2E Discovery Hit");
+      await expect(dashboard.getByRole("alert").filter({ hasText: "Ta osoba ma już 2 aktywne zgłoszenia" })).toBeVisible();
+
+      await queuePage.goto(`${eventPath}/queue`);
+      const queueRow = queuePage.locator("[data-queue-request-id]").filter({ hasText: "Slice Two Mobile" }).filter({ hasText: "E2E Song" });
+      await expect(queueRow).toBeVisible();
+      await queueRow.getByRole("button", { name: /^Zaakceptuj/ }).click();
+      await queueRow.getByRole("button", { name: /^Rozpocznij/ }).click();
+      await queueRow.getByRole("button", { name: /^Oznacz jako zagrane/ }).click();
+      await expect(mobileRow).toContainText("Aktywne: 1/2");
+      await expect(mobileRow).toContainText("Zakończone występy: 1");
+      await expect(dashboard.getByRole("alert").filter({ hasText: "Ta osoba ma już 2 aktywne zgłoszenia" })).toBeVisible();
+
+      await dashboard.getByRole("button", { name: "Dodaj uczestnika", exact: true }).click();
+      const manualDialog = dashboard.getByRole("dialog", { name: "Dodaj uczestnika", exact: true });
+      await manualDialog.getByLabel("Nick uczestnika").fill("Slice Two Manual");
+      await manualDialog.getByRole("button", { name: "Utwórz uczestnika" }).click();
+      const manualRow = dashboard.getByRole("button", { name: "Wybierz uczestnika: Slice Two Manual" });
+      await expect(manualRow).toBeVisible();
+      await addCatalogSong("E2E Discovery Hit");
+      await expect(manualRow).toContainText("Aktywne: 1/2");
+      expect((await fixture.readParticipantRequests("Slice Two Manual"))[0]?.requestedBy).toBe("operator");
+      await dashboard.reload();
+      await expect(manualRow).toContainText("Aktywne: 1/2");
+      await dashboard.setViewportSize({ width: 390, height: 844 });
+      await manualRow.click();
+      await expect(dashboard.getByRole("heading", { name: "Zgłoszenia i historia" })).toBeVisible();
+      expect(await dashboard.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(browserErrors).toEqual([]);
+    } finally {
+      await Promise.allSettled([participantContext.close(), dashboardContext.close()]);
+    }
+  });
+
+  test("enforces participant 2/2 through HTTP, reload and real Realtime", async ({ browser }) => {
+    const dashboardContext = await browser.newContext();
+    const participantContext = await browser.newContext({
+      extraHTTPHeaders: { "x-forwarded-for": "203.0.113.85" },
+    });
+    const dashboard = await dashboardContext.newPage();
+    const participant = await participantContext.newPage();
+    const browserErrors: string[] = [];
+    const expectedConflictPaths = new Set([`/api/s/${fixture.publicToken}/requests`]);
+    observeBrowserErrors(dashboard, browserErrors, expectedConflictPaths);
+    observeBrowserErrors(participant, browserErrors, expectedConflictPaths);
+    try {
+      await signInLocalOperator(dashboard, fixture);
+      await dashboard.goto(`/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`);
+      await expect(dashboard.locator('[data-realtime-status="live"]')).toBeVisible();
+      await participant.goto(`/s/${fixture.publicToken}`);
+      await participant.getByLabel("Imię lub ksywka").fill("E2E Limit Participant");
+      await participant.getByRole("button", { name: "Dołącz" }).click();
+      const capacity = (count: number) => participant.getByText(`Aktywne zgłoszenia: ${count}/2`, { exact: true }).first();
+      await expect(capacity(0)).toBeVisible();
+      await submitParticipantSong(participant, "E2E Song");
+      await expect(capacity(1)).toBeVisible();
+      await submitParticipantSong(participant, "E2E Second Song");
+      await expect(capacity(2)).toBeVisible();
+      await participant.reload();
+      await expect(capacity(2)).toBeVisible();
+
+      const search = await participantContext.request.get(`/api/s/${fixture.publicToken}/songs/search?q=E2E%20Discovery%20Hit`);
+      expect(search.status()).toBe(200);
+      const songs: { items: { id: number; title: string }[] } = await search.json();
+      const third = songs.items.find(({ title }) => title === "E2E Discovery Hit");
+      expect(third).toBeDefined();
+      const direct = await participantContext.request.post(`/api/s/${fixture.publicToken}/requests`, {
+        headers: { origin: new URL(participant.url()).origin }, data: { songId: third!.id },
+      });
+      expect(direct.status()).toBe(409);
+      expect((await direct.json()).error.code).toBe("SESSION_REQUEST_LIMIT_REACHED");
+
+      const searchbox = participant.getByRole("searchbox");
+      await searchbox.fill("E2E Discovery Hit");
+      await expect(participant.getByRole("heading", { name: "„E2E Discovery Hit”" })).toBeVisible();
+      await participant.getByRole("button", { name: /E2E Discovery Hit/ }).click();
+      const submissionResponse = participant.waitForResponse((response) =>
+        new URL(response.url()).pathname === `/api/s/${fixture.publicToken}/requests` && response.request().method() === "POST",
+      );
+      await participant.getByRole("button", { name: "Dodaj do kolejki" }).click();
+      const deniedSubmission = await submissionResponse;
+      expect(deniedSubmission.status()).toBe(409);
+      expect((await deniedSubmission.json()).error.code).toBe("SESSION_REQUEST_LIMIT_REACHED");
+      await expect(participant.getByText("Masz już 2 aktywne zgłoszenia")).toBeVisible();
+      await participant.getByRole("button", { name: "Zamknij szczegóły utworu" }).click();
+
+      const first = dashboard.locator("[data-queue-request-id]")
+        .filter({ hasText: "E2E Limit Participant" }).filter({ hasText: "E2E Song" });
+      await expect(first).toBeVisible();
+      await first.getByRole("button", { name: "Odrzuć" }).click();
+      const rejectDialog = dashboard.getByRole("alertdialog", { name: "Odrzucić zgłoszenie?" });
+      await expect(rejectDialog).toBeVisible();
+      await rejectDialog.getByRole("button", { name: "Anuluj" }).click();
+      await expect(first).toBeVisible();
+      await expect(capacity(2)).toBeVisible();
+      await first.getByRole("button", { name: "Odrzuć" }).click();
+      const invalidationStartedAt = performance.now();
+      await rejectDialog.getByRole("button", { name: /^Odrzuć/ }).click();
+      // No participant action or refresh: operator rejection broadcasts invalidation.
+      await expect(capacity(1)).toBeVisible({ timeout: 5_000 });
+      console.log(`[participant-limit] Realtime capacity update: ${Math.round(performance.now() - invalidationStartedAt)} ms`);
+      await submitParticipantSong(participant, "E2E Discovery Hit");
+      await expect(capacity(2)).toBeVisible();
+      const rejected = queueLane(dashboard, "rejected").locator("[data-queue-request-id]")
+        .filter({ hasText: "E2E Limit Participant" }).filter({ hasText: "E2E Song" });
+      const firstRequest = (await fixture.readParticipantRequests("E2E Limit Participant"))
+        .find(({ songTitle }) => songTitle === "E2E Song");
+      expect(firstRequest).toBeDefined();
+      const restorePath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue/requests/${firstRequest!.requestId}/action`;
+      expectedConflictPaths.add(restorePath);
+      const restoreResponse = dashboard.waitForResponse((response) => new URL(response.url()).pathname === restorePath);
+      await rejected.getByRole("button", { name: "Przywróć" }).click();
+      const deniedRestore = await restoreResponse;
+      expect(deniedRestore.status()).toBe(409);
+      expect((await deniedRestore.json()).error.code).toBe("SESSION_REQUEST_LIMIT_REACHED");
+      await expect(dashboard.getByRole("alert").filter({ hasText: "Ta osoba ma już 2 aktywne zgłoszenia" })).toBeVisible();
+      await expect(rejected).toBeVisible();
+      expect(browserErrors).toEqual([]);
+    } finally {
+      await Promise.allSettled([participantContext.close(), dashboardContext.close()]);
+    }
+  });
+
   test("lets a participant discover a song and submit it without knowing its title", async ({
     browser,
   }) => {
@@ -451,6 +952,18 @@ test.describe("public event and session identity with local Supabase Auth", () =
   }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
+    // Hard navigations create two leases in React Strict Mode. Exercise the
+    // catalog below the real 32-new-connections/minute credential limit.
+    // All HTTP requests and rate limits remain real; no response is suppressed.
+    let lastDocumentNavigation = 0;
+    await context.route("**/*", async route => {
+      if (route.request().isNavigationRequest() && route.request().frame() === page.mainFrame()) {
+        const delay = Math.max(0, lastDocumentNavigation + 4_500 - Date.now());
+        if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+        lastDocumentNavigation = Date.now();
+      }
+      await route.continue();
+    });
     const browserErrors: string[] = [];
     const browseRequests: URL[] = [];
     const searchRequests: URL[] = [];
@@ -673,9 +1186,15 @@ test.describe("public event and session identity with local Supabase Auth", () =
     const page = await authenticatedContext.newPage();
     const anonymousPage = await anonymousContext.newPage();
     const browserErrors: string[] = [];
+    const closedPresenceResponses: import("@playwright/test").Response[] = [];
 
     observeBrowserErrors(page, browserErrors);
     observeBrowserErrors(anonymousPage, browserErrors);
+    anonymousPage.on("response", response => {
+      if (response.status() === 403 && new URL(response.url()).pathname === `/api/s/${fixture.publicToken}/presence`) {
+        closedPresenceResponses.push(response);
+      }
+    });
 
     try {
       await signInLocalOperator(page, fixture);
@@ -703,7 +1222,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       );
       await expect(
         anonymousPage
-          .getByRole("dialog")
+          .getByRole("main")
           .getByRole("heading", { name: "Jak mamy Cię podpisać?" }),
       ).toBeVisible();
       await expect(anonymousPage.getByRole("searchbox")).toHaveCount(0);
@@ -913,7 +1432,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       expect(closedState.requestStatus).toBe("pending");
 
       await anonymousPage.goto(`/s/${fixture.publicToken}`);
-      await expect(anonymousPage.getByText("Sesja zakończona")).toBeVisible();
+      await expect(anonymousPage.getByRole("heading", { name: "Karaoke dobiegło końca" })).toBeVisible();
       await expect(anonymousPage.getByRole("button", { name: /Dodaj/ })).toHaveCount(0);
 
       await page.goto(queuePath);
@@ -953,7 +1472,15 @@ test.describe("public event and session identity with local Supabase Auth", () =
           .locator("strong:visible")
           .filter({ hasText: fixture.requestDisplayName }),
       ).toBeVisible();
-      expect(browserErrors).toEqual([]);
+      // A lease/beacon can race manual close. Validate that precise negative
+      // response; every unrelated HTTP, console or runtime error still fails.
+      for (const response of closedPresenceResponses) {
+        expect(await response.json()).toMatchObject({ error: { code: "SESSION_EVENT_CLOSED" } });
+      }
+      expect([...browserErrors].sort()).toEqual(closedPresenceResponses.flatMap(() => [
+        "HTTP 403 /api/s/[redacted]/presence",
+        "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      ]).sort());
     } finally {
       await Promise.allSettled([
         anonymousContext.close(),
@@ -966,16 +1493,19 @@ test.describe("public event and session identity with local Supabase Auth", () =
 function observeBrowserErrors(
   page: import("@playwright/test").Page,
   errors: string[],
+  expectedConflictPaths: ReadonlySet<string> = new Set(),
 ) {
   page.on("response", (response) => {
-    if (response.status() >= 400) {
+    if (response.status() >= 400 && !(response.status() === 409 && expectedConflictPaths.has(new URL(response.url()).pathname))) {
       errors.push(
         `HTTP ${response.status()} ${sanitizeBrowserUrl(response.url())}`,
       );
     }
   });
   page.on("console", (message) => {
-    if (message.type() === "error") {
+    const expectedResourceConflict = expectedConflictPaths.size > 0 &&
+      message.text() === "Failed to load resource: the server responded with a status of 409 (Conflict)";
+    if (message.type() === "error" && !expectedResourceConflict) {
       errors.push(message.text());
     }
   });
@@ -1026,11 +1556,16 @@ async function submitParticipantSong(
   await expect(page.getByRole("heading", { name: `„${title}”` })).toBeVisible();
   await page.getByRole("button", { name: new RegExp(title) }).click();
   await page.getByRole("button", { name: "Dodaj do kolejki" }).click();
+  const successToast = page.locator("[data-sonner-toast]").filter({ hasText: "Dodano zgłoszenie" });
+  await expect(successToast).toBeVisible();
+  await successToast.getByRole("button", { name: "Close toast" }).click();
+  await expect(successToast).toBeHidden();
   await openMyRequests(page);
   await expect(
     participantRequestsSection(page)
       .locator("[data-participant-request-id]")
-      .filter({ hasText: title }),
+      .filter({ hasText: title })
+      .filter({ hasText: "Oczekujące" }),
   ).toBeVisible();
 }
 
@@ -1103,6 +1638,7 @@ async function dragQueueRequest({
   page,
   sourceLane,
   requestName,
+  requestTitle,
   targetLane,
   targetRequestName,
   cancel = false,
@@ -1112,13 +1648,15 @@ async function dragQueueRequest({
   page: import("@playwright/test").Page;
   sourceLane: "pending" | "approved" | "rejected";
   requestName: string;
+  requestTitle?: string;
   targetLane: "pending" | "approved" | "rejected";
   targetRequestName?: string;
   cancel?: boolean;
   verifyGeometry?: boolean;
   verifyAutoScroll?: boolean;
 }) {
-  const source = queueRequest(page, sourceLane, requestName);
+  const namedSource = queueRequest(page, sourceLane, requestName);
+  const source = requestTitle ? namedSource.filter({ hasText: requestTitle }) : namedSource;
   const handle = source.getByRole("button", {
     name: new RegExp(`^Przeciągnij zgłoszenie: ${escapeRegExp(requestName)}`),
   });

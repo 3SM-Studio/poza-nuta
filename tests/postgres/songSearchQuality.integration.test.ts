@@ -72,7 +72,7 @@ const qualityCases = qualitySongs.flatMap((song) =>
 
 test("professional song search corpus ranks normal human queries prominently", async () => {
   assert.ok(qualityCases.length >= 100, `expected at least 100 quality cases, received ${qualityCases.length}`);
-  const harness = await startPostgresTestHarness("pozanuta-song-search", "postgres:15-alpine");
+  const harness = await startPostgresTestHarness("pozanuta-song-search", "postgres:17-alpine");
   const sql = createPostgresTestClient(harness, "postgres", 4);
 
   try {

@@ -10,6 +10,11 @@ Kod aplikacji znajduje się w `src/app`, `src/components`, `src/server`,
 
 Wymagany jest Node.js 24.x oraz pnpm.
 
+Jedyną wspieraną i testowaną wersją bazy jest PostgreSQL 17. Harnessy
+integracyjne używają `postgres:17-alpine`, a izolowany Supabase smoke
+sprawdza rzeczywistą wersję silnika przed migracjami. Historyczne raporty
+testów na starszych wersjach nie opisują obecnej macierzy wsparcia.
+
 ```bash
 pnpm install
 pnpm dev

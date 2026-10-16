@@ -13,7 +13,7 @@ import {
   type PostgresTestHarness,
 } from "./postgresTestHarness.ts";
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 
 for (const image of images) {
   test(`${image}: canonical session access backfill and constraints`, async () => {

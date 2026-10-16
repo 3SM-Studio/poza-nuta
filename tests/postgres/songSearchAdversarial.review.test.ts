@@ -18,7 +18,7 @@ import {
 vi.mock("server-only", () => ({}));
 
 test("adversarial search review", async () => {
-  const harness = await startPostgresTestHarness("pozanuta-search-review", "postgres:15-alpine");
+  const harness = await startPostgresTestHarness("pozanuta-search-review", "postgres:17-alpine");
   const sql = createPostgresTestClient(harness, "postgres", 4);
 
   try {

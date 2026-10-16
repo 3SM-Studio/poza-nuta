@@ -571,6 +571,8 @@ export const eventParticipants = pgTable(
       .references(() => participantIdentities.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
     normalizedDisplayName: text("normalized_display_name").notNull(),
+    mergedIntoId: bigint("merged_into_id", { mode: "number" }),
+    mergedAt: timestampColumn("merged_at"),
     joinedAt: timestampColumn("joined_at").notNull().defaultNow(),
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },
@@ -584,6 +586,9 @@ export const eventParticipants = pgTable(
       table.normalizedDisplayName,
     ),
     index("event_participants_participant_idx").on(table.participantId),
+    index("event_participants_merged_into_idx").on(table.mergedIntoId),
+    foreignKey({ name: "event_participants_merged_into_fk", columns: [table.mergedIntoId], foreignColumns: [table.id] }),
+    check("event_participants_merge_state_check", sql`(${table.mergedIntoId} is null and ${table.mergedAt} is null) or (${table.mergedIntoId} is not null and ${table.mergedIntoId} <> ${table.id} and ${table.mergedAt} is not null)`),
     check(
       "event_participants_display_name_check",
       sql`char_length(${table.displayName}) between 2 and 24
@@ -595,6 +600,93 @@ export const eventParticipants = pgTable(
     ),
   ],
 ).enableRLS();
+
+// Ephemeral tab leases. A disconnected ID is a tombstone and cannot be renewed.
+export const participantConnections = pgTable(
+  "participant_connections",
+  {
+    id: uuid("id").primaryKey(),
+    eventParticipantId: bigint("event_participant_id", { mode: "number" }).notNull(),
+    credentialId: bigint("credential_id", { mode: "number" }).notNull(),
+    createdAt: timestampColumn("created_at").notNull().defaultNow(),
+    heartbeatAt: timestampColumn("heartbeat_at").notNull().defaultNow(),
+    expiresAt: timestampColumn("expires_at").notNull(),
+    disconnectedAt: timestampColumn("disconnected_at"),
+  },
+  (table) => [
+    foreignKey({ name: "participant_connections_member_fk", columns: [table.eventParticipantId], foreignColumns: [eventParticipants.id] }).onDelete("cascade"),
+    foreignKey({ name: "participant_connections_credential_fk", columns: [table.credentialId], foreignColumns: [participantCredentials.id] }).onDelete("cascade"),
+    index("participant_connections_member_expiry_idx").on(table.eventParticipantId, table.expiresAt),
+    index("participant_connections_credential_created_idx").on(table.credentialId, table.createdAt),
+    index("participant_connections_expiry_idx").on(table.expiresAt),
+    check("participant_connections_time_check", sql`${table.expiresAt} >= ${table.heartbeatAt} and ${table.heartbeatAt} >= ${table.createdAt}`),
+  ],
+).enableRLS();
+
+export const participantDeviceLinks = pgTable("participant_device_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventSessionId: bigint("event_session_id", { mode: "number" }).notNull().references(() => eventSessions.id),
+  participantId: bigint("participant_id", { mode: "number" }).notNull(),
+  issuerCredentialId: bigint("issuer_credential_id", { mode: "number" }),
+  tokenHash: text("token_hash").notNull(),
+  challengeHash: text("challenge_hash"),
+  verificationHash: text("verification_hash"),
+  approvalAttempts: integer("approval_attempts").notNull().default(0),
+  approvedAt: timestampColumn("approved_at"),
+  consumedAt: timestampColumn("consumed_at"),
+  cancelledAt: timestampColumn("cancelled_at"),
+  issuedCredentialId: bigint("issued_credential_id", { mode: "number" }),
+  createdAt: timestampColumn("created_at").notNull().defaultNow(),
+  expiresAt: timestampColumn("expires_at").notNull(),
+}, table => [
+  foreignKey({ name: "participant_device_links_issued_credential_id_fk", columns: [table.issuedCredentialId], foreignColumns: [participantCredentials.id] }),
+
+  foreignKey({ name: "participant_device_links_issuer_credential_id_fk", columns: [table.issuerCredentialId], foreignColumns: [participantCredentials.id] }).onDelete("set null"),
+
+  foreignKey({ name: "participant_device_links_participant_id_fk", columns: [table.participantId], foreignColumns: [participantIdentities.id] }),
+
+  uniqueIndex("participant_device_links_token_idx").on(table.tokenHash),
+  uniqueIndex("participant_device_links_challenge_idx").on(table.challengeHash),
+  index("participant_device_links_issuer_created_idx").on(table.issuerCredentialId, table.createdAt),
+  index("participant_device_links_participant_created_idx").on(table.participantId, table.createdAt),
+  index("participant_device_links_expiry_idx").on(table.expiresAt),
+  check("participant_device_links_hash_check", sql`${table.tokenHash} ~ '^[a-f0-9]{64}$' and (${table.challengeHash} is null or ${table.challengeHash} ~ '^[a-f0-9]{64}$') and (${table.verificationHash} is null or ${table.verificationHash} ~ '^[a-f0-9]{64}$')`),
+  check("participant_device_links_state_check", sql`${table.expiresAt} > ${table.createdAt} and ${table.expiresAt} <= ${table.createdAt} + interval '5 minutes' and ${table.approvalAttempts} between 0 and 5 and (${table.challengeHash} is null) = (${table.verificationHash} is null) and (${table.approvedAt} is null or ${table.challengeHash} is not null) and (${table.consumedAt} is null or (${table.approvedAt} is not null and ${table.issuedCredentialId} is not null))`),
+]).enableRLS();
+
+export const participantMergeProposals = pgTable("participant_merge_proposals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventSessionId: bigint("event_session_id", { mode: "number" }).notNull(),
+  sourceId: bigint("source_id", { mode: "number" }).notNull().references(() => eventParticipants.id),
+  targetId: bigint("target_id", { mode: "number" }).notNull().references(() => eventParticipants.id),
+  sourceUpdatedAt: timestampColumn("source_updated_at").notNull(),
+  targetUpdatedAt: timestampColumn("target_updated_at").notNull(),
+  sourceConsentRequired: boolean("source_consent_required").notNull(),
+  sourceConsentCredentialId: bigint("source_consent_credential_id", { mode: "number" }),
+  targetConsentCredentialId: bigint("target_consent_credential_id", { mode: "number" }),
+  sourceConsentedAt: timestampColumn("source_consented_at"),
+  targetConsentedAt: timestampColumn("target_consented_at"),
+  createdByOperatorId: bigint("created_by_operator_id", { mode: "number" }),
+  completedByOperatorId: bigint("completed_by_operator_id", { mode: "number" }),
+  cancelledAt: timestampColumn("cancelled_at"),
+  completedAt: timestampColumn("completed_at"),
+  createdAt: timestampColumn("created_at").notNull().defaultNow(),
+  expiresAt: timestampColumn("expires_at").notNull(),
+}, table => [
+  foreignKey({ name: "participant_merge_proposals_session_fk", columns: [table.eventSessionId], foreignColumns: [eventSessions.id] }),
+  foreignKey({ name: "participant_merge_proposals_completed_by_operator_id_fk", columns: [table.completedByOperatorId], foreignColumns: [operatorUsers.id] }).onDelete("set null"),
+
+  foreignKey({ name: "participant_merge_proposals_created_by_operator_id_fk", columns: [table.createdByOperatorId], foreignColumns: [operatorUsers.id] }).onDelete("set null"),
+
+  foreignKey({ name: "participant_merge_proposals_target_consent_credential_id_fk", columns: [table.targetConsentCredentialId], foreignColumns: [participantCredentials.id] }),
+
+  foreignKey({ name: "participant_merge_proposals_source_consent_credential_id_fk", columns: [table.sourceConsentCredentialId], foreignColumns: [participantCredentials.id] }),
+
+  index("participant_merge_proposals_source_idx").on(table.sourceId, table.expiresAt),
+  index("participant_merge_proposals_target_idx").on(table.targetId, table.expiresAt),
+  index("participant_merge_proposals_event_idx").on(table.eventSessionId, table.createdAt),
+  check("participant_merge_proposals_state_check", sql`${table.sourceId} <> ${table.targetId} and ${table.expiresAt} > ${table.createdAt} and ${table.expiresAt} <= ${table.createdAt} + interval '5 minutes' and (${table.sourceConsentedAt} is null) = (${table.sourceConsentCredentialId} is null) and (${table.targetConsentedAt} is null) = (${table.targetConsentCredentialId} is null) and not (${table.cancelledAt} is not null and ${table.completedAt} is not null)`),
+]).enableRLS();
 
 export const workspaceMembers = pgTable(
   "workspace_members",

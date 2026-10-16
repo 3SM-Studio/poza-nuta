@@ -993,6 +993,7 @@ describe("session request feedback", () => {
             status: "pending",
             queuePosition: null,
             isNext: false,
+            canCancel: true,
             createdAt: "2026-07-18T18:00:00.000Z",
           },
         ],
@@ -1019,6 +1020,37 @@ describe("session request feedback", () => {
     });
   });
 
+  it("counts active statuses, synchronizes through Realtime, and reloads canonical capacity", async () => {
+    const makeRequest = (status: "pending" | "approved" | "now" | "done" | "skipped" | "rejected", index: number) => ({
+      id: `request-${index}`, title: `Song ${index}`, artist: "Artist", status,
+      queuePosition: null, isNext: false, canCancel: status === "pending", createdAt: "2026-07-18T18:00:00.000Z",
+    });
+    const history = [makeRequest("done", 1), makeRequest("rejected", 2), makeRequest("skipped", 3)];
+    getParticipantRequests.mockResolvedValue({ items: history });
+    const view = render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} participantDisplayName="Ala" />);
+    expect(await within(screen.getByRole("main")).findByText("Aktywne zgłoszenia: 0/2")).toBeVisible();
+    getParticipantRequests.mockResolvedValue({ items: [...history, makeRequest("now", 4)] });
+    await act(async () => { await realtime.onInvalidate?.("queue", new AbortController().signal); });
+    expect(within(screen.getByRole("main")).getByText("Aktywne zgłoszenia: 1/2")).toBeVisible();
+    getParticipantRequests.mockResolvedValue({ items: [...history, makeRequest("now", 4), makeRequest("approved", 5)] });
+    await act(async () => { await realtime.onInvalidate?.("queue", new AbortController().signal); });
+    expect(within(screen.getByRole("main")).getByText("Aktywne zgłoszenia: 2/2")).toBeVisible();
+    view.unmount();
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} participantDisplayName="Renamed Ala" />);
+    expect(await within(screen.getByRole("main")).findByText("Aktywne zgłoszenia: 2/2")).toBeVisible();
+  });
+
+  it("shows the server's limit rejection and refreshes stale capacity", async () => {
+    const { SessionClientError } = await import("@/components/public/session-api");
+    createRequest.mockRejectedValue(new SessionClientError(409, "SESSION_REQUEST_LIMIT_REACHED", "safe limit"));
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} participantDisplayName="Ala" />);
+    await completeRequestForm();
+    expect(await screen.findByText("Masz już 2 aktywne zgłoszenia")).toBeVisible();
+    expect(getParticipantRequests).toHaveBeenCalledTimes(2);
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it("shows a persistent duplicate alert without duplicating it in Sonner", async () => {
     const { SessionClientError } = await import(
       "@/components/public/session-api"
@@ -1040,6 +1072,16 @@ describe("session request feedback", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it("shows operator requests in the participant history without offering cancellation", async () => {
+    getParticipantRequests.mockResolvedValue({ items: [{
+      id: "operator-request", title: "Operator Song", artist: "Artist", status: "pending",
+      queuePosition: null, isNext: false, canCancel: false, createdAt: "2026-07-18T18:00:00.000Z",
+    }] });
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} participantDisplayName="Ala" />);
+    expect(await screen.findByText("Operator Song")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Anuluj" })).not.toBeInTheDocument();
+  });
+
   it("renames the participant and cancels only a pending owned request", async () => {
     const item = {
       id: "c09f9509-0677-45cc-98b2-b6f3892035de",
@@ -1048,6 +1090,7 @@ describe("session request feedback", () => {
       status: "pending" as const,
       queuePosition: null,
       isNext: false,
+      canCancel: true,
       createdAt: "2026-07-18T18:00:00.000Z",
     };
     getParticipantRequests.mockResolvedValue({ items: [item] });
@@ -1148,6 +1191,7 @@ describe("session request feedback", () => {
       status: "pending" as const,
       queuePosition: null,
       isNext: false,
+      canCancel: true,
       createdAt: "2026-07-18T18:00:00.000Z",
     };
     const second = {
@@ -1235,6 +1279,7 @@ describe("session request feedback", () => {
           status: "pending",
           queuePosition: null,
           isNext: false,
+          canCancel: true,
           createdAt: "2026-07-18T18:00:00.000Z",
         },
       ],
@@ -1302,6 +1347,7 @@ describe("session request feedback", () => {
       status: "pending" as const,
       queuePosition: null,
       isNext: false,
+      canCancel: true,
       createdAt: "2026-07-18T18:00:00.000Z",
     };
     getParticipantRequests.mockResolvedValue({ items: [item] });

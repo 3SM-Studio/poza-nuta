@@ -17,10 +17,10 @@ import {
   startPostgresTestHarness,
 } from "./postgresTestHarness.ts";
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 
 test(
-  "platform admin imports reads a bounded safe projection on PostgreSQL 15 and 17",
+  "platform admin imports reads a bounded safe projection on PostgreSQL 17",
   { timeout: 1_200_000 },
   async (context) => {
     for (const image of images) {
@@ -30,7 +30,7 @@ test(
 );
 
 async function verifyOnImage(image: (typeof images)[number]) {
-  const version = image.startsWith("postgres:15") ? "15" : "17";
+  const version = "17";
   const harness = await startPostgresTestHarness(
     `pozanuta-platform-admin-imports-pg${version}`,
     image,

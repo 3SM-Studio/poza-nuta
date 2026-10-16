@@ -13,6 +13,7 @@ import {
   normalizeParticipantNickname,
 } from "@/lib/participant-nickname";
 import { getSessionCapabilityState } from "@/lib/session-capabilities";
+import { countActiveParticipantRequests, PARTICIPANT_ACTIVE_REQUEST_LIMIT } from "@/lib/participant-request-policy";
 import type {
   PublicQueueResponse,
   PublicSong,
@@ -656,6 +657,9 @@ export function SessionRequestPage({
         return;
       }
       const alertKind = getSubmitAlertKind(caughtError);
+      if (caughtError instanceof SessionClientError && caughtError.code === "SESSION_REQUEST_LIMIT_REACHED") {
+        await loadParticipantRequests();
+      }
       if (alertKind) {
         setSubmitAlert(alertKind);
       } else {
@@ -720,6 +724,13 @@ export function SessionRequestPage({
           />
           <main className="session-scrollbar min-w-0 flex-1 pb-[calc(5.75rem+env(safe-area-inset-bottom))] xl:overflow-y-auto xl:overscroll-contain xl:pb-0" ref={mainScrollRef}>
             <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 xl:max-w-6xl">
+      {participantDisplayName ? (
+        <p aria-live="polite" className="mb-4 text-sm text-muted-foreground">
+          {participantRequests === null
+            ? "Wczytywanie limitu zgłoszeń…"
+            : `Aktywne zgłoszenia: ${countActiveParticipantRequests(participantRequests)}/${PARTICIPANT_ACTIVE_REQUEST_LIMIT}`}
+        </p>
+      ) : null}
       {capabilities.allSessionFeaturesDisabled ? (
         <section className="mb-7">
           <h2 className="mb-2 text-xl font-bold tracking-[-0.035em]">Sesja wydarzenia</h2>
@@ -819,6 +830,7 @@ export function SessionRequestPage({
       />
       {participantDisplayName ? (
         <ParticipantProfileDrawer
+          sessionToken={sessionToken}
           error={renameMessage}
           isOpen={isProfileOpen}
           isSaving={isRenaming}
@@ -865,6 +877,8 @@ function getSubmitAlertKind(
   error: unknown,
 ): SessionStateAlertKind | null {
   if (!(error instanceof SessionClientError)) return null;
+
+  if (error.code === "SESSION_REQUEST_LIMIT_REACHED") return "request_limit";
 
   if (error.status === 429 || error.code === "SESSION_RATE_LIMITED") {
     return "rate_limited";

@@ -36,6 +36,7 @@ export type ParticipantRequest = {
   status: ParticipantRequestStatus;
   queuePosition: number | null;
   isNext: boolean;
+  canCancel: boolean;
   createdAt: string;
 };
 
@@ -212,6 +213,10 @@ export function getSessionQueue(publicToken: string, signal?: AbortSignal) {
     `/api/s/${encodeURIComponent(publicToken)}/queue`,
     { signal },
   );
+}
+
+export function sessionIdentityApi<T>(publicToken: string, operation: "linking" | "merges", body?: Record<string, unknown>) {
+  return requestJson<T>(`/api/s/${encodeURIComponent(publicToken)}/identity/${operation}`, body ? { method: "POST", body: JSON.stringify(body) } : {});
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {

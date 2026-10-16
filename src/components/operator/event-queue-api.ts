@@ -51,6 +51,7 @@ export type DashboardEventQueueResponse = {
 };
 
 export type DashboardEventQueueActionResponse = {
+  items: DashboardEventQueueItemDto[];
   event: {
     id: number;
     name: string;
@@ -73,6 +74,23 @@ type ApiErrorBody = {
     message?: string;
   };
 };
+
+export type FairQueuePreview = {
+  revision: string;
+  changes: { id: number; from: number; to: number; displayName: string; songTitle: string }[];
+};
+
+export function previewDashboardFairQueue(organizationId: string, eventId: string, signal?: AbortSignal) {
+  return requestJson<FairQueuePreview>(`${getDashboardEventQueueApiPath(organizationId, eventId)}/fair`, {
+    method: "POST", body: JSON.stringify({ action: "preview" }), signal,
+  });
+}
+
+export function applyDashboardFairQueue(organizationId: string, eventId: string, revision: string, signal?: AbortSignal) {
+  return requestJson<{ changed: number; items: DashboardEventQueueItemDto[] }>(`${getDashboardEventQueueApiPath(organizationId, eventId)}/fair`, {
+    method: "POST", body: JSON.stringify({ action: "apply", revision }), signal,
+  });
+}
 
 export function getDashboardEventQueue(
   organizationId: string,

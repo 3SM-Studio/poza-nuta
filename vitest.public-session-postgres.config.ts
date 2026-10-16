@@ -15,6 +15,7 @@ export default defineConfig({
       "tests/postgres/participantIdentity.integration.test.ts",
       "tests/postgres/participantSongDiscovery.integration.test.ts",
       "tests/postgres/catalogCollections.integration.test.ts",
+      "tests/postgres/postgresDriverFault.integration.test.ts",
     ],
     testTimeout: 180_000,
     hookTimeout: 180_000,

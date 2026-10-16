@@ -52,6 +52,8 @@ export type LocalSupabaseFixture = {
     }[]
   >;
   resetQueue(): Promise<void>;
+  readParticipantPresence(displayName: string): Promise<{ memberId: number; liveConnections: number; connections: number }>;
+  readParticipantCredentialCount(displayName: string): Promise<number>;
   cleanup(): Promise<void>;
 };
 
@@ -477,6 +479,29 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       }));
     }
 
+    async function readParticipantPresence(displayName: string) {
+      const [row] = await sql<{ member_id: number; live: number; total: number }[]>`
+        select ep.id::integer as member_id, count(c.id)::integer as total,
+          count(c.id) filter (where c.disconnected_at is null and c.expires_at > clock_timestamp()
+            and pc.revoked_at is null and pc.expires_at > clock_timestamp())::integer as live
+        from public.event_participants ep join public.event_sessions es on es.id = ep.event_session_id
+        join public.events e on e.id = es.event_id
+        left join public.participant_connections c on c.event_participant_id = ep.id
+        left join public.participant_credentials pc on pc.id = c.credential_id
+        where e.public_id = ${eventPublicId}::uuid and ep.display_name = ${displayName} group by ep.id`;
+      if (!row) throw new Error("Presence fixture participant missing.");
+      return { memberId: row.member_id, liveConnections: row.live, connections: row.total };
+    }
+
+    async function readParticipantCredentialCount(displayName: string) {
+      const [row] = await sql`select count(pc.id)::integer as count from public.participant_credentials pc
+        join public.event_participants own on own.participant_id = pc.participant_id
+        join public.event_participants target on target.id = coalesce(own.merged_into_id, own.id)
+        join public.event_sessions es on es.id = target.event_session_id join public.events e on e.id = es.event_id
+        where e.public_id = ${eventPublicId}::uuid and target.display_name = ${displayName}`;
+      return Number(row.count);
+    }
+
     async function readParticipantRequests(displayName: string) {
       const rows = await sql<
         {
@@ -567,6 +592,12 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
 
     async function cleanup() {
       try {
+        // Only this isolated fixture's event. Linking rows intentionally retain
+        // identity/history references and must be removed before its teardown.
+        await sql`delete from public.participant_device_links where event_session_id in
+          (select es.id from public.event_sessions es join public.events e on e.id = es.event_id where e.public_id = ${eventPublicId}::uuid)`;
+        await sql`delete from public.participant_merge_proposals where event_session_id in
+          (select es.id from public.event_sessions es join public.events e on e.id = es.event_id where e.public_id = ${eventPublicId}::uuid)`;
         if (operatorId !== null) {
           await sql`
             DELETE FROM public.operator_audit_log
@@ -626,6 +657,8 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       readQueueStatuses,
       readQueueRows,
       readParticipantRequests,
+      readParticipantPresence,
+      readParticipantCredentialCount,
       resetQueue,
       cleanup,
     };
@@ -649,6 +682,6 @@ function requireEnvironment(name: string) {
 }
 
 function createSessionCode() {
-  const value = randomBytes(4).readUInt32BE(0) % 100_000_000;
-  return value.toString().padStart(8, "0");
+  const value = randomBytes(4).readUInt32BE(0) % 1_000_000;
+  return value.toString().padStart(6, "0");
 }

@@ -48,6 +48,8 @@ import { getDb } from "../db";
 import { traceDbOperation, traceDbTransaction, traceForUpdateSelect } from "../db-telemetry";
 import { setLocalDatabaseTimeouts } from "../database-transaction-timeouts";
 import { PublicApiError } from "../public-api/errors";
+import { requireParticipantRequestCapacity } from "../participant-request-limit";
+import { findCredentialMembership, findCanonicalMember } from "./participant-membership";
 import {
   ACTIVE_PUBLIC_REQUEST_STATUSES,
   PUBLIC_QUEUE_VISIBLE_STATUSES,
@@ -132,6 +134,7 @@ export type PublicParticipantRequest = {
   status: (typeof songRequests.status.enumValues)[number];
   queuePosition: number | null;
   isNext: boolean;
+  canCancel: boolean;
   createdAt: Date;
 };
 
@@ -875,25 +878,7 @@ async function getPublicSessionParticipantForSession(
   if (!tokenHash) return null;
 
   const now = new Date();
-  const [membership] = await getDb()
-    .select({
-      displayName: eventParticipants.displayName,
-      credentialId: participantCredentials.id,
-    })
-    .from(participantCredentials)
-    .innerJoin(
-      eventParticipants,
-      eq(eventParticipants.participantId, participantCredentials.participantId),
-    )
-    .where(
-      and(
-        eq(participantCredentials.tokenHash, tokenHash),
-        gt(participantCredentials.expiresAt, now),
-        isNull(participantCredentials.revokedAt),
-        eq(eventParticipants.eventSessionId, session.sessionId),
-      ),
-    )
-    .limit(1);
+  const membership = await findCredentialMembership(getDb(), session.sessionId, credential);
 
   if (!membership) return null;
 
@@ -922,6 +907,7 @@ export async function getPublicParticipantRequests(
       artist: songs.artist,
       status: songRequests.status,
       position: songRequests.position,
+      requestedBy: songRequests.requestedBy,
       createdAt: songRequests.createdAt,
     })
     .from(songRequests)
@@ -941,6 +927,7 @@ export async function getPublicParticipantRequests(
     status: row.status,
     queuePosition: row.status === "approved" ? row.position : null,
     isNext: row.status === "approved" && row.position === 1,
+    canCancel: row.status === "pending" && row.requestedBy === "public",
     createdAt: row.createdAt,
   }));
 }
@@ -973,7 +960,7 @@ export async function renamePublicSessionParticipant(
         .set({
           displayName: input.displayName,
           normalizedDisplayName: input.normalizedDisplayName,
-          updatedAt: new Date(),
+          updatedAt: sql`greatest(clock_timestamp(), ${eventParticipants.updatedAt} + interval '1 millisecond')`,
         })
         .where(eq(eventParticipants.id, membership.id))
         .returning({ displayName: eventParticipants.displayName });
@@ -1387,6 +1374,13 @@ export async function createPublicSessionRequest(
       );
     }
 
+    await requireParticipantRequestCapacity(
+      transaction,
+      session.event.id,
+      currentMembership.id,
+      PublicApiError,
+    );
+
     const [queueState] = await traceDbOperation("public_session.requests", "queue.position.read", () => transaction
       .select({ maxPosition: max(songRequests.position) })
       .from(songRequests)
@@ -1413,29 +1407,8 @@ export async function createPublicSessionRequest(
   }));
 }
 
-async function requireParticipantMembership(
-  sessionId: number,
-  credential: string | null | undefined,
-) {
-  const tokenHash = credential ? hashParticipantCredential(credential) : null;
-  if (!tokenHash) throw participantRequiredError();
-  const now = new Date();
-  const [membership] = await getDb()
-    .select({ id: eventParticipants.id, credentialId: participantCredentials.id })
-    .from(participantCredentials)
-    .innerJoin(
-      eventParticipants,
-      eq(eventParticipants.participantId, participantCredentials.participantId),
-    )
-    .where(
-      and(
-        eq(participantCredentials.tokenHash, tokenHash),
-        gt(participantCredentials.expiresAt, now),
-        isNull(participantCredentials.revokedAt),
-        eq(eventParticipants.eventSessionId, sessionId),
-      ),
-    )
-    .limit(1);
+async function requireParticipantMembership(sessionId: number, credential: string | null | undefined) {
+  const membership = await findCredentialMembership(getDb(), sessionId, credential);
   if (!membership) throw participantRequiredError();
   return membership;
 }
@@ -1469,7 +1442,9 @@ async function requireParticipantMembershipInTransaction(
     .update(participantCredentials)
     .set({ lastUsedAt: now })
     .where(eq(participantCredentials.id, membership.credentialId));
-  return membership;
+  const current = await findCredentialMembership(transaction, sessionId, credential);
+  if (!current) throw participantRequiredError();
+  return current;
 }
 
 async function requireCurrentParticipantMembershipInTransaction(
@@ -1477,20 +1452,7 @@ async function requireCurrentParticipantMembershipInTransaction(
   sessionId: number,
   membershipId: number,
 ) {
-  const [membership] = await transaction
-    .select({
-      id: eventParticipants.id,
-      displayName: eventParticipants.displayName,
-    })
-    .from(eventParticipants)
-    .where(
-      and(
-        eq(eventParticipants.id, membershipId),
-        eq(eventParticipants.eventSessionId, sessionId),
-      ),
-    )
-    .for("share")
-    .limit(1);
+  const membership = await findCanonicalMember(transaction, sessionId, membershipId, true);
   if (!membership) throw participantRequiredError();
   return membership;
 }
@@ -1523,6 +1485,12 @@ function isNicknameUniqueViolation(error: unknown) {
         : null;
   }
   return false;
+}
+
+// Presence shares the participant lifecycle gate, never the session queue mutex.
+export async function requirePresenceSessionInTransaction(transaction: DatabaseTransaction, publicToken: string) {
+  const row = requireLiveSessionRow(await findSessionEventInTransaction(transaction, { kind: "token", value: publicToken }));
+  return requireCurrentSessionLifecycleInTransaction(transaction, row, "participation");
 }
 
 async function requireLiveSession(lookup: SessionLookup) {

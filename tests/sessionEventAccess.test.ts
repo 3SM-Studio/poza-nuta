@@ -296,8 +296,14 @@ test("participant request duplicate protection is serialized by the session queu
   );
   assert.match(
     source,
-    /async function requireCurrentParticipantMembershipInTransaction[\s\S]*\.from\(eventParticipants\)[\s\S]*eq\(eventParticipants\.id, membershipId\)[\s\S]*\.for\("share"\)/,
+    /async function requireCurrentParticipantMembershipInTransaction[\s\S]*findCanonicalMember\(transaction, sessionId, membershipId, true\)/,
   );
+  const membershipSource = readFileSync("src/server/session-api/participant-membership.ts", "utf8");
+  assert.match(membershipSource, /eq\(eventParticipants\.id, memberId\)/);
+  assert.match(membershipSource, /eq\(eventParticipants\.eventSessionId, sessionId\)/);
+  assert.match(membershipSource, /eq\(canonical\.eventSessionId, eventParticipants\.eventSessionId\)/);
+  assert.match(membershipSource, /isNull\(canonical\.mergedIntoId\)/);
+  assert.match(membershipSource, /\.for\("share", \{ of: canonical \}\)/);
   assert.match(createRequest, /singerName: currentMembership\.displayName/);
   assert.match(createRequest, /displayName: currentMembership\.displayName/);
 });

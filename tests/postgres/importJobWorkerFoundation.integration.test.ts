@@ -36,13 +36,13 @@ import {
 type PgFailure = Error & { code?: string; constraint_name?: string };
 type Database = ReturnType<typeof databaseFor>;
 
-const images = ["postgres:15-alpine", "postgres:17-alpine"] as const;
+const images = ["postgres:17-alpine"] as const;
 const firstToken = "00000000-0000-4000-8000-000000000101";
 const secondToken = "00000000-0000-4000-8000-000000000102";
 const thirdToken = "00000000-0000-4000-8000-000000000103";
 
 test(
-  "0019 provides durable import worker services on PostgreSQL 15 and 17",
+  "0019 provides durable import worker services on PostgreSQL 17",
   { timeout: 1_200_000 },
   async (context) => {
     for (const image of images) {
@@ -52,7 +52,7 @@ test(
 );
 
 async function verifyOnImage(image: (typeof images)[number]) {
-  const version = image.startsWith("postgres:15") ? "15" : "17";
+  const version = "17";
   const harness = await startPostgresTestHarness(
     `pozanuta-import-worker-pg${version}`,
     image,

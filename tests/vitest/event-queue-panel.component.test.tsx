@@ -34,6 +34,8 @@ const {
   pointerWithin,
   realtime,
   runAction,
+  fairPreview,
+  fairApply,
   sortableKeyboardCoordinates,
   toastInfo,
   toastSuccess,
@@ -59,6 +61,8 @@ const {
       status: "live" as QueueRealtimeConnectionStatus,
     },
     runAction: vi.fn(),
+    fairPreview: vi.fn(),
+    fairApply: vi.fn(),
     sortableKeyboardCoordinates: vi.fn(),
     toastInfo: vi.fn(),
     toastSuccess: vi.fn(),
@@ -131,6 +135,8 @@ vi.mock("@/components/operator/event-queue-api", () => ({
   getDashboardEventQueue: getQueue,
   moveDashboardEventQueueRequest: moveRequest,
   runDashboardEventQueueAction: runAction,
+  previewDashboardFairQueue: fairPreview,
+  applyDashboardFairQueue: fairApply,
 }));
 
 vi.mock("@/components/operator/use-dashboard-queue-realtime", () => ({
@@ -169,6 +175,7 @@ describe("EventQueuePanel", () => {
     realtime.invalidate = null;
     realtime.status = "live";
     runAction.mockReset();
+    fairPreview.mockReset(); fairApply.mockReset();
     sortableKeyboardCoordinates.mockReset();
     toastInfo.mockReset();
     toastSuccess.mockReset();
@@ -185,6 +192,38 @@ describe("EventQueuePanel", () => {
       screen.queryByRole("button", { name: /^Zaakceptuj:/ }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: /^Odrzuć:/ })).toBeNull();
+  });
+
+  it("uses the entire canonical approval response when Fair Insert shifts other rows", async () => {
+    const pending = makeItem(1, "pending"), existing = { ...makeItem(2, "approved"), position: 1 };
+    const accepted = { ...pending, status: "approved" as const, position: 1, version: 2 };
+    const shifted = { ...existing, position: 2, version: 2 };
+    getQueue.mockResolvedValue({ items: [accepted, shifted] });
+    runAction.mockResolvedValue({ request: accepted, items: [accepted, shifted] });
+    renderPanel([pending, existing]);
+    fireEvent.click(screen.getByRole("button", { name: /^Zaakceptuj:/ }));
+    await waitFor(() => expect(document.querySelectorAll('[data-queue-lane="approved"] [data-queue-request-id] strong')[0]).toHaveTextContent("Singer 1"));
+    expect(document.querySelectorAll('[data-queue-lane="approved"] [data-queue-request-id] strong')[1]).toHaveTextContent("Singer 2");
+  });
+
+  it("prevents a delayed refresh from overwriting an applied fair-sort snapshot", async () => {
+    const first = { ...makeItem(1, "approved"), position: 1 }, second = { ...makeItem(2, "approved"), position: 2 };
+    let release!: (result: { items: DashboardEventQueueItemDto[] }) => void;
+    getQueue.mockReturnValueOnce(new Promise(resolve => { release = resolve; }));
+    const canonical = [{ ...second, position: 1, version: 2 }, { ...first, position: 2, version: 2 }];
+    getQueue.mockResolvedValue({ items: canonical });
+    fairPreview.mockResolvedValue({ revision: "a".repeat(64), changes: [
+      { id: 2, from: 2, to: 1, displayName: "Singer 2", songTitle: "Song 2" },
+      { id: 1, from: 1, to: 2, displayName: "Singer 1", songTitle: "Song 1" },
+    ] });
+    fairApply.mockResolvedValue({ changed: 2, items: canonical });
+    renderPanel([first, second]);
+    await act(async () => { void realtime.invalidate?.("queue", new AbortController().signal); });
+    fireEvent.click(screen.getByRole("button", { name: "Ułóż sprawiedliwie" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Zastosuj kolejność" }));
+    await waitFor(() => expect(fairApply).toHaveBeenCalledOnce());
+    await act(async () => release({ items: [first, second] }));
+    await waitFor(() => expect(document.querySelectorAll('[data-queue-lane="approved"] [data-queue-request-id] strong')[0]).toHaveTextContent("Singer 2"));
   });
 
   it("keeps manual refresh available in read-only lifecycle", async () => {
@@ -800,6 +839,22 @@ describe("EventQueuePanel", () => {
       "Zgłoszenie zostało w międzyczasie zmienione",
     );
     finishCanonicalRefresh({ items: [pending] });
+  });
+
+  it("rolls back restore and refreshes canonical state after a participant limit rejection", async () => {
+    const skipped = makeItem(1, "skipped");
+    runAction.mockRejectedValue(new OperatorClientError(409, "SESSION_REQUEST_LIMIT_REACHED", "Safe limit"));
+    getQueue.mockResolvedValue({ items: [skipped] });
+    renderPanel([skipped]);
+    fireEvent.click(screen.getByRole("button", { name: "Przywróć: Singer 1 — Song 1" }));
+    await waitFor(() => expect(getQueue).toHaveBeenCalled());
+    await waitFor(() => expect(getItemStatus(1)).toBe("skipped"));
+    expect(screen.getByRole("alert")).toHaveTextContent("Ta osoba ma już 2 aktywne zgłoszenia");
+    await act(async () => {
+      await realtime.invalidate?.("queue", new AbortController().signal);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("Ta osoba ma już 2 aktywne zgłoszenia");
+    expect(toastSuccess).not.toHaveBeenCalledWith("Kolejka zaktualizowana");
   });
 
   it("refreshes the canonical queue after an active duplicate blocks restore", async () => {

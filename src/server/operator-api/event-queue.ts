@@ -26,6 +26,9 @@ import { getEffectiveEventLifecycleStatus } from "../../lib/effective-event-life
 import { getDb } from "../db";
 import { startForUpdateSelect, traceDbOperation, traceDbTransaction, traceForUpdateSelect } from "../db-telemetry";
 import { setLocalDatabaseTimeouts } from "../database-transaction-timeouts";
+import { requireParticipantRequestCapacity } from "../participant-request-limit";
+import { insertFairQueue } from "../fair-queue";
+import { anchorLegacyApprovedRequests, loadFairQueueSnapshot, writeApprovedOrder } from "./fair-queue-store";
 import {
   ACTIVE_PUBLIC_REQUEST_STATUSES,
   isActivePublicRequestStatus,
@@ -171,7 +174,6 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     const targetStatus = getDashboardEventQueueTargetStatus(input.action);
 
     if (
-      queueRequest.requestedBy === "public" &&
       queueRequest.eventParticipantId !== null &&
       isActivePublicRequestStatus(targetStatus)
     ) {
@@ -196,6 +198,19 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
           "This participant already has an active request for the selected song.",
         );
       }
+    }
+
+    if (
+      queueRequest.eventParticipantId !== null &&
+      !isActivePublicRequestStatus(queueRequest.status) &&
+      isActivePublicRequestStatus(targetStatus)
+    ) {
+      await requireParticipantRequestCapacity(
+        transaction,
+        context.event.id,
+        queueRequest.eventParticipantId,
+        OperatorApiError,
+      );
     }
 
     const changedAt = new Date();
@@ -255,10 +270,12 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       );
     }
 
-    if (
-      queueRequest.status === "approved" ||
-      targetStatus === "approved"
-    ) {
+    if (targetStatus === "approved") {
+      const snapshot = await loadFairQueueSnapshot(transaction, context.event.id, { id: queueRequest.id, at: changedAt });
+      await writeApprovedOrder(transaction, context.event.id, snapshot.requests,
+        insertFairQueue(snapshot.requests, queueRequest.id), changedAt, queueRequest.id);
+      await anchorLegacyApprovedRequests(transaction, context.event.id, snapshot.requests, changedAt, context.organization.operatorId);
+    } else if (queueRequest.status === "approved") {
       await traceDbOperation("operator.queue.action", "operator.queue.renumber", () => renumberApprovedQueue(
         transaction,
         context.event.id,
@@ -278,6 +295,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       eventId: context.event.id,
       action: `event_queue_${input.action}`,
       entityId: String(queueRequest.id),
+      createdAt: changedAt,
       payload: {
         previousStatus: queueRequest.status,
         nextStatus: targetStatus,
@@ -294,6 +312,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     return {
       event: context.event,
       request: updatedRequest,
+      items: await loadDashboardEventQueueItems(transaction, context.event.id),
     };
   }));
 }
@@ -498,7 +517,7 @@ async function completeCurrentEventQueueRequests(
   return currentRequests.length;
 }
 
-async function requireEventQueueManagerContext(
+export async function requireEventQueueManagerContext(
   transaction: DatabaseTransaction,
   authUserId: string,
   organizationId: string,
@@ -782,6 +801,13 @@ function toDashboardEventQueueItem(row: DashboardEventQueueItemRow) {
       durationSeconds: row.durationSeconds,
     },
   };
+}
+
+export async function loadDashboardEventQueueItems(transaction: DatabaseTransaction, eventId: number) {
+  const rows = await transaction.select(dashboardEventQueueItemSelection).from(songRequests)
+    .innerJoin(songs, eq(songs.id, songRequests.songId)).where(eq(songRequests.eventId, eventId))
+    .orderBy(asc(songRequests.id));
+  return rows.map(toDashboardEventQueueItem).sort(compareDashboardEventQueueItems);
 }
 
 function compareDashboardEventQueueItems(
