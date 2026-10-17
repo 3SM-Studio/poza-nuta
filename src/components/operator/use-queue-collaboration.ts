@@ -4,6 +4,7 @@ import { getQueueDevice } from './queue-device';
 import { QueueCollaboration, type QueueCollaborationState } from '@/lib/queue-collaboration';
 import { getQueueSync, sendQueueOperation, type DashboardEventQueueItemDto } from './event-queue-api';
 import { loadQueueOutbox, persistQueueOutbox } from './queue-outbox';
+import { realtimeDiagnostic } from '@/lib/realtime-diagnostics';
 
 // Responsive layouts may mount the same route more than once. They must share
 // a single outbox writer/transport for this tab, never overwrite each other's log.
@@ -22,7 +23,11 @@ export function useQueueCollaboration(organizationId:string,eventId:string,initi
     let shared=controllers.get(controllerKey);
     if(!shared){const client=new QueueCollaboration(sourceItems.current,{
       deviceId,online:()=>navigator.onLine,
-      snapshot:(ids,signal)=>getQueueSync(organizationId,eventId,deviceId,ids,signal),
+      snapshot:async(ids,signal)=>{
+        const snapshot=await getQueueSync(organizationId,eventId,deviceId,ids,signal);
+        realtimeDiagnostic('snapshot_ok');
+        return snapshot;
+      },
       send:(op,signal)=>sendQueueOperation(organizationId,eventId,op,signal),
       load:actor=>loadQueueOutbox(`${actor}:${organizationId}:${eventId}:${deviceId}`),
       persist:(actor,entries)=>persistQueueOutbox(`${actor}:${organizationId}:${eventId}:${deviceId}`,entries),
@@ -32,10 +37,10 @@ export function useQueueCollaboration(organizationId:string,eventId:string,initi
     const unsubscribe=c.subscribe(()=>setState(c.getSnapshot()));
     // Initial source items are only a loading view. Mutations wait for an authorised actor/snapshot.
     queueMicrotask(()=>{if(mounted){setClient(c);setDeviceId(deviceId);setState(c.getSnapshot());}});
-    const online=()=>c.reconnect(), focus=()=>{void c.refresh();};
+    const online=()=>c.reconnect();
     const unload=(event:BeforeUnloadEvent)=>{if(c.getSnapshot().entries.length){event.preventDefault();}};
-    window.addEventListener('online',online);window.addEventListener('offline',online);window.addEventListener('focus',focus);window.addEventListener('beforeunload',unload);
-    release=()=>{unsubscribe();if(--shared.references===0){c.stop();controllers.delete(controllerKey);}window.removeEventListener('online',online);window.removeEventListener('offline',online);window.removeEventListener('focus',focus);window.removeEventListener('beforeunload',unload);};
+    window.addEventListener('online',online);window.addEventListener('offline',online);window.addEventListener('beforeunload',unload);
+    release=()=>{unsubscribe();if(--shared.references===0){c.stop();controllers.delete(controllerKey);}window.removeEventListener('online',online);window.removeEventListener('offline',online);window.removeEventListener('beforeunload',unload);};
     }).catch(()=>{if(mounted)setState(previous=>({...previous,error:'Nie można bezpiecznie otworzyć lokalnego magazynu kolejki. Użyj przeglądarki z obsługą Web Locks i IndexedDB.',ready:false}));});
     return()=>{mounted=false;release?.();};
     // Server revalidation must not discard an active device's pending intent log.

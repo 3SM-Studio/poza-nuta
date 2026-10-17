@@ -14,6 +14,7 @@ export function isDashboardParticipantsChangedPayload(payload: unknown, eventId:
 
 export type QueueRealtimeConnectionStatus =
   | "connecting"
+  | "recovering"
   | "live"
   | "unavailable";
 

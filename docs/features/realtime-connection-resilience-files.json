@@ -1,0 +1,52 @@
+{
+  "base": "9c5d86d9c4cfc00d4f931906af54e2f78aa6f0e3",
+  "foundation": "721a1dd35caec0666d099024a344628c6e075c1c",
+  "files": [
+    "docs/features/realtime-connection-resilience-files.json",
+    "docs/features/realtime-connection-resilience.md",
+    "playwright.local-supabase.config.ts",
+    "public/realtime-heartbeat-worker.js",
+    "src/components/operator/event-queue-panel.tsx",
+    "src/components/operator/use-queue-collaboration.ts",
+    "src/components/realtime/use-queue-realtime.ts",
+    "src/i18n/messages/en.json",
+    "src/i18n/messages/pl.json",
+    "src/i18n/messages/uk.json",
+    "src/i18n/source-index.json",
+    "src/lib/queue-realtime.ts",
+    "src/lib/realtime-diagnostics.ts",
+    "src/lib/realtime-transport.ts",
+    "tests/dashboardOrganizationRouting.test.ts",
+    "tests/e2e/public-event-session-identity.local.spec.ts",
+    "tests/e2e/queue-collaboration.local.spec.ts",
+    "tests/e2e/realtime-resilience.local.spec.ts",
+    "tests/e2e/run-local-supabase-smoke.ts",
+    "tests/vitest/event-queue-panel.component.test.tsx",
+    "tests/vitest/use-queue-realtime.test.tsx"
+  ],
+  "runtimeAndTestSha256": {
+    "playwright.local-supabase.config.ts": "0800eecc4cc0daa6c90868391c9abb3aad2f5ef0b13803f257b3e3abd21a6535",
+    "public/realtime-heartbeat-worker.js": "49852c3d9664fa0b6d4f3f9a94b7b00433c5eec295f51eb8c507f47f8fc4afeb",
+    "src/components/operator/event-queue-panel.tsx": "8965a8d2423e56859bbf68ca0ab18c8b22b284c0dd76759274f3067fdc4bfeb5",
+    "src/components/operator/use-queue-collaboration.ts": "38cf57a0b3120e70909102d0ad0fe5cb3c994156c9126a1a2c51edf61d752dd8",
+    "src/components/realtime/use-queue-realtime.ts": "c4cfe0f6064f6fee79292ed43ab9bb80ea078381697606e107a73f3bfff6a6dd",
+    "src/i18n/messages/en.json": "1645f9dbc46bb532ee6a20caa6ea61715009a55d7c2f572f8a4776c492d0e440",
+    "src/i18n/messages/pl.json": "abd5eb21cdf9fc35750a91383365207dd1cd49de8a2ed25a816bf3c2a40f7d37",
+    "src/i18n/messages/uk.json": "f51daa2b3fc4725ccd351c99e2254811903094c90d6887b6d1105541d760fafc",
+    "src/i18n/source-index.json": "7c00b3cf5544c868c72e9c1d7a1ca3f9f9e00fb043808b9abf0391f283ee22c6",
+    "src/lib/queue-realtime.ts": "f6f8c3dc4e2a42dbf8eeeef2d36b307983aa8695b28d3ce2e3187e945511aae8",
+    "src/lib/realtime-diagnostics.ts": "b617fd4c0ecfcefef054d130569b95ab4af1f11479d48e7b310a5d1cd4d9feea",
+    "src/lib/realtime-transport.ts": "5f066498d144bfc706f2bbd53c65ad0e7da6c2525876936e82f14a2b4a574f5c",
+    "tests/dashboardOrganizationRouting.test.ts": "c7cddac02ad0aad089cd1b5e38a3120fb283f9475eadc585f3054331ebb031d8",
+    "tests/e2e/public-event-session-identity.local.spec.ts": "42c849495c89eeef539da00d7b77c740a8f6704c2f6802d070286e9210414fc7",
+    "tests/e2e/queue-collaboration.local.spec.ts": "12497a0f1fcbdf1b9a832e059e9a61a2984742d78cbb2d8f091410b5aa84cd00",
+    "tests/e2e/realtime-resilience.local.spec.ts": "2ed59cc6e83bb1a8a7ff2b54732d288ab70d66ffcc71be2642d71a8f8a6f880f",
+    "tests/e2e/run-local-supabase-smoke.ts": "1a142ddf32e3abb69d8e7937e402ede08d4956d59f3dc5095c83cd44cec6c1b1",
+    "tests/vitest/event-queue-panel.component.test.tsx": "6b829fb986570ec8436383f4550f68e9beaf50809d8859691150f4b8ab5cf5fd",
+    "tests/vitest/use-queue-realtime.test.tsx": "47c92ea37cd7bd66c5d9ff7e99d13825d02a5ffb85e86d6c22ac8cf11db0ec09"
+  },
+  "protectedOriginalFiles": {
+    ".codex/config.toml": "b3129521d573035ce05bc8ae85086fe3f3a25093fc26e69d9c72b440f4c4291b",
+    "docs/features/kunestu-production-readiness.md": "49e74b1ed9ca42b0d3fb578fb19f2a3348393a35558fe8e31bca3393ff728b62"
+  }
+}

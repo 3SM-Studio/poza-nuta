@@ -108,8 +108,12 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
   const currentItem=items.find(x=>x.status==='now')??null;
   const approvedItems=items.filter(x=>x.status==='approved').sort((a,b)=>a.position-b.position||a.id-b.id);
   const closedItems=items.filter(x=>x.status==='done'||x.status==='skipped');
-  const refreshFromRealtime=useCallback(async()=>{await client?.refresh();},[client]);
-  const liveStatus=useDashboardQueueRealtime(realtimeEventId,refreshFromRealtime,client?.getRevision);
+  const refreshFromRealtime=useCallback(async()=>{
+    if (!client) return;
+    if (!client.getSnapshot().ready) await client.start(); else await client.refresh();
+    if (client.getSnapshot().error) throw new Error('Queue snapshot unavailable');
+  },[client]);
+  const liveStatus=useDashboardQueueRealtime(client ? realtimeEventId : null,refreshFromRealtime,client?.getRevision);
   const scheduleQueueRequestFocus=useCallback((id:number)=>requestAnimationFrame(()=>{
     queuePanelRef.current?.querySelector<HTMLElement>(`[data-queue-request-id="${id}"]`)?.focus({preventScroll:true});
   }),[]);
@@ -172,6 +176,7 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
           <Badge
             variant={liveStatus === "live" ? "default" : "secondary"}
             data-realtime-status={liveStatus}
+            role="status"
           >
             {liveStatus === "live" ? (
               <CircleDot aria-hidden="true" data-icon="inline-start" />
@@ -647,6 +652,8 @@ function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
       return "Aktualizacje na żywo";
     case "unavailable":
       return "Aktualizacje niedostępne";
+    case "recovering":
+      return "Ponowne łączenie…";
     default:
       return "Łączenie…";
   }

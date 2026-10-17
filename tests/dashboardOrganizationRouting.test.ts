@@ -1582,8 +1582,12 @@ test("session queue uses Supabase Realtime invalidation without data polling", (
   );
 
   assert.match(sessionPageSource, /usePublicQueueRealtime/);
-  assert.match(hookSource, /\.on\("broadcast"/);
-  assert.match(hookSource, /supabase\.removeChannel\(channel\)/);
+  const transportSource = readFileSync("src/lib/realtime-transport.ts", "utf8");
+  assert.match(hookSource, /acquireRealtime/);
+  assert.match(transportSource, /\.on\('broadcast'/);
+  assert.match(transportSource, /client\.removeChannel\(channel\)/);
+  assert.equal(transportSource.includes(".from("), false);
+  assert.equal(transportSource.includes("setInterval"), false);
   assert.match(hookSource, /new AbortController\(\)/);
   assert.equal(sessionPageSource.includes("public-queue-polling"), false);
   assert.equal(sessionPageSource.includes("setInterval"), false);

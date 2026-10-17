@@ -1231,7 +1231,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       ).toBeVisible();
       await expect(anonymousPage.getByRole("searchbox")).toHaveCount(0);
 
-      const participantName = "E2E Participant";
+      const participantName = "E2E Lifecycle";
       await anonymousPage.getByLabel("Imię lub ksywka").fill(participantName);
       await anonymousPage
         .getByRole("button", { name: "Dołącz" })
@@ -1266,7 +1266,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await participantQueueRow.getByRole("button", { name: "Zaakceptuj" }).click();
       await expect
         .poll(async () =>
-          (await fixture.readParticipantRequests(participantName))[0]?.status,
+          (await fixture.readQueueRows()).find(row => row.requestId === firstParticipantRequest.requestId)?.status,
         )
         .toBe("approved");
       await expect(
@@ -1276,7 +1276,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
           .getByText("Zaakceptowane"),
       ).toBeVisible();
 
-      const renamedParticipant = "E2E Renamed";
+      const renamedParticipant = "E2E Life New";
       await openParticipantProfile(anonymousPage);
       await anonymousPage
         .getByLabel("Twój nick")

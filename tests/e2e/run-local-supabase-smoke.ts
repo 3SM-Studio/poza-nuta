@@ -94,6 +94,7 @@ try {
     LOCAL_E2E_TRACE: process.env.LOCAL_E2E_TRACE === "on" ? "on" : "off",
     LOCAL_E2E_PERFORMANCE: process.env.LOCAL_E2E_PERFORMANCE === "1" ? "1" : "0",
     LOCAL_E2E_OPTIMIZED: optimizedBuild ? "1" : "0",
+    LOCAL_E2E_SHORT_JWT: process.env.LOCAL_E2E_SHORT_JWT === "1" ? "1" : "0",
   };
   assertLocalE2ETarget(localEnvironment);
 
@@ -127,8 +128,11 @@ try {
 async function runPlaywright(environment: NodeJS.ProcessEnv) {
   const grep = process.env.LOCAL_E2E_PLAYWRIGHT_GREP?.trim();
   const result = await runCaptured(
-    "node_modules\\.bin\\playwright.cmd",
+    // Pass regex metacharacters/spaces as one literal argv entry on Windows.
+    // A .cmd shim introduces another cmd.exe parser and can change selection.
+    process.execPath,
     [
+      resolve(repoRoot, "node_modules/@playwright/test/cli.js"),
       "test",
       process.env.LOCAL_E2E_PERFORMANCE === "1"
         ? "--config=playwright.queue-performance.config.ts"
@@ -218,7 +222,7 @@ file_size_limit = "50MiB"
 enabled = true
 site_url = "${LOCAL_ORIGIN}"
 additional_redirect_urls = ["${LOCAL_ORIGIN}/auth/callback"]
-jwt_expiry = 3600
+jwt_expiry = ${process.env.LOCAL_E2E_SHORT_JWT === "1" ? 120 : 3600}
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
@@ -312,7 +316,7 @@ function runProcess(
 ) {
   return new Promise<number>((resolvePromise, reject) => {
     const child =
-      process.platform === "win32"
+      process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)
         ? spawn(
             process.env.ComSpec ?? "cmd.exe",
             ["/d", "/s", "/c", formatWindowsCommand(command, args)],

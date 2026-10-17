@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { acquireRealtime } from "@/lib/realtime-transport";
+import { realtimeDiagnostic } from "@/lib/realtime-diagnostics";
+
 import { createClient } from "@/lib/supabase/client";
 import {
   getDashboardQueueRealtimeTopic,
@@ -66,9 +69,10 @@ export function useQueueRealtime({
     let refreshQueued: QueueRealtimeInvalidateReason | null = null;
     let refreshController: AbortController | null = null;
     let advertisedRevision = -1n;
-    let channel:
-      | ReturnType<ReturnType<typeof createClient>["channel"]>
-      | undefined;
+    let release: (() => void) | undefined;
+    let snapshotAt = 0;
+    let snapshotRetry = 0;
+    let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
 
     const invalidate = (reason: QueueRealtimeInvalidateReason) => {
       if (!active) {
@@ -83,10 +87,23 @@ export function useQueueRealtime({
       refreshInFlight = true;
       refreshController = new AbortController();
 
-      Promise.resolve(
-        onInvalidateRef.current(reason, refreshController.signal),
-      )
-        .catch(() => undefined)
+      const signal = refreshController.signal;
+      Promise.resolve().then(() => onInvalidateRef.current(reason, signal))
+        .then(() => {
+          if (active) {
+            snapshotAt = Date.now(); snapshotRetry = 0; clearTimeout(snapshotTimer); snapshotTimer = undefined;
+            // A callback can coalesce with an active read or handle its own UI
+            // error. Actual dashboard snapshot success is recorded by its API
+            // adapter, never inferred from callback completion here.
+          }
+        })
+        .catch(() => {
+          if (!active) return;
+          realtimeDiagnostic('snapshot_error');
+          if (snapshotRetry < 3 && !snapshotTimer) snapshotTimer = setTimeout(() => {
+            snapshotTimer = undefined; invalidate('reconnect');
+          }, 1000 * 2 ** snapshotRetry++);
+        })
         .finally(() => {
           refreshInFlight = false;
           refreshController = null;
@@ -101,20 +118,11 @@ export function useQueueRealtime({
         });
     };
 
-    async function subscribe() {
-      await supabase.realtime.setAuth();
-
-      if (!active) {
-        return;
-      }
-
-      channel = supabase
-        .channel(topic, {
-          config: {
-            private: true,
-          },
-        })
-        .on("broadcast", { event: audience === "participants" ? participantsRealtimeEvent : queueRealtimeEvent }, (message) => {
+    try {
+      release = acquireRealtime(supabase, topic,
+        audience === "participants" ? participantsRealtimeEvent : queueRealtimeEvent, {
+        message: (payload) => {
+          const message = { payload };
           const reason =
             audience === "participants"
               ? isDashboardParticipantsChangedPayload(message.payload, realtimeIdentity as number) ? "queue" : null
@@ -128,7 +136,7 @@ export function useQueueRealtime({
               : getPublicQueueRealtimeInvalidateReason(message.payload);
 
           if (active && reason) {
-            if (audience === 'dashboard' && revisionRef.current && typeof message.payload?.revision === 'string') {
+            if (audience === 'dashboard' && revisionRef.current && isDashboardQueueChangedPayload(message.payload, realtimeIdentity as number) && typeof message.payload.revision === 'string') {
               const revision=BigInt(message.payload.revision), known=BigInt(revisionRef.current());
               if (revision<=known || (refreshInFlight && revision<=advertisedRevision)) return;
               advertisedRevision=revision;
@@ -137,52 +145,30 @@ export function useQueueRealtime({
             }
             invalidate(reason);
           }
-        })
-        .subscribe((channelStatus) => {
-          if (!active) {
-            return;
-          }
-
-          if (channelStatus === "SUBSCRIBED") {
-            setConnection({
-              identity: realtimeIdentity,
-              status: "live",
-            });
-            invalidate(hasSubscribed ? "reconnect" : "subscribe");
+        },
+        state: (status) => {
+          if (!active) return;
+          setConnection({ identity: realtimeIdentity, status });
+          if (status === 'live') {
+            invalidate(hasSubscribed ? 'reconnect' : 'subscribe');
             hasSubscribed = true;
-            return;
           }
-
-          if (
-            channelStatus === "CHANNEL_ERROR" ||
-            channelStatus === "TIMED_OUT" ||
-            channelStatus === "CLOSED"
-          ) {
-            setConnection({
-              identity: realtimeIdentity,
-              status: "unavailable",
-            });
-          }
-        });
+        },
+        resume: () => {
+          if (Date.now() - snapshotAt > 15_000) invalidate('reconnect');
+        },
+      });
+    } catch {
+      setConnection({ identity: realtimeIdentity, status: 'unavailable' });
     }
-
-    void subscribe().catch(() => {
-      if (active) {
-        setConnection({
-          identity: realtimeIdentity,
-          status: "unavailable",
-        });
-      }
-    });
 
     return () => {
       active = false;
       refreshQueued = null;
       refreshController?.abort();
 
-      if (channel) {
-        void supabase.removeChannel(channel);
-      }
+      clearTimeout(snapshotTimer);
+      release?.();
     };
   }, [audience, identity]);
 
