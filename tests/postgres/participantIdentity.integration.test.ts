@@ -31,6 +31,7 @@ for (const image of images) {
       await applyPostgresMigrations(sql, 24);
       await applyPostgresMigration(sql, 30);
     await applyPostgresMigration(sql, 32);
+    await applyPostgresMigration(sql, 33);
       const [queueTrigger] = await sql<{ enabled: string }[]>`
         SELECT tgenabled AS enabled
         FROM pg_trigger
@@ -716,6 +717,7 @@ for (const image of images) {
       await applyPostgresMigrations(sql, 24);
       await applyPostgresMigration(sql, 30);
     await applyPostgresMigration(sql, 32);
+    await applyPostgresMigration(sql, 33);
       const fixture = await seedFixture(sql);
       const [thirdSong] = await sql<{ id: number }[]>`
         INSERT INTO public.songs (
@@ -909,6 +911,7 @@ for (const image of images) {
       await applyPostgresMigrations(sql, 29);
       await applyPostgresMigration(sql, 30);
     await applyPostgresMigration(sql, 32);
+    await applyPostgresMigration(sql, 33);
       const fixture = await seedFixture(sql, 6);
       await sql.unsafe(`CREATE TABLE public.test_participant_broadcasts (payload jsonb, event_name text, topic text, private boolean);
         CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event_name text, topic_name text, private_channel boolean)
@@ -972,7 +975,7 @@ for (const image of images) {
         assert.equal((await service.listEventParticipants(otherScope)).items[0].completedCount, 1);
         await action({ ...otherScope, requestId: counterRequest.request.id, action: "restore" });
         const restoredStats = (await service.listEventParticipants(otherScope)).items[0];
-        assert.equal(restoredStats.completedCount, 0);
+        assert.equal(restoredStats.completedCount, 1, "Restoring a request preserves its confirmed performance");
         assert.equal(restoredStats.hasPerformed, false);
         assert.equal(restoredStats.activeCount, 1);
         await assert.rejects(service.getEventParticipant({ ...scope, participantId: sameNickOtherEvent.participant.id }), hasPublicError(404, "EVENT_PARTICIPANT_NOT_FOUND"));
@@ -1121,6 +1124,7 @@ test("postgres:17-alpine: presence leases, races, retention, privacy and isolati
     await applyPostgresMigrations(sql, 29);
     await applyPostgresMigration(sql, 30);
     await applyPostgresMigration(sql, 32);
+    await applyPostgresMigration(sql, 33);
     const [{ version }] = await sql`select current_setting('server_version_num')::integer as version`;
     assert.ok(version >= 170000 && version < 180000);
     const fixture = await seedFixture(sql, 6);
@@ -1722,6 +1726,7 @@ async function withSlice4Fixture(name: string, action: (sql: ReturnType<typeof c
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, 30);
     await applyPostgresMigration(sql, 32);
+    await applyPostgresMigration(sql, 33);
     const fixture = await seedFixture(sql, 6);
     await sql.unsafe(`create table public.test_slice4_broadcasts (payload jsonb, private boolean);
       create or replace function realtime.send(payload jsonb, event_name text, topic_name text, private_channel boolean)
@@ -1947,7 +1952,7 @@ test("postgres:17-alpine: Slice 5 Fair Insert, explicit preview, history, audit,
     assert.deepEqual(result.items.filter(row => row.status === "approved").map(row => row.id), [b, c, a]);
     const [audit] = await t.sql`select operator_id, event_id, created_at, payload from public.operator_audit_log where action = 'event_queue_fair_sort'`;
     assert.equal(Number(audit.event_id), t.fixture.eventA); assert.ok(audit.operator_id); assert.ok(audit.created_at);
-    assert.deepEqual(audit.payload, { before: [b, a, c], after: [b, c, a], outcome: "changed", changed: 2 });
+    assert.deepEqual(audit.payload, { before: [b, a, c], after: [b, c, a], outcome: "changed", changed: 2, engine: "legacy" });
     const after = await t.snapshot();
     assert.deepEqual(after.filter(row => row.data.status !== "approved"), before.filter(row => row.data.status !== "approved"), "Full sort leaves all history and nonapproved rows unchanged");
     for (const row of after.filter(row => row.data.status === "approved")) {
@@ -2020,6 +2025,7 @@ test("postgres:17-alpine: Slice 5 legacy null owners and event-scoped merged his
   await withFairQueueFixture("legacy-merge", async t => {
     const a = await t.member("Source Owner"), b = await t.member("Target Owner"), c = await t.member("Fresh Owner");
     await t.history(a, 1); await t.history(b, 1);
+    await t.sql`update event_participants set display_name='Source Renamed',normalized_display_name='source renamed' where id=${a.id}`;
     const ar = await t.approve(a), cr = await t.approve(c);
     const preview = await t.fair.previewFairEventQueue(t.scope);
     const proposal = await t.merge.createParticipantMergeProposal({ ...t.scope, sourceId: a.id, targetId: b.id });
@@ -2030,6 +2036,10 @@ test("postgres:17-alpine: Slice 5 legacy null owners and event-scoped merged his
     const fresh = await t.fair.previewFairEventQueue(t.scope);
     assert.deepEqual(fresh.changes.map(row => row.id), [cr, ar]);
     assert.equal((await t.sql`select count(*)::integer as count from public.song_requests where event_participant_id=${b.id} and status='done'`)[0].count, 2);
+    const detail=await t.participants.getEventParticipant({...t.scope,participantId:a.id});
+    assert.equal(detail.participant.id,b.id);assert.equal(detail.participant.completedCount,2);
+    assert.ok(detail.participant.nicknameChanges.some(change=>change.before==='Source Owner'&&change.after==='Source Renamed'));
+    assert.ok(detail.requests.every(request=>request.currentDisplayName==='Target Owner'));
     const [legacy] = await t.sql`insert into public.song_requests(event_id,song_id,singer_name,display_name,status,position,requested_by)
       values(${t.fixture.eventA},${t.fixture.songId},'Target Owner','Target Owner','approved',9,'operator') returning id::integer`;
     const fallback = await t.fair.previewFairEventQueue(t.scope);
@@ -2046,6 +2056,11 @@ test("postgres:17-alpine: Slice 5 legacy null owners and event-scoped merged his
     const again = await t.fair.previewFairEventQueue(t.scope);
     await t.fair.applyFairEventQueue({ ...t.scope, revision: again.revision });
     assert.equal((await t.sql`select count(*)::integer as count from public.operator_audit_log where action='event_queue_fair_anchor' and entity_id=${String(legacy.id)}`)[0].count, 1);
+    const snapshots=await t.sql`select id,display_name,singer_name from song_requests where event_id=${t.fixture.eventA} order by id`;
+    await t.service.renamePublicSessionParticipant(t.fixture.tokenA,a.credential,{displayName:'Canonical Renamed',normalizedDisplayName:'canonical renamed'});
+    const renamed=await t.participants.getEventParticipant({...t.scope,participantId:a.id});assert.equal(renamed.participant.id,b.id);assert.equal(renamed.participant.displayName,'Canonical Renamed');assert.equal(renamed.participant.completedCount,2);
+    assert.ok(renamed.participant.nicknameChanges.some(change=>change.before==='Target Owner'&&change.after==='Canonical Renamed'));
+    assert.deepEqual(await t.sql`select id,display_name,singer_name from song_requests where event_id=${t.fixture.eventA} order by id`,snapshots);
   });
 });
 

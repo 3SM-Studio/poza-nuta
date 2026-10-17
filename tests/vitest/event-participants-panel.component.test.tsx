@@ -108,3 +108,7 @@ describe("EventParticipantsPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Nie udało się odświeżyć uczestników");
   });
 });
+
+it('identifies an unfinished first performance by confirmations rather than join date or now status',()=>{
+ renderPanel({...initialData,items:[{...person,completedCount:0,hasPerformed:true}]});expect(screen.getByRole('button',{name:'Wybierz uczestnika: Ala'})).toHaveTextContent('Pierwszy występ');
+});

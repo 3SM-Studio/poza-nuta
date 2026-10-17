@@ -17,7 +17,7 @@ test('real seed, worker, migration and E2E entry points reject an unknown target
     UNICODE_SEARCH_LOCAL_DATABASE_URL: target,
     IMPORT_WORKER_DATABASE_URL: target, ISING_CLIENT_ID: 'synthetic', LOCAL_E2E_DATABASE_URL: target,
     E2E_BASE_URL: 'http://localhost:3105', SUPABASE_URL: 'http://127.0.0.1:55431',
-    NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:55431', LOCAL_E2E_SUPABASE_SECRET_KEY: credential };
+    NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:55431', LOCAL_E2E_SUPABASE_SECRET_KEY: credential, KUNESTU_LOCAL:'1', LOCAL_E2E_OPTIMIZED:'1' };
   async function denied(command: string, args: string[]) {
     const result = await new Promise<{ failed: boolean; output: string }>(resolve => {
       execFile(command, args, { env: environment, timeout: 30_000, windowsHide: true }, (error, stdout, stderr) => {
@@ -29,6 +29,7 @@ test('real seed, worker, migration and E2E entry points reject an unknown target
     assert.equal(connections, 0);
   }
   try {
+    await denied(process.execPath, ['--experimental-strip-types', 'scripts/local-next.ts', 'build']);
     await denied(process.execPath, ['--experimental-strip-types', 'src/db/seed.ts']);
     await denied(process.execPath, ['--experimental-strip-types', 'scripts/backfill-unicode-song-search.ts']);
     await denied(process.execPath, ['--experimental-strip-types', 'src/server/platform-admin/import-worker-process.ts', '--once']);

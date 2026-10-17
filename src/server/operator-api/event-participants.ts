@@ -1,4 +1,5 @@
 import "server-only";
+import {loadEventPresentation} from "../queue-presentation";
 
 import { and, asc, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -31,9 +32,8 @@ async function requireReadableEvent(input: EventParticipantScope) {
   return context;
 }
 
-// Counts describe current request statuses, not immutable performance events.
-// Restoring a done request removes it from completedCount. First appearance
-// means no request currently in now/done, matching the existing domain rule.
+// completedCount follows confirmed performances, including restored requests.
+// hasPerformed retains its legacy now/done status contract for older clients.
 export async function listEventParticipants(input: EventParticipantScope) {
   const context = await requireReadableEvent(input);
   const items = await getDb()
@@ -54,9 +54,10 @@ export async function listEventParticipants(input: EventParticipantScope) {
     .where(and(eq(eventSessions.eventId, context.event.id), isNull(eventParticipants.mergedIntoId)))
     .groupBy(eventParticipants.id)
     .orderBy(asc(eventParticipants.normalizedDisplayName), asc(eventParticipants.id));
+  const {participants:counts}=await loadEventPresentation(getDb(),context.event.id);
   const presence = await getEventPresence(context.event.id);
   return {
-    items: items.map(item => ({ ...item, online: !!presence.byId.get(item.id), onlineUntil: presence.byId.get(item.id) ?? null })),
+    items: items.map(item => ({ ...item, completedCount:counts.get(item.id)?.completedCount??0, hasPerformed:item.hasPerformed, nicknameChanges:counts.get(item.id)?.nicknameChanges??[], online: !!presence.byId.get(item.id), onlineUntil: presence.byId.get(item.id) ?? null })),
     serverNow: presence.serverNow,
     nextPresenceCheckAt: presence.nextPresenceCheckAt,
     canManage: canManageDashboardEventQueue(context.organization.role) && context.event.effectiveStatus === "active",
@@ -82,7 +83,11 @@ export async function getEventParticipant(input: EventParticipantScope & { parti
   }).from(songRequests).innerJoin(songs, eq(songs.id, songRequests.songId))
     .where(and(eq(songRequests.eventId, context.event.id), eq(songRequests.eventParticipantId, participant.id)))
     .orderBy(desc(songRequests.createdAt), desc(songRequests.id));
-  return { participant, requests };
+  const {requests:presentation,participants}=await loadEventPresentation(getDb(),context.event.id);
+  const meta=participants.get(participant.id);
+  return { participant:{...participant,completedCount:meta?.completedCount??0,nicknameChanges:meta?.nicknameChanges??[]},
+    requests:requests.map(request=>({...request,currentDisplayName:participant.displayName,requestDisplayName:presentation.get(request.id)?.requestDisplayName??participant.displayName})) };
+
 }
 
 export async function listEventParticipantPresence(input: EventParticipantScope) {

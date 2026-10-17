@@ -30,6 +30,7 @@ for (const image of images) {
       await applyPostgresMigrations(sql, 24);
       await applyPostgresMigration(sql, 30);
     await applyPostgresMigration(sql, 32);
+    await applyPostgresMigration(sql, 33);
       const fixture = await seedFixture(sql);
 
       await withApplicationDatabase(harness, async () => {

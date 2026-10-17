@@ -46,7 +46,7 @@ const allowedSourceStatuses: Record<
   start: ["pending", "approved"],
   reject: ["pending", "approved"],
   done: ["approved", "now"],
-  restore: ["approved", "done", "skipped", "rejected"],
+  restore: ["approved", "now", "done", "skipped", "rejected"],
 };
 
 const targetStatuses: Record<

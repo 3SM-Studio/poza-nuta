@@ -87,6 +87,7 @@ try {
     LOCAL_E2E_DATABASE_URL: databaseUrl,
     LOCAL_E2E_SUPABASE_SECRET_KEY: secretKey,
     NEXT_DIST_DIR: NEXT_DIST_DIRECTORY,
+    KUNESTU_FAIR_QUEUE_ENGINE:process.env.LOCAL_E2E_FAIR_ENGINE==='rotation-v2'?'rotation-v2':'legacy',
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
     NEXT_PUBLIC_SUPABASE_URL: API_ORIGIN,
     SITE_URL: LOCAL_ORIGIN,
@@ -101,7 +102,7 @@ try {
 
   if (optimizedBuild) {
     console.log("[local-e2e] Building optimized application for isolated browser verification.");
-    await runVisible(process.execPath, ["node_modules/next/dist/bin/next", "build"], localEnvironment);
+    await runVisible("pnpm.cmd", ["build"], localEnvironment);
   }
 
   console.log("[local-e2e] Running authenticated and public Playwright smoke.");

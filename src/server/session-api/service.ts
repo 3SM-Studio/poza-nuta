@@ -1,4 +1,5 @@
 import "server-only";
+import {loadQueuePresentation} from "../queue-presentation";
 
 import {
   and,
@@ -1225,6 +1226,7 @@ async function getQueueForLookup(lookup: SessionLookup) {
     };
   }
 
+  const presentation=await loadQueuePresentation(getDb(),session.event.id);
   if (session.event.publicShowSongTitles) {
     const items = await getDb()
       .select({
@@ -1249,7 +1251,7 @@ async function getQueueForLookup(lookup: SessionLookup) {
     return {
       enabled: true as const,
       showSongTitles: true as const,
-      items,
+      items:items.map(row=>({...row,singerName:presentation.get(row.id)?.currentDisplayName??row.singerName})),
     };
   }
 
@@ -1273,7 +1275,7 @@ async function getQueueForLookup(lookup: SessionLookup) {
   return {
     enabled: true as const,
     showSongTitles: false as const,
-    items,
+    items:items.map(row=>({...row,singerName:presentation.get(row.id)?.currentDisplayName??row.singerName})),
   };
 }
 

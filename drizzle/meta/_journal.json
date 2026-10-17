@@ -232,6 +232,13 @@
       "when": 1792245585067,
       "tag": "0032_queue_collaboration",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792252054872,
+      "tag": "0033_participant_presentation",
+      "breakpoints": true
     }
   ]
 }

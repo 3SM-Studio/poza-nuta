@@ -5,6 +5,7 @@ import { OperatorClientError } from "./api";
 export type EventParticipantSummary = {
   id: number; displayName: string; joinedAt: string;
   activeCount: number; completedCount: number; hasPerformed: boolean;
+  nicknameChanges?:{before:string;after:string;at:string}[];
   online: boolean; onlineUntil: string | null;
 };
 export type EventParticipantList = { items: EventParticipantSummary[]; canManage: boolean; realtimeEventId: number; serverNow: string; nextPresenceCheckAt: string | null };
@@ -12,9 +13,9 @@ export type EventPresenceSnapshot = Pick<EventParticipantList, "serverNow" | "ne
   items: Pick<EventParticipantSummary, "id" | "online" | "onlineUntil">[];
 };
 export type EventParticipantDetail = {
-  participant: { id: number; displayName: string; joinedAt: string };
+  participant: { id: number; displayName: string; joinedAt: string; completedCount?:number; nicknameChanges?:{before:string;after:string;at:string}[] };
   requests: {
-    id: number; title: string; artist: string; status: DashboardEventQueueRequestStatus;
+    id: number; currentDisplayName?:string; requestDisplayName?:string; title: string; artist: string; status: DashboardEventQueueRequestStatus;
     requestedBy: "operator" | "public"; createdAt: string; startedAt: string | null; completedAt: string | null;
   }[];
 };

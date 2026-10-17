@@ -15,6 +15,10 @@ export type DashboardEventQueueItemDto = {
   songId: number;
   singerName: string;
   displayName: string;
+  fairInsertion?:{reason:string;constrained:boolean};
+  currentDisplayName?:string; requestDisplayName?:string; eventParticipantId?:number|null;
+  completedCount?:number|null; performing?:boolean; joinedAt?:string|null;
+  nicknameChanges?:{before:string;after:string;at:string}[]; mergedProfile?:boolean;
   note: string | null;
   status: DashboardEventQueueRequestStatus;
   position: number;
@@ -87,7 +91,8 @@ type ApiErrorBody = {
 
 export type FairQueuePreview = {
   revision: string;
-  changes: { id: number; from: number; to: number; displayName: string; songTitle: string }[];
+  engine?:string;
+  changes: { id: number; from: number; to: number; displayName: string; songTitle: string; decision?:import('@/server/fair-queue-v2').FairDecision }[];
 };
 
 export function previewDashboardFairQueue(organizationId: string, eventId: string, signal?: AbortSignal) {
@@ -223,7 +228,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
     throw new OperatorClientError(
       response.status,
       errorBody?.error?.code ?? "REQUEST_FAILED",
-      errorBody?.error?.message ?? "Nie udało się wykonać operacji.",
+      errorBody?.error?.message ?? "Nie udaĹ‚o siÄ™ wykonaÄ‡ operacji.",
     );
   }
 

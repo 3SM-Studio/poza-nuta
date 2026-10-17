@@ -620,7 +620,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
         const peerId = await sql.begin(async tx => {
           const [peer] = await tx<{id: number}[]>`INSERT INTO public.operator_users
             (name,display_name,profile_completed_at,auth_user_id,password_hash,active)
-            VALUES ('Synthetic peer','Synthetic peer',now(),${result.data.user.id}::uuid,'supabase-auth-managed',true) RETURNING id`;
+            VALUES (${'Synthetic peer '+randomUUID()},'Synthetic peer',now(),${result.data.user.id}::uuid,'supabase-auth-managed',true) RETURNING id`;
           await tx`INSERT INTO public.workspace_members (workspace_id,operator_user_id,role,active)
             VALUES (${workspaceId},${peer.id},'operator',true)`;
           return Number(peer.id);

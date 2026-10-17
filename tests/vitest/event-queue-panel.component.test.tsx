@@ -52,3 +52,16 @@ describe('operator collaboration UI',()=>{
   it('keeps data and retry available after a background fetch fails',async()=>{await panel([item(1)]);h.get.mockRejectedValueOnce(new Error('Offline'));await act(async()=>h.invalidate?.());expect(row(1)).toHaveTextContent('Singer 1');expect(screen.getByRole('alert')).toHaveTextContent('Lokalne zmiany pozostają zachowane');expect(screen.getByRole('button',{name:'Odśwież'})).toBeEnabled();});
   it('disables Fair Sort without disabling independent actions during a pending operation',async()=>{await panel([item(1),item(2)]);hold();fireEvent.click(within(row(1)).getByRole('button',{name:/^Zaakceptuj:/}));expect(screen.getByRole('button',{name:'Ułóż sprawiedliwie'})).toBeDisabled();expect(within(row(2)).getByRole('button',{name:/^Zaakceptuj:/})).toBeEnabled();});
 });
+
+it('keeps a current-name update and original request label during an independent pending write and drag',async()=>{
+ await panel([item(1,'approved'),item(2,'approved'),item(3)]);hold();fireEvent.click(within(row(3)).getByRole('button',{name:/^Zaakceptuj:/}));start(1);
+ canonical={...canonical,revision:'2',items:[{...item(1,'approved'),displayName:'Dima',singerName:'Dima',currentDisplayName:'Dima',requestDisplayName:'Dimon',eventParticipantId:17,completedCount:0,nicknameChanges:[{before:'Dimon',after:'Dima',at:'2026-10-17T12:00:00Z'}]},item(2,'approved'),item(3)]};
+ await act(async()=>h.invalidate?.());expect(row(1)).toHaveTextContent('Dima');expect(row(1)).toHaveTextContent('Zgłoszono jako: Dimon');expect(row(1)).toHaveTextContent('Pierwszy występ');expect(within(row(1)).getByRole('link')).toHaveAttribute('href',expect.stringContaining('participant=17'));
+ expect(status(3)).toBe('approved');expect(document.querySelector('[data-queue-drag-overlay]')).toBeVisible();expect(h.toast).not.toHaveBeenCalled();
+});
+it('cancel performance requires cancel-first confirmation and sends restore without a false completion',async()=>{
+ await panel([{...item(1,'now'),eventParticipantId:17,completedCount:0}]);
+ fireEvent.click(within(row(1)).getByRole('button',{name:/^Anuluj występ:/}));expect(screen.getByRole('alertdialog')).toBeVisible();fireEvent.click(screen.getByRole('button',{name:/^Anuluj$/}));expect(status(1)).toBe('now');expect(h.send).not.toHaveBeenCalled();
+ fireEvent.click(within(row(1)).getByRole('button',{name:/^Anuluj występ:/}));fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:/^Anuluj występ:/}));
+ await waitFor(()=>expect(h.send).toHaveBeenCalledOnce());expect(h.send.mock.calls[0][2]).toMatchObject({kind:'action',action:'restore',expectedStatus:'now'});expect(status(1)).toBe('pending');
+});

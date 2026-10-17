@@ -1,4 +1,6 @@
 import "server-only";
+import {performanceHistory} from "../performance-history";
+import {presentQueue} from "../queue-presentation";
 
 import { and, asc, eq, inArray, max, ne, sql } from "drizzle-orm";
 
@@ -27,7 +29,8 @@ import { getDb } from "../db";
 import { startForUpdateSelect, traceDbOperation, traceDbTransaction, traceForUpdateSelect } from "../db-telemetry";
 import { setLocalDatabaseTimeouts } from "../database-transaction-timeouts";
 import { requireParticipantRequestCapacity } from "../participant-request-limit";
-import { insertFairQueue } from "../fair-queue";
+import {admissionBudget} from "../fair-queue-v2";
+import { insertQueue, fairEngine } from "../fair-queue-engine";
 import { anchorLegacyApprovedRequests, loadFairQueueSnapshot, writeApprovedOrder } from "./fair-queue-store";
 import {
   ACTIVE_PUBLIC_REQUEST_STATUSES,
@@ -112,9 +115,7 @@ export async function getDashboardOrganizationEventQueueForAuthUser(input: {
   return {
     ...result,
     canManage: canManageDashboardEventQueue(result.organization.role),
-    items: rows
-      .map(toDashboardEventQueueItem)
-      .sort(compareDashboardEventQueueItems),
+    items: await presentQueue(getDb(),result.event.id,rows.map(toDashboardEventQueueItem).sort(compareDashboardEventQueueItems)),
   };
 }
 
@@ -147,6 +148,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
         position: songRequests.position,
         requestedBy: songRequests.requestedBy,
         eventParticipantId: songRequests.eventParticipantId,
+        completedAt:songRequests.completedAt,
         version: songRequests.version,
       })
       .from(songRequests)
@@ -226,6 +228,14 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     }
 
     const changedAt = new Date();
+    if(input.action==='restore'&&queueRequest.status==='done'){
+      const audits=await transaction.select({id:operatorAuditLog.id,action:operatorAuditLog.action,entityId:operatorAuditLog.entityId,payload:operatorAuditLog.payload,createdAt:operatorAuditLog.createdAt}).from(operatorAuditLog)
+        .where(and(eq(operatorAuditLog.eventId,context.event.id),eq(operatorAuditLog.entityId,String(queueRequest.id)),inArray(operatorAuditLog.action,['event_queue_done','event_queue_start','event_queue_restore','event_queue_performance_completed'])));
+      const history=performanceHistory([{...queueRequest,completedAt:queueRequest.completedAt?.getTime()??null}],audits.map(a=>({...a,createdAt:a.createdAt.getTime()}))).get(queueRequest.id)!;
+      if(history.unrecordedCurrent)await transaction.insert(operatorAuditLog).values({actorKind:'operator',operatorId:context.organization.operatorId,
+        eventId:context.event.id,action:'event_queue_performance_completed',entityId:String(queueRequest.id),
+        createdAt:queueRequest.completedAt??changedAt,payload:{requestVersion:queueRequest.version,confirmation:'legacy_done_observed_before_restore',timeKnown:queueRequest.completedAt!==null}});
+    }
     const completedNowRequestCount =
       input.action === "start"
         ? await completeCurrentEventQueueRequests(
@@ -283,13 +293,15 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       );
     }
 
+    let insertion:ReturnType<typeof insertQueue>|undefined;
     if (targetStatus === "approved") {
       const snapshot = await loadFairQueueSnapshot(transaction, context.event.id,
         queueRequest.status === "approved" ? undefined : { id: queueRequest.id, at: changedAt });
+      if(!input.placement)insertion=insertQueue(snapshot.requests,queueRequest.id);
       const order = input.placement
         ? snapshot.requests.filter(row => row.status === "approved" && row.id !== queueRequest.id)
           .sort((a, b) => a.position - b.position || a.id - b.id).map(row => row.id)
-        : insertFairQueue(snapshot.requests, queueRequest.id);
+        : insertion!.order;
       if (input.placement) {
         if (input.placement.position < 1 || input.placement.position > order.length + 1) {
           throw new OperatorApiError(409, "QUEUE_PLACEMENT_STALE", "The target position is no longer available.");
@@ -299,6 +311,11 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       await writeApprovedOrder(transaction, context.event.id, snapshot.requests,
         order, changedAt, queueRequest.id);
       await anchorLegacyApprovedRequests(transaction, context.event.id, snapshot.requests, changedAt, context.organization.operatorId);
+      if(queueRequest.status!=='approved')await transaction.insert(operatorAuditLog).values({
+        actorKind:'operator',operatorId:context.organization.operatorId,eventId:context.event.id,
+        action:'event_queue_fair_admission',entityId:String(queueRequest.id),createdAt:changedAt,
+        payload:{engine:fairEngine(),protectionTurns:admissionBudget(snapshot.requests,queueRequest.id)},
+      });
     } else if (queueRequest.status === "approved") {
       await traceDbOperation("operator.queue.action", "operator.queue.renumber", () => renumberApprovedQueue(
         transaction,
@@ -307,6 +324,15 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       ));
     }
 
+    if (input.action === "done") await transaction.insert(operatorAuditLog).values({
+      actorKind:'operator',operatorId:context.organization.operatorId,eventId:context.event.id,
+      action:'event_queue_performance_completed',entityId:String(queueRequest.id),createdAt:changedAt,
+      payload:{requestVersion:queueRequest.version+1,confirmation:queueRequest.status==='now'?'explicit_finish':'explicit_direct_done'},
+    });
+    if (input.action === 'restore' && queueRequest.status === 'now') await transaction.insert(operatorAuditLog).values({
+      actorKind:'operator',operatorId:context.organization.operatorId,eventId:context.event.id,
+      action:'event_queue_performance_cancelled',entityId:String(queueRequest.id),createdAt:changedAt,payload:{reason:'operator_cancelled'},
+    });
     const updatedRequest = await requireDashboardEventQueueItem(
       transaction,
       context.event.id,
@@ -322,6 +348,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       createdAt: changedAt,
       payload: {
         ...(input.placement ? { manualDrop: true, targetLane: input.placement.lane, targetPosition: input.placement.position } : {}),
+        ...(insertion?.decision?{engine:fairEngine(),fairDecision:insertion.decision,constrained:insertion.constrained}:{}),
         previousStatus: queueRequest.status,
         nextStatus: targetStatus,
         previousPosition: queueRequest.position,
@@ -334,10 +361,11 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       },
     });
 
+    const items=await loadDashboardEventQueueItems(transaction,context.event.id);
     return {
       event: context.event,
-      request: updatedRequest,
-      items: await loadDashboardEventQueueItems(transaction, context.event.id),
+      request: items.find(item=>item.id===updatedRequest.id)??updatedRequest,
+      items,
     };
   };
   if (existingTransaction) return run(existingTransaction);
@@ -541,6 +569,8 @@ async function completeCurrentEventQueueRequests(
     .for("update"));
 
   for (const request of currentRequests) {
+    await transaction.insert(operatorAuditLog).values({actorKind:'system',operatorId:null,eventId,
+      action:'event_queue_performance_completed',entityId:String(request.id),createdAt:changedAt,payload:{requestVersion:request.version+1,confirmation:'implicit_next_start'}});
     await transaction
       .update(songRequests)
       .set({
@@ -854,7 +884,7 @@ export async function loadDashboardEventQueueItems(transaction: DatabaseTransact
   const rows = await transaction.select(dashboardEventQueueItemSelection).from(songRequests)
     .innerJoin(songs, eq(songs.id, songRequests.songId)).where(eq(songRequests.eventId, eventId))
     .orderBy(asc(songRequests.id));
-  return rows.map(toDashboardEventQueueItem).sort(compareDashboardEventQueueItems);
+  return presentQueue(transaction,eventId,rows.map(toDashboardEventQueueItem).sort(compareDashboardEventQueueItems));
 }
 
 function compareDashboardEventQueueItems(

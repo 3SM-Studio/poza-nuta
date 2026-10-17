@@ -43,6 +43,7 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, 30);
     await applyPostgresMigration(sql, 32);
+    await applyPostgresMigration(sql, 33);
     const legacyFixture = await seedLegacyActiveEvent(sql);
     const fixture = await seedFixture(sql);
     process.env.DATABASE_URL = makeDatabaseUrl(harness);
@@ -206,7 +207,12 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
       WHERE event_id = ${fixture.eventId}
         AND action LIKE 'event_queue_%'
     `;
-    assert.equal(audit.count, 11);
+    assert.equal(audit.count, 14);
+    const actions=await sql`select action,count(*)::int n from operator_audit_log where event_id=${fixture.eventId} and action like 'event_queue_%' group by action order by action`;
+    assert.deepEqual(actions.map(r=>[r.action,r.n]),[
+      ['event_queue_approve',1],['event_queue_done',2],['event_queue_fair_admission',1],
+      ['event_queue_performance_completed',2],['event_queue_reject',2],['event_queue_restore',4],['event_queue_start',2],
+    ],'Every original action and the new admission/completion facts are audited exactly once');
   } finally {
     if (applicationDatabase) {
       await applicationDatabase.$client.end({ timeout: 5 });

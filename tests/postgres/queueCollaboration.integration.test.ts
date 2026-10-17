@@ -19,7 +19,7 @@ const registry=globalThis as typeof globalThis & {pozaNutaDatabase?:ReturnType<t
 
 beforeAll(async()=>{
   harness=await startPostgresTestHarness('kunestu-collaboration');connection=createPostgresTestClient(harness,'postgres',8);
-  await installPostgresCompatibilityFixture(connection);await applyPostgresMigrations(connection,32);
+  await installPostgresCompatibilityFixture(connection);await applyPostgresMigrations(connection,33);
   registry.pozaNutaDatabase=drizzle({client:connection,schema});
   service=await import('../../src/server/operator-api/queue-sync');legacy=await import('../../src/server/operator-api/event-queue');fair=await import('../../src/server/operator-api/fair-queue');
   [workspace]= (await connection`insert into workspaces(name,handle,public_id) values('Collaboration','collaboration',${organizationId}) returning id::int`).map(x=>x.id);
@@ -63,6 +63,139 @@ describe('PG17 transactional collaboration',()=>{
     const closed=await snapshot();expect(closed.lifecycle).toBe('closed');expect(BigInt(closed.revision)).toBe(BigInt(expired.revision)+1n);
     await connection`delete from events where id=${eventId}`;
     expect((await connection`select * from queue_streams where event_id=${eventId}`).length).toBe(0);
+  });
+  it('refreshes current names while preserving request snapshots and semantic movement versions',async()=>{
+    const [identity]=await connection`insert into participant_identities default values returning id`;
+    const [member]=await connection`insert into event_participants(event_session_id,participant_id,display_name,normalized_display_name)
+      select id,${identity.id},'Dimon','dimon' from event_sessions where event_id=${eventId} returning id`;
+    await connection`update song_requests set event_participant_id=${member.id} where id=${ids[0]}`;
+    const intent=await operation(0,5),before=await snapshot();
+    await connection`update event_participants set display_name='Dima',normalized_display_name='dima' where id=${member.id}`;
+    const after=await snapshot(),r=after.items.find(x=>x.id===ids[0])!;
+    expect(r.displayName).toBe('Dima');expect(r.requestDisplayName).toBe('Singer 1');expect(r.nicknameChanges?.[0]).toMatchObject({before:'Dimon',after:'Dima'});
+    expect(r.completedCount).toBe(0);expect(r.intentVersion).toBe(before.items.find(x=>x.id===ids[0])!.intentVersion);expect(BigInt(after.revision)).toBeGreaterThan(BigInt(before.revision));
+    await apply(intent);expect((await snapshot()).items.find(x=>x.id===ids[0])?.displayName).toBe('Dima');
+    const [stored]=await connection`select display_name from song_requests where id=${ids[0]}`;expect(stored.display_name).toBe('Singer 1');
+  });
+  it('uses immutable new confirmations after restore and does not count an explicitly cancelled now',async()=>{
+    const [identity]=await connection`insert into participant_identities default values returning id`;
+    const [member]=await connection`insert into event_participants(event_session_id,participant_id,display_name,normalized_display_name)
+      select id,${identity.id},'Singer','singer' from event_sessions where event_id=${eventId} returning id`;
+    await connection`update song_requests set event_participant_id=${member.id} where id=${ids[0]}`;
+    await apply(await action(0,'start'));let source=await action(0,'done');
+    await apply({...source,action:'restore'});expect((await snapshot()).items.find(x=>x.id===ids[0])?.completedCount).toBe(0);
+    await apply(await action(0,'start'));await apply(await action(0,'done'));
+    expect((await snapshot()).items.find(x=>x.id===ids[0])?.completedCount).toBe(1);
+    source=await action(0,'done');await apply({...source,action:'restore'});
+    expect((await snapshot()).items.find(x=>x.id===ids[0])?.completedCount).toBe(1);
+    const [audit]=await connection`select count(*)::int n from operator_audit_log where event_id=${eventId} and action='event_queue_performance_cancelled'`;expect(audit.n).toBe(1);
+  });
+  it('rolls back a rename audit, revision and broadcasts together and denies browser function execution',async()=>{
+    const [identity]=await connection`insert into participant_identities default values returning id`;
+    const [member]=await connection`insert into event_participants(event_session_id,participant_id,display_name,normalized_display_name)
+      select id,${identity.id},'Before','before' from event_sessions where event_id=${eventId} returning id`;
+    const before=await snapshot(),messages=await connection`select count(*)::int n from realtime.test_queue_messages`;
+    await expect(connection.begin(async tx=>{await tx`update event_participants set display_name='After',normalized_display_name='after' where id=${member.id}`;throw new Error('synthetic rollback');})).rejects.toThrow('synthetic rollback');
+    expect((await snapshot()).revision).toBe(before.revision);
+    expect((await connection`select display_name from event_participants where id=${member.id}`)[0].display_name).toBe('Before');
+    expect((await connection`select count(*)::int n from realtime.test_queue_messages`)[0].n).toBe(messages[0].n);
+    expect((await connection`select count(*)::int n from operator_audit_log where event_id=${eventId} and action='participant_nickname_changed'`)[0].n).toBe(0);
+    const [grants]=await connection`select has_function_privilege('anon','private.participant_presentation_changed()','EXECUTE') a,has_function_privilege('authenticated','private.participant_presentation_changed()','EXECUTE') b`;
+    expect(grants).toEqual({a:false,b:false});
+    await connection`update event_participants set display_name='After',normalized_display_name='after' where id=${member.id}`;
+    const participants=await import('../../src/server/operator-api/event-participants');
+    const summary=(await participants.listEventParticipants(scope)).items.find(m=>m.id===Number(member.id))!;
+    expect(summary.completedCount).toBe(0);expect(summary.nicknameChanges).toHaveLength(1);expect(summary.nicknameChanges[0]).toMatchObject({before:'Before',after:'After'});
+    const detail=await participants.getEventParticipant({...scope,participantId:Number(member.id)});expect(detail.participant.nicknameChanges).toEqual(summary.nicknameChanges);
+
+  });
+  it('coalesces a presentation change and queue movement while retaining every real rename audit',async()=>{
+    const [identity]=await connection`insert into participant_identities default values returning id`;
+    const [member]=await connection`insert into event_participants(event_session_id,participant_id,display_name,normalized_display_name)
+      select id,${identity.id},'Before','before' from event_sessions where event_id=${eventId} returning id`;
+    const before=await snapshot();
+    await connection.begin(async tx=>{
+      await tx`update song_requests set position=position+1 where event_id=${eventId}`;
+      await tx`update event_participants set display_name='Middle',normalized_display_name='middle' where id=${member.id}`;
+      await tx`update event_participants set display_name='After',normalized_display_name='after' where id=${member.id}`;
+    });
+    const after=await snapshot();expect(BigInt(after.revision)).toBe(BigInt(before.revision)+1n);
+    const messages=await connection`select payload from realtime.test_queue_messages where topic=${'dashboard:event:'+eventId+':queue'} and payload->>'revision'=${after.revision}`;
+    expect(messages).toHaveLength(1);expect(Object.keys(messages[0].payload).sort()).toEqual(['changedAt','eventId','operation','revision','type']);
+    const names=await connection`select payload from operator_audit_log where event_id=${eventId} and action='participant_nickname_changed' order by id`;
+    expect(names.map(r=>r.payload)).toEqual([{before:'Before',after:'Middle'},{before:'Middle',after:'After'}]);
+  });
+  it('preserves observed legacy completions through restore without inventing a rename',async()=>{
+    const [identity]=await connection`insert into participant_identities default values returning id`;
+    const [member]=await connection`insert into event_participants(event_session_id,participant_id,display_name,normalized_display_name)
+      select id,${identity.id},'Legacy','legacy' from event_sessions where event_id=${eventId} returning id`;
+    await connection`update song_requests set event_participant_id=${member.id},status='done',completed_at=now()-interval '1 hour',position=0 where id=${ids[0]}`;
+    const source=await action(0,'done');await apply({...source,action:'restore'});
+    const item=(await snapshot()).items.find(x=>x.id===ids[0])!;expect(item.completedCount).toBe(1);expect(item.nicknameChanges).toEqual([]);expect(item.requestDisplayName).toBe('Singer 1');
+    const [audit]=await connection`select payload from operator_audit_log where event_id=${eventId} and action='event_queue_performance_completed'`;expect(audit.payload).toMatchObject({confirmation:'legacy_done_observed_before_restore',timeKnown:true});expect(Object.keys(audit.payload).sort()).toEqual(['confirmation','requestVersion','timeKnown']);expect(Number.isSafeInteger(audit.payload.requestVersion)).toBe(true);
+  });
+  it('reconciles original explicit done/restore audits and deduplicates later confirmed performances',async()=>{
+    const [identity]=await connection`insert into participant_identities default values returning id`;
+    const [member]=await connection`insert into event_participants(event_session_id,participant_id,display_name,normalized_display_name)
+      select id,${identity.id},'Historical','historical' from event_sessions where event_id=${eventId} returning id`;
+    await connection`update song_requests set event_participant_id=${member.id},status='pending',position=0,version=3 where id=${ids[0]}`;
+    await connection`update song_requests set position=position-1 where event_id=${eventId} and status='approved'`;
+    await connection`insert into operator_audit_log(actor_kind,operator_id,event_id,action,entity_id,payload)
+      values('operator',${actor},${eventId},'event_queue_done',${String(ids[0])},'{"nextVersion":2}'::jsonb),
+      ('operator',${actor},${eventId},'event_queue_restore',${String(ids[0])},'{"nextVersion":3}'::jsonb)`;
+    expect((await snapshot()).items.find(r=>r.id===ids[0])?.completedCount).toBe(1);
+    const store=await import('../../src/server/operator-api/fair-queue-store');
+    const historical=await registry.pozaNutaDatabase!.transaction(tx=>store.loadFairQueueSnapshot(tx,eventId));expect(historical.requests.find(r=>r.id===ids[0])?.confirmedCompletionCount).toBe(1);
+    await apply(await action(0,'approve'));await apply(await action(0,'start'));const finish=await action(0,'done');await apply(finish);await apply(finish);
+    expect((await snapshot()).items.find(r=>r.id===ids[0])?.completedCount).toBe(2);
+    const restore=await action(0,'done');await apply({...restore,action:'restore'});expect((await snapshot()).items.find(r=>r.id===ids[0])?.completedCount).toBe(2);
+  });
+  it('v2 previews explain decisions, fence stale applies and retain the collaboration receipt protocol',async()=>{
+    vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE','rotation-v2');
+    try{
+      const preview=await fair.previewFairEventQueue(scope);expect(preview.engine).toBe('rotation-v2');expect(preview.changes.every(x=>x.decision)).toBe(true);
+      const op=await operation(0,5);await apply(op);await expect(fair.applyFairEventQueue({...scope,revision:preview.revision})).rejects.toMatchObject({code:'FAIR_QUEUE_PREVIEW_STALE'});
+      const fresh=await fair.previewFairEventQueue(scope);await fair.applyFairEventQueue({...scope,revision:fresh.revision});
+      const again=await apply(op);expect(again.replayed).toBe(true);
+    }finally{vi.unstubAllEnvs();}
+  });
+  it.each(['approve','done'] as const)('v2 Fair Sort racing %s preserves all rows, receipts, positions and confirmation counts',async kind=>{
+    vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE','rotation-v2');
+    try{
+      if(kind==='approve'){const [p]=await connection`insert into song_requests(event_id,song_id,singer_name,display_name,status,position,requested_by) values(${eventId},${song},'New singer','New singer','pending',0,'operator') returning id::int`;ids.push(p.id);}
+      const source=kind==='approve'?ids.length-1:0,op=await action(source,kind),preview=await fair.previewFairEventQueue(scope);
+      const results=await Promise.allSettled([fair.applyFairEventQueue({...scope,revision:preview.revision}),apply(op)]);
+      expect(results[1].status).toBe('fulfilled');if(results[0].status==='rejected')expect(results[0].reason).toMatchObject({code:'FAIR_QUEUE_PREVIEW_STALE'});
+      const final=await snapshot(),approved=final.items.filter(r=>r.status==='approved').sort((a,b)=>a.position-b.position);
+      expect(final.items).toHaveLength(ids.length);expect(approved.map(r=>r.position)).toEqual(approved.map((_,i)=>i+1));expect(final.items.filter(r=>r.status==='now')).toHaveLength(0);
+      expect(final.items.find(r=>r.id===ids[source])?.status).toBe(kind==='approve'?'approved':'done');expect((await apply(op)).replayed).toBe(true);
+      const [count]=await connection`select count(*)::int n from operator_audit_log where event_id=${eventId} and action='event_queue_performance_completed'`;
+      expect(count.n).toBe(kind==='done'?1:0);
+      if(kind==='approve'){
+        expect(final.items.find(r=>r.id===ids[source])?.fairInsertion).toBeDefined();
+        const restore=await action(source,'done');await apply({...restore,action:'restore'});
+        const manual=await operation(source,1);
+        await apply(manual);expect((await snapshot()).items.find(r=>r.id===ids[source])?.fairInsertion).toBeUndefined();
+      }
+
+    }finally{vi.unstubAllEnvs();}
+  });
+  it('v2 admission cannot pass a protected participant hidden behind a preserved existing pair',async()=>{
+    vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE','rotation-v2');
+    try{
+      const members:number[]=[];
+      for(const name of ['High','Protected','New']){const [identity]=await connection`insert into participant_identities default values returning id`;const [member]=await connection`insert into event_participants(event_session_id,participant_id,display_name,normalized_display_name) select id,${identity.id},${name},${name.toLowerCase()} from event_sessions where event_id=${eventId} returning id::int`;members.push(member.id);}
+      await connection`update song_requests set status='rejected',position=0 where event_id=${eventId} and id not in (${ids[0]},${ids[1]})`;
+      for(const [index,member] of members.slice(0,2).entries())await connection`update song_requests set event_participant_id=${member},created_at=now()-interval '20 minutes' where id=${ids[index]}`;
+      for(const [member,count] of [[members[0],3],[members[1],2]])for(let i=0;i<count;i++)await connection`insert into song_requests(event_id,song_id,event_participant_id,singer_name,display_name,status,position,requested_by,created_at,completed_at) values(${eventId},${song},${member},'Historical','Historical','done',0,'operator',now()-interval '20 minutes',now()-(${member===members[0]&&i===2?'5 minutes':'15 minutes'})::interval)`;
+      await connection`insert into operator_audit_log(actor_kind,operator_id,event_id,action,entity_id,payload,created_at) values
+        ('operator',${actor},${eventId},'event_queue_approve',${String(ids[0])},'{}',now()-interval '1 minute'),
+        ('operator',${actor},${eventId},'event_queue_approve',${String(ids[1])},'{}',now()-interval '10 minutes'),
+        ('operator',${actor},${eventId},'event_queue_fair_admission',${String(ids[1])},'{"protectionTurns":1}',now()-interval '10 minutes')`;
+      const [pending]=await connection`insert into song_requests(event_id,song_id,event_participant_id,singer_name,display_name,status,position,requested_by) values(${eventId},${song},${members[2]},'New','New','pending',0,'operator') returning id::int`;ids.push(pending.id);
+      await apply(await action(ids.length-1,'approve'));const approved=(await snapshot()).items.filter(r=>r.status==='approved').sort((a,b)=>a.position-b.position);
+      expect(approved.map(r=>r.id)).toEqual([ids[0],ids[1],pending.id]);expect(approved[1].completedCount).toBe(2);expect(approved[2].fairInsertion?.constrained).toBe(true);
+    }finally{vi.unstubAllEnvs();}
   });
   it('rebases two independent placements and preserves contiguous positions',async()=>{
     const [a,b]=await Promise.all([operation(0,5),operation(1,3,2)]);

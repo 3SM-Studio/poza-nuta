@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useUiText } from "@/i18n/use-ui-text";
 import { localizeUiRecord } from "@/i18n/text";
 
@@ -295,6 +296,7 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
         {currentItem ? (
           <EventQueueRequestRow
             item={currentItem}
+            participantPath={`/dashboard/org/${organizationId}/events/${eventId}/participants`}
             unconfirmed={state.unconfirmedIds.includes(currentItem.id)}
             canManage={canMutate}
             canMoveUp={false}
@@ -324,7 +326,7 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
           if (dragEpoch === dragEpochRef.current) handlePlacement(requestId, placement);
         }}
         renderRow={(item, dragHandle, overlay) => <EventQueueRequestRow
-          item={item} isDragOverlay={overlay} dragHandle={dragHandle} unconfirmed={state.unconfirmedIds.includes(item.id)}
+          item={item} participantPath={`/dashboard/org/${organizationId}/events/${eventId}/participants`} isDragOverlay={overlay} dragHandle={dragHandle} unconfirmed={state.unconfirmedIds.includes(item.id)}
           canManage={canMutate && !overlay}
           canMoveUp={approvedItems.findIndex(row => row.id === item.id) > 0}
           canMoveDown={item.status === "approved" && approvedItems.findIndex(row => row.id === item.id) < approvedItems.length - 1}
@@ -371,6 +373,7 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
               <EventQueueRequestRow
                 key={item.id}
                 item={item}
+                participantPath={`/dashboard/org/${organizationId}/events/${eventId}/participants`}
                 unconfirmed={state.unconfirmedIds.includes(item.id)}
                 canManage={canMutate}
                 canMoveUp={false}
@@ -397,6 +400,7 @@ type EventQueueRequestRowProps = {
   dragHandle?: ReactNode;
   isDragOverlay?: boolean;
   unconfirmed?: boolean;
+  participantPath?:string;
   onAction: (
     requestId: number,
     action: DashboardEventQueueAction,
@@ -416,6 +420,7 @@ function EventQueueRequestRow({
   dragHandle,
   isDragOverlay = false,
   unconfirmed = false,
+  participantPath,
   onAction,
   onMove,
 }: EventQueueRequestRowProps) {
@@ -452,6 +457,14 @@ function EventQueueRequestRow({
             {item.requestedBy === "public" ? tx("Link sesji") : tx("Operator")}
           </Badge>
         </div>
+        {item.eventParticipantId&&item.completedCount!==null&&item.completedCount!==undefined?<p className="mt-1 text-xs text-muted-foreground">
+          {item.completedCount===0?tx("Pierwszy występ — brak potwierdzonych zakończeń"):tx("Zakończone występy: {v0}",{v0:item.completedCount})}
+          {participantPath?<Link className="ml-2 underline" href={`${participantPath}?participant=${item.eventParticipantId}`}>{tx("Historia uczestnika")}</Link>:null}
+        </p>:null}
+        {item.requestDisplayName&&item.requestDisplayName!==item.displayName?<p className="text-xs text-muted-foreground">{tx("Zgłoszono jako: {v0}",{v0:item.requestDisplayName})}</p>:null}
+        {item.fairInsertion?<details className="text-xs text-muted-foreground"><summary>{tx("Priorytet przy zatwierdzeniu")}</summary><p>{tx(item.fairInsertion.reason==='protected'?'Ochrona przed zbyt długim oczekiwaniem':item.fairInsertion.reason==='first'?'Pierwszy występ uczestnika':item.fairInsertion.reason==='separation'?'Rozdzielenie kolejnych występów tej samej osoby':'Priorytet rotacyjny')}</p>{item.fairInsertion.constrained?<p>{tx("Zachowano ręczną kolejność pozostałych zgłoszeń")}</p>:null}</details>:null}
+        {item.mergedProfile?<p className="text-xs text-muted-foreground">{tx("Połączona historia profili")}</p>:null}
+        {item.nicknameChanges?.length?<details className="text-xs text-muted-foreground"><summary>{tx("Zmiana nicku")}</summary>{item.nicknameChanges.map((change,index)=><p key={index}>{change.before} → {change.after} · {tx.date(change.at)}</p>)}</details>:null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <p className={"m-0 text-sm font-semibold leading-snug"}>{item.song.title}</p>
         </div>
@@ -502,7 +515,7 @@ function EventQueueRequestRow({
           ) : null}
 
           {actions.map((action) => {
-            if (action === "reject") {
+            if (action === "reject" || (action === "restore" && item.status === "now")) {
               return (
                 <AlertDialog key={action}>
                   <AlertDialogTrigger asChild>
@@ -511,29 +524,29 @@ function EventQueueRequestRow({
                       variant="destructive"
                       type="button"
                       className={`${destructiveButtonClassName} min-h-11 sm:min-h-7`}
-                      aria-label={`${tx(actionLabels[action])}: ${getQueueRequestLabel(item)}`}
+                      aria-label={`${tx(action==='restore'&&item.status==='now'?"Anuluj występ":actionLabels[action])}: ${getQueueRequestLabel(item)}`}
                     >
                       {getActionIcon(action)}
-                      {actionLabels[action]}
+                      {action==='restore'&&item.status==='now'?tx("Anuluj występ"):actionLabels[action]}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent data-management-theme="true">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>{tx("Odrzucić zgłoszenie?")}</AlertDialogTitle>
+                      <AlertDialogTitle>{tx(item.status==='now'?"Anulować rozpoczęty występ?":"Odrzucić zgłoszenie?")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {tx("Zgłoszenie zniknie z aktywnej kolejki. Można je później przywrócić.")}</AlertDialogDescription>
+                        {tx(item.status==='now'?"Występ wróci do oczekujących i nie zostanie zaliczony. Wcześniejsze wykonania pozostaną w historii.":"Zgłoszenie zniknie z aktywnej kolejki. Można je później przywrócić.")}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>{tx("Anuluj")}</AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"
                         className={`${destructiveButtonClassName} min-h-11 sm:min-h-7`}
-                        aria-label={`${tx(actionLabels[action])}: ${getQueueRequestLabel(item)}`}
+                        aria-label={`${tx(action==='restore'&&item.status==='now'?"Anuluj występ":actionLabels[action])}: ${getQueueRequestLabel(item)}`}
                         onClick={(event) =>
                           void onAction(item.id, action, event.detail === 0)
                         }
                       >
-                        {tx("Odrzuć zgłoszenie")}</AlertDialogAction>
+                        {tx(item.status==='now'?"Anuluj występ":"Odrzuć zgłoszenie")}</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -555,13 +568,13 @@ function EventQueueRequestRow({
                 }
                 type="button"
                 className="min-h-11 sm:min-h-7"
-                aria-label={`${tx(actionLabels[action])}: ${getQueueRequestLabel(item)}`}
+                aria-label={`${tx(action==='restore'&&item.status==='now'?"Anuluj występ":actionLabels[action])}: ${getQueueRequestLabel(item)}`}
                 onClick={(event) =>
                   void onAction(item.id, action, event.detail === 0)
                 }
               >
                 {getActionIcon(action)}
-                {actionLabels[action]}
+                {action==='restore'&&item.status==='now'?tx("Anuluj występ"):actionLabels[action]}
               </Button>
             );
           })}

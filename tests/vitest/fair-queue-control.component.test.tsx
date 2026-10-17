@@ -66,3 +66,9 @@ it("does not request a preview when access is disabled", () => {
   setup(true); expect(screen.getByRole("button", { name: "Ułóż sprawiedliwie" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Ułóż sprawiedliwie" })); expect(mocks.preview).not.toHaveBeenCalled();
 });
+
+it('explains protected priority without fabricating a missing approval timestamp',async()=>{
+ mocks.preview.mockResolvedValue({...proposal,engine:'rotation-v2',changes:[{...proposal.changes[0],decision:{reason:'protected',completed:4,allocated:0,ordinal:0,otherTurns:3,protectionTurns:3,waitingSince:null,round:4}}]});
+ setup();fireEvent.click(screen.getByRole('button',{name:'Ułóż sprawiedliwie'}));const dialog=await screen.findByRole('dialog');expect(await within(dialog).findByText('Ochrona przed zbyt długim oczekiwaniem')).toBeVisible();
+ expect(dialog).toHaveTextContent('Zakończone występy: 4');expect(dialog).toHaveTextContent('Cudze występy podczas oczekiwania: 3 / 3');expect(dialog).toHaveTextContent('Brak wiarygodnego czasu zatwierdzenia');expect(mocks.apply).not.toHaveBeenCalled();
+});

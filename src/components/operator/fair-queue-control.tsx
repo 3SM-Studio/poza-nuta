@@ -102,7 +102,10 @@ export function FairQueueControl({ organizationId, eventId, disabled, onApplied,
         <ol className="grid gap-2" aria-label={tx("Proponowana kolejność")}>
           {preview.changes.map(row => <li key={row.id} className="flex min-w-0 items-start gap-3 rounded-lg border p-3" data-fair-request-id={row.id}>
             <span className="shrink-0 tabular-nums" aria-label={tx("Pozycja {v0}, proponowana {v1}", {v0: row.from, v1: row.to})}>{row.from} → {row.to}</span>
-            <span className="min-w-0 break-words"><span className="block font-medium">{row.songTitle}</span><span className="text-sm text-muted-foreground">{row.displayName}</span></span>
+            <div className="min-w-0 break-words"><span className="block font-medium">{row.songTitle}</span><span className="text-sm text-muted-foreground">{row.displayName}</span>
+            {row.decision?<><p className="mt-1 text-xs text-muted-foreground">{tx(row.decision.reason==='protected'?'Ochrona przed zbyt długim oczekiwaniem':row.decision.reason==='first'?'Pierwszy występ uczestnika':row.decision.reason==='separation'?'Rozdzielenie kolejnych występów tej samej osoby':'Priorytet rotacyjny')}</p>
+            <details className="text-xs"><summary>{tx("Szczegóły decyzji")}</summary><p>{tx("Zakończone występy: {v0}",{v0:row.decision.completed})}</p><p>{tx("Cudze występy podczas oczekiwania: {v0} / {v1}",{v0:row.decision.otherTurns,v1:row.decision.protectionTurns})}</p>{row.decision.waitingSince!==null?<p>{tx("Zatwierdzono: {v0}",{v0:tx.date(row.decision.waitingSince)})}</p>:<p>{tx("Brak wiarygodnego czasu zatwierdzenia")}</p>}</details></>:null}
+            </div>
           </li>)}
         </ol>
       </> : null}

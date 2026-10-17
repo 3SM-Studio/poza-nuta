@@ -11,6 +11,10 @@ export type FairQueueRequest = Readonly<{
   waitingSince: number | null;
   startedAt: number | null;
   completedAt: number | null;
+  confirmedCompletions?: readonly number[];
+  confirmedCompletionCount?: number;
+  historyObservedAt?: number|null;
+  protectionTurns?: number;
 }>;
 
 export type FairQueuePriority = {

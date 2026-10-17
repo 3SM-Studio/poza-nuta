@@ -1,10 +1,13 @@
 import "server-only";
+import {performanceHistory} from "../performance-history";
 
 import { createHash } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { eventParticipants, operatorAuditLog, songRequests } from "../../db/schema";
 import type { getDb } from "../db";
 import type { FairQueueRequest } from "../fair-queue";
+import {admissionBudget} from "../fair-queue-v2";
+import {fairEngine} from "../fair-queue-engine";
 import { OperatorApiError } from "./errors";
 
 type Transaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
@@ -18,18 +21,24 @@ export async function loadFairQueueSnapshot(transaction: Transaction, eventId: n
   }).from(songRequests).leftJoin(eventParticipants, eq(eventParticipants.id, songRequests.eventParticipantId))
     .where(eq(songRequests.eventId, eventId)).orderBy(asc(songRequests.id));
   const audits = await transaction.select({ id: operatorAuditLog.id, action: operatorAuditLog.action,
-    entityId: operatorAuditLog.entityId, createdAt: operatorAuditLog.createdAt }).from(operatorAuditLog)
-    .where(and(eq(operatorAuditLog.eventId, eventId), sql`${operatorAuditLog.action} in ('event_queue_approve', 'event_queue_fair_sort', 'event_queue_fair_anchor')`))
+    entityId: operatorAuditLog.entityId, payload:operatorAuditLog.payload, createdAt: operatorAuditLog.createdAt }).from(operatorAuditLog)
+    .where(and(eq(operatorAuditLog.eventId, eventId), sql`${operatorAuditLog.action} in ('event_queue_approve', 'event_queue_fair_sort', 'event_queue_fair_anchor','event_queue_fair_admission','event_queue_performance_completed','event_queue_performance_cancelled','event_queue_done','event_queue_start','event_queue_restore')`))
     .orderBy(asc(operatorAuditLog.id));
   const approvals = new Map<string, number>();
   const anchors = new Map<string, number>();
   let sortRevision = 0;
+  const budgets=new Map<string,number>();
   for (const audit of audits) {
     if (audit.action === "event_queue_approve" && audit.entityId !== null) approvals.set(audit.entityId, audit.createdAt.getTime());
     if (audit.action === "event_queue_fair_anchor" && audit.entityId !== null) anchors.set(audit.entityId, audit.createdAt.getTime());
+    if(audit.entityId!==null&&audit.action==='event_queue_fair_admission'){
+      const turns=audit.payload?.protectionTurns;if(typeof turns==='number'&&Number.isSafeInteger(turns)&&turns>0)budgets.set(audit.entityId,turns);
+    }
     if (audit.action === "event_queue_fair_sort") sortRevision = audit.id;
   }
+  const history=performanceHistory(rows.map(r=>({...r,completedAt:r.completedAt?.getTime()??null})),audits.map(a=>({...a,createdAt:a.createdAt.getTime()})));
   const requests: FairQueueRequest[] = rows.map(row => ({
+    confirmedCompletions:history.get(row.id)?.times, confirmedCompletionCount:history.get(row.id)?.count, historyObservedAt:history.get(row.id)?.observedAt, protectionTurns:budgets.get(String(row.id)),
     id: row.id, participantId: row.mergedIntoId ?? row.participantId,
     status: row.status, position: row.position, createdAt: row.createdAt.getTime(),
     startedAt: row.startedAt?.getTime() ?? null, completedAt: row.completedAt?.getTime() ?? null,
@@ -38,7 +47,8 @@ export async function loadFairQueueSnapshot(transaction: Transaction, eventId: n
     waitingSince: newlyApproved?.id === row.id ? newlyApproved.at.getTime() :
       approvals.get(String(row.id)) ?? anchors.get(String(row.id)) ?? null,
   }));
-  const revision = createHash("sha256").update(JSON.stringify({ engine: 1, eventId, sortRevision,
+  if(newlyApproved){const target=requests.find(r=>r.id===newlyApproved.id);if(target){const index=requests.indexOf(target);requests[index]={...target,protectionTurns:admissionBudget(requests,target.id)};}}
+  const revision = createHash("sha256").update(JSON.stringify({ engine: fairEngine(), eventId, sortRevision,
     requests: requests.map((row, index) => ({ ...row, version: rows[index].version })),
   })).digest("hex");
   return { requests, revision };
@@ -64,6 +74,10 @@ export async function writeApprovedOrder(transaction: Transaction, eventId: numb
 // Unknown approval history must never grant waiting credit for time spent
 // pending. Record an explicit server observation on the next queue write.
 export async function anchorLegacyApprovedRequests(transaction: Transaction, eventId: number, snapshot: readonly FairQueueRequest[], changedAt: Date, operatorId: number) {
+  const unbudgeted=snapshot.filter(row=>row.status==='approved'&&row.protectionTurns===undefined);
+  if(unbudgeted.length)await transaction.insert(operatorAuditLog).values(unbudgeted.map(row=>({actorKind:'operator' as const,operatorId,eventId,
+    action:'event_queue_fair_admission',entityId:String(row.id),createdAt:changedAt,payload:{reason:'observed_legacy_admission',protectionTurns:admissionBudget(snapshot,row.id)},
+  })));
   const missing = snapshot.filter(row => row.status === "approved" && row.waitingSince === null);
   if (missing.length) await transaction.insert(operatorAuditLog).values(missing.map(row => ({
     actorKind: "operator" as const, operatorId, eventId, action: "event_queue_fair_anchor",

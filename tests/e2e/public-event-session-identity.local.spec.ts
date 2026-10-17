@@ -2045,9 +2045,9 @@ test.describe("Enterprise DnD contract", () => {
       await touch('touchMove',t.x+t.width/2,t.y+t.height-5);
       await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','4');
       await touch('touchEnd'); await expect.poll(async()=>(await fixture.readQueueRows()).find(row=>row.displayName==='Drag 1')!.position).toBe(4);
-      await page.reload(); await expect(approved.locator('[data-queue-request-id]').nth(3)).toContainText('Drag 1');
+      await page.reload(); await expect(page.locator('[data-queue-sync-state]:visible')).toHaveAttribute('data-queue-sync-state','synced'); await expect(approved.locator('[data-queue-request-id]').nth(3)).toContainText('Drag 1');
       for(const viewport of [{width:768,height:1024},{width:1024,height:768}]){
-        await page.setViewportSize(viewport); await expect(page.locator('[data-queue-board]')).toBeVisible();
+        await page.setViewportSize(viewport); await expect(page.locator('[data-queue-board]:visible')).toHaveCount(1); await expect(page.locator('[data-queue-board]:visible')).toBeVisible();
         expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
       }
       await page.emulateMedia({reducedMotion:'reduce'}); await page.setViewportSize({width:390,height:844});

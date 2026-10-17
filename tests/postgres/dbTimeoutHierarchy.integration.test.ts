@@ -79,6 +79,7 @@ test("a contended public mutation fails with PostgreSQL lock timeout before the 
     await applyPostgresMigrations(observer, 24);
     await applyPostgresMigration(observer, 30);
     await applyPostgresMigration(observer, 32);
+    await applyPostgresMigration(observer, 33);
     const fixture = await seedPublicSessionFixture(observer);
     process.env.DATABASE_URL = `postgres://postgres:${encodeURIComponent(harness.password)}@${harness.host}:${harness.port}/postgres`;
     const { getDb } = await import("../../src/server/db.ts");

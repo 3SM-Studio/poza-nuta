@@ -33,8 +33,8 @@ export function EventParticipantsPanel({ organizationId, eventId, initialData }:
   const base = participantApiPath(organizationId, eventId);
   const [data, setData] = useState(initialData);
   const [filter, setFilter] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selectedIdRef = useRef<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number|null>(null);
+  const selectedIdRef=useRef<number|null>(null);
   const [detail, setDetail] = useState<EventParticipantDetail | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -79,6 +79,8 @@ export function EventParticipantsPanel({ organizationId, eventId, initialData }:
 
   useEffect(() => {
     const controller = new AbortController();
+    const initialId=Number(new URLSearchParams(window.location.search).get('participant'));
+    if(Number.isSafeInteger(initialId)&&initialId>0){selectedIdRef.current=initialId;queueMicrotask(()=>{if(!controller.signal.aborted){setSelectedId(initialId);void refresh(controller.signal);}});}
     const onFocus = () => void refresh(controller.signal);
     window.addEventListener("focus", onFocus);
     return () => { generation.current += 1; controller.abort(); window.removeEventListener("focus", onFocus); };
@@ -206,7 +208,7 @@ export function EventParticipantsPanel({ organizationId, eventId, initialData }:
                 <Button variant={item.id === selectedId ? "secondary" : "outline"} className="h-auto w-full flex-col items-start gap-1 whitespace-normal py-3 text-left" aria-label={tx("Wybierz uczestnika: {v0}", {v0: item.displayName})} aria-pressed={item.id === selectedId} disabled={isAdding} onClick={() => selectParticipant(item.id)}>
                   <span className="break-all">{item.displayName}</span><span className="text-sm">{tx("Aktywne: ")}{item.activeCount}/{PARTICIPANT_ACTIVE_REQUEST_LIMIT} {tx(" · Zakończone występy: ")}{item.completedCount}</span>
                   <Badge variant={item.online && !presenceStale ? "secondary" : "outline"} data-participant-presence={presenceStale ? "checking" : item.online ? "online" : "offline"}>{presenceStale ? tx("Sprawdzanie obecności…") : item.online ? tx("Online") : tx("Offline")}</Badge>
-                  {!item.hasPerformed ? <Badge variant="outline">{tx("Jeszcze nie śpiewał(a)")}</Badge> : null}
+                  {item.completedCount===0 ? <Badge variant="outline">{tx("Pierwszy występ — brak potwierdzonych zakończeń")}</Badge> : null}
                 </Button>
               </li>)}</ul>
             )}
@@ -227,8 +229,9 @@ export function EventParticipantsPanel({ organizationId, eventId, initialData }:
             </section> : null}
             {actionError ? <Alert variant="destructive"><AlertTitle>{tx("Nie udało się wykonać operacji")}</AlertTitle><AlertDescription>{tx(actionError)}</AlertDescription></Alert> : null}
             {detail ? <section aria-labelledby="participant-history"><h3 id="participant-history" className="font-semibold">{tx("Zgłoszenia i historia")}</h3>
-              <p className="my-2 text-sm text-muted-foreground">{tx("Zakończone występy to zgłoszenia ze statusem „Zagrane”. Cofnięcie do kolejki zmniejsza ten licznik.")}</p>
-              {detail.requests.length === 0 ? <p className="text-sm">{tx("Ta osoba nie ma jeszcze zgłoszeń.")}</p> : <ul className="flex flex-col gap-3">{detail.requests.map((request) => <li key={request.id} className="min-w-0 rounded-md border p-3"><RequestStatusBadge status={request.status} /><p className="mt-2 break-words font-medium">{request.title} · {request.artist}</p><p className="mt-1 text-sm text-muted-foreground">{request.requestedBy === "operator" ? tx("Dodane przez operatora") : tx("Dodane przez uczestnika")} · {tx.date(request.createdAt)}</p></li>)}</ul>}
+              <p className="my-2 text-sm text-muted-foreground">{tx("Licznik obejmuje potwierdzone zakończone występy. Przywrócenie zgłoszenia nie usuwa wykonania z historii.")}</p>
+              {detail.participant.nicknameChanges?.length?<details className="mb-3 text-sm"><summary>{tx("Zmiana nicku")}</summary>{detail.participant.nicknameChanges.map((change,index)=><p key={index}>{change.before} → {change.after} · {tx.date(change.at)}</p>)}</details>:null}
+              {detail.requests.length === 0 ? <p className="text-sm">{tx("Ta osoba nie ma jeszcze zgłoszeń.")}</p> : <ul className="flex flex-col gap-3">{detail.requests.map((request) => <li key={request.id} className="min-w-0 rounded-md border p-3"><RequestStatusBadge status={request.status} />{request.requestDisplayName&&request.requestDisplayName!==detail.participant.displayName?<p className="text-xs text-muted-foreground">{tx("Zgłoszono jako: {v0}",{v0:request.requestDisplayName})}</p>:null}<p className="mt-2 break-words font-medium">{request.title} · {request.artist}</p><p className="mt-1 text-sm text-muted-foreground">{request.requestedBy === "operator" ? tx("Dodane przez operatora") : tx("Dodane przez uczestnika")} · {tx.date(request.createdAt)}</p></li>)}</ul>}
             </section> : null}
             <Button variant="outline" asChild><Link href={getDashboardOrganizationEventQueuePath(organizationId, eventId)}>{tx("Przejdź do kolejki")}</Link></Button>
           </CardContent></Card>
