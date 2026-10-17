@@ -1,0 +1,241 @@
+{
+  "auditDate": "2026-10-18 Europe/Warsaw",
+  "candidateBase": "372a9b9869a0f9df905142862352968c66160ef1",
+  "decision": "NO-GO for production execution",
+  "ancestryVerified": [
+    "721a1dd",
+    "703c145",
+    "437a4c0",
+    "9c5d86d",
+    "73bf9d0",
+    "372a9b9"
+  ],
+  "production": {
+    "captureUtc": "2026-10-17T22:37:36.739Z",
+    "supabaseRef": "qwmimnhdnzqfckswxjww",
+    "postgresVersion": "170006",
+    "transactionReadOnly": "on",
+    "clientToPoolerTlsCertificateValidated": true,
+    "poolerDatabaseBackendSslReported": false,
+    "journalCount": 32,
+    "migrationMismatches": [],
+    "pendingAtRead": [
+      "0032_queue_collaboration",
+      "0033_participant_presentation",
+      "0034_song_search_fuzzy_distance"
+    ],
+    "catalog": {
+      "songs": 92014,
+      "documents": 92014,
+      "missing": 0
+    },
+    "storageBuckets": 0,
+    "storageObjects": 0,
+    "businessTablesWithBrowserDmlOrWithoutRls": [],
+    "currentSourceWrites": 0
+  },
+  "vercel": {
+    "capturedForAuditDate": "2026-10-18",
+    "deployment": {
+      "id": "dpl_2HM5HjWHffVM7zH76BUMngXbx85V",
+      "sha": "703c145dc21a2b1eb58370a93058402ffbb4f48b",
+      "state": "READY",
+      "target": "production",
+      "regions": [
+        "iad1"
+      ]
+    },
+    "project": {
+      "name": "pozanuta",
+      "id": "prj_PO0LSVlkKWTv2TYRPflrrDWpVdU3",
+      "nodeVersion": "24.x",
+      "framework": "nextjs"
+    },
+    "environmentNames": [
+      {
+        "key": "SONG_SEARCH_ENGINE",
+        "type": "plain"
+      },
+      {
+        "key": "SITE_URL",
+        "type": "encrypted"
+      },
+      {
+        "key": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        "type": "sensitive"
+      },
+      {
+        "key": "NEXT_PUBLIC_SUPABASE_URL",
+        "type": "sensitive"
+      },
+      {
+        "key": "DATABASE_URL",
+        "type": "sensitive"
+      }
+    ],
+    "engine": "unicode-v2",
+    "siteUrl": {
+      "key": "SITE_URL",
+      "matchesCanonical": true,
+      "readable": true
+    },
+    "secretValuesStored": false
+  },
+  "supabaseMetadata": {
+    "status": "read",
+    "matchingProjects": [
+      {
+        "id": "qwmimnhdnzqfckswxjww",
+        "name": "poza-nuta-development",
+        "region": "eu-central-1",
+        "status": "ACTIVE_HEALTHY"
+      }
+    ]
+  },
+  "edgeFunctions": {
+    "capturedUtc": "2026-10-17T22:58:25.639548+00:00",
+    "projectRef": "qwmimnhdnzqfckswxjww",
+    "status": "read",
+    "functionCount": 0,
+    "sourceDownloaded": false
+  },
+  "migrationWindow": {
+    "startedUtc": "2026-10-17T22:52:44.595Z",
+    "synthetic": true,
+    "cpuQuota": 2,
+    "productionWrites": 0,
+    "interruptedSecondPhase": "expected fault rolled back index and history; 0032/0033 remained; retry of original files succeeded",
+    "results": [
+      {
+        "mode": "combined",
+        "phases": [
+          {
+            "name": "all",
+            "wallMs": 2000.1157999999996,
+            "queueExclusiveSamples": 127,
+            "catalogShareSamples": 125
+          }
+        ],
+        "trafficWrites": 14,
+        "maxTrafficMs": 1969.8062999999966
+      },
+      {
+        "mode": "split",
+        "phases": [
+          {
+            "name": "queue-schema",
+            "wallMs": 171.0005999999994,
+            "queueExclusiveSamples": 3,
+            "catalogShareSamples": 0
+          },
+          {
+            "name": "index-and-policy",
+            "wallMs": 1894.393200000006,
+            "queueExclusiveSamples": 0,
+            "catalogShareSamples": 120
+          }
+        ],
+        "trafficWrites": 261,
+        "maxTrafficMs": 107.07140000000072
+      }
+    ],
+    "status": "PASS",
+    "finishedUtc": "2026-10-17T22:54:07.781Z"
+  },
+  "backup": {
+    "createdUtc": "2026-10-16T17:13:27.910Z",
+    "coreArtifactsAuthenticatedAndChecksumsVerified": 6,
+    "keyDpapiUnwrapSucceeded": true,
+    "historicalRestore": {
+      "verifiedUtc": "2026-10-16T17:21:08.968Z",
+      "projectRef": "qwmimnhdnzqfckswxjww",
+      "databaseRestoreVerified": true,
+      "network": "none",
+      "publishedPorts": 0,
+      "tableCount": 68,
+      "tableCountAndDigestMismatches": 0,
+      "constraintsMatched": 242,
+      "checksCanonicalizedAndVerifiedByServer": 4,
+      "requiredRolesPresent": 33,
+      "roleAttributesMatched": true,
+      "privileges": {
+        "authenticatedHasSchema": true,
+        "authUsers": 1,
+        "journalEntries": 28,
+        "sourceReads": 92014,
+        "pgVersion": "170006"
+      },
+      "sourceWrites": 0,
+      "limitations": [
+        "Windows DPAPI recovery requires this Windows account/machine or separate owner-controlled key escrow. Do not delete key.dpapi.",
+        "Provider-managed role passwords excluded; retain/reset credentials only through authorized recovery.",
+        "Cloud project Auth settings, OAuth providers, signing/encryption keys and custom SMTP are not part of pg_dump; same-project recovery retains provider configuration.",
+        "No Storage objects exist in this snapshot. This is not an object-file backup."
+      ]
+    },
+    "unchangedFilesVerified": 40,
+    "freshBackupAndRestoreRequired": true,
+    "newBackupPerformed": false,
+    "freshAcl": {
+      "unexpectedPrincipals": 0,
+      "allowEntryCount": 2,
+      "inheritanceDisabled": true
+    }
+  },
+  "newMigration": "0035_dashboard_queue_channel_scope",
+  "historicalChecks": {
+    "date": "2026-10-17",
+    "node": 430,
+    "vitest": 721,
+    "postgres17": 96,
+    "browser": 32,
+    "evidenceHashesMatchedBeforeNewRun": 17,
+    "source": "docs/features/production-search-reliability-files.json"
+  },
+  "freshChecks": {
+    "node": 430,
+    "vitest": 721,
+    "newPostgres17": 2,
+    "collaborationPostgres17Through0035": 22,
+    "targetedBrowser": 1,
+    "fullBrowser": 33,
+    "typecheck": "PASS",
+    "lint": "PASS, exit 0 after cleanup",
+    "build": "PASS in isolated optimized launcher",
+    "diffCheck": "PASS",
+    "browserDurationMinutes": 12.1
+  },
+  "remoteMutations": false,
+  "push": false,
+  "deployment": false,
+  "commitCreated": false,
+  "browserSecurity": {
+    "utc": "2026-10-17T23:14:34.077Z",
+    "localOnly": true,
+    "physicalDevice": false,
+    "before": {
+      "crossOrganizationJoin": "SUBSCRIBED",
+      "observedPayloadKeys": [
+        "changedAt",
+        "eventId",
+        "id",
+        "operation",
+        "revision",
+        "type"
+      ],
+      "piiInPayload": false
+    },
+    "cachedAuthorizationPersistsUntilRejoin": true,
+    "after": {
+      "crossOrganizationJoin": "CHANNEL_ERROR",
+      "anonymousDashboard": "CHANNEL_ERROR",
+      "ownQueue": "SUBSCRIBED",
+      "ownParticipants": "SUBSCRIBED",
+      "publicQueue": "SUBSCRIBED",
+      "crossOrganizationApi": 404,
+      "forgedBroadcastResult": "timed out",
+      "forgedPayloadObserved": false
+    }
+  },
+  "completedLocalVerificationUtc": "2026-10-17T23:17:04.017427+00:00"
+}

@@ -19,7 +19,7 @@ const registry=globalThis as typeof globalThis & {pozaNutaDatabase?:ReturnType<t
 
 beforeAll(async()=>{
   harness=await startPostgresTestHarness('kunestu-collaboration');connection=createPostgresTestClient(harness,'postgres',8);
-  await installPostgresCompatibilityFixture(connection);await applyPostgresMigrations(connection,33);
+  await installPostgresCompatibilityFixture(connection);await applyPostgresMigrations(connection,35);
   registry.pozaNutaDatabase=drizzle({client:connection,schema});
   service=await import('../../src/server/operator-api/queue-sync');legacy=await import('../../src/server/operator-api/event-queue');fair=await import('../../src/server/operator-api/fair-queue');
   [workspace]= (await connection`insert into workspaces(name,handle,public_id) values('Collaboration','collaboration',${organizationId}) returning id::int`).map(x=>x.id);

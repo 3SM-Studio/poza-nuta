@@ -246,6 +246,13 @@
       "when": 1792270966202,
       "tag": "0034_song_search_fuzzy_distance",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792277314482,
+      "tag": "0035_dashboard_queue_channel_scope",
+      "breakpoints": true
     }
   ]
 }

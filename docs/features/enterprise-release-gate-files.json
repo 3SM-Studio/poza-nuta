@@ -1,0 +1,77 @@
+{
+  "auditDate": "2026-10-18 Europe/Warsaw",
+  "base": "372a9b9869a0f9df905142862352968c66160ef1",
+  "branch": "michal-szwindowski/kunestu-search-reliability",
+  "files": [
+    "docs/features/enterprise-production-release-security-gate.md",
+    "docs/features/enterprise-release-gate-evidence.json",
+    "docs/features/enterprise-release-gate-files.json",
+    "docs/runbooks/enterprise-production-release.md",
+    "drizzle/0035_dashboard_queue_channel_scope.sql",
+    "drizzle/meta/0035_snapshot.json",
+    "drizzle/meta/_journal.json",
+    "playwright.local-supabase.config.ts",
+    "tests/e2e/realtime-scope.local.spec.ts",
+    "tests/postgres/queueCollaboration.integration.test.ts",
+    "tests/postgres/realtimeQueueScope.integration.test.ts",
+    "tests/postgres/releaseMigrationWindow.integration.test.ts",
+    "vitest.release-gate.config.ts"
+  ],
+  "fileCount": 13,
+  "sha256": {
+    "docs/features/enterprise-production-release-security-gate.md": "60db0e31db6fc47d4058c70a5e14d13d2fa3bdbcf89cd48bd760cff3c56ae5fc",
+    "docs/features/enterprise-release-gate-evidence.json": "57a79eef96bae95c943522c5429be8e7d86bd3faeeee9fc2d91974f5bd93f165",
+    "docs/runbooks/enterprise-production-release.md": "29ffbb32a63b82102f65e4e976a03d26fee40a03fa17285d518edb82b05cb021",
+    "drizzle/0035_dashboard_queue_channel_scope.sql": "a8a20a3f3e8c9b3a72ac329ae2deb917277a7e88573b0cc572bf711f92775590",
+    "drizzle/meta/0035_snapshot.json": "2e7783e5047690548911a06869ee033e4c918591363f58a999c4372ff06b6712",
+    "drizzle/meta/_journal.json": "e70f263e7c7d41fbb4469e85082b54b242a2c42dc989b96c7931fd4e85017690",
+    "playwright.local-supabase.config.ts": "1c0ad2183dc75f80b16827cec28009b188533297de56576aca5932ea3b6c3e86",
+    "tests/e2e/realtime-scope.local.spec.ts": "14e2c13cbac764439f8363bf36b5e1a52c1799e405d1beca05becf0f74a057d3",
+    "tests/postgres/queueCollaboration.integration.test.ts": "6bedd696c4c669a8968084108fe2d3c80d24837fa01682cb461e0e30424bbaa7",
+    "tests/postgres/realtimeQueueScope.integration.test.ts": "f1f4daf22ed7cd1f543c96a9752f0fac5a19cf4b9605a3b14bc2b36244cd42af",
+    "tests/postgres/releaseMigrationWindow.integration.test.ts": "4b3f2309e4ed0040ff12ab7ba5673616ca013282d50d57b9fa64ac7a5ba8021e",
+    "vitest.release-gate.config.ts": "b19b74b6ba10ad8a2192e500030e436c08fa1f929cd99c4fd494ec8da9e195ac"
+  },
+  "selfHashExcluded": true,
+  "localEvidenceSha256": {
+    ".artifacts/release-gate-production-readonly.json": "97732be747e9458db285d87536db354d4e35148770694f677b0eefa4f2d5b92f",
+    ".artifacts/release-gate-rehearsal.json": "390070d962d6454f6c0ac4a24f5b7c861e5e03f0441010f85f5088f2712b6faa",
+    ".artifacts/release-gate-policy-proof.json": "d0f3f5e9361bfd948b8a45d47fdd1dbc5e3dd0f72710a11bcc63445f24502ce5",
+    ".artifacts/release-gate-backup-readonly-baseline.json": "213f799d409e046faac65eef73596ba98d64675451719b5f480aa9e013611df0",
+    ".artifacts/release-gate-backup-acl.json": "e7a0cf08876d0e1296524e9d6a7e734af2616cd2eca51f8785c375b337b60304",
+    ".artifacts/release-gate-vercel-sanitized.json": "05f0adf083fcdd3530c744fc2b0274f0964072d99add71b38df119763f7463ca",
+    ".artifacts/release-gate-supabase-metadata.json": "43898716577ded3b7370d6726d144a09330c876722538779bb2a24ba02c0ccec",
+    ".artifacts/release-gate-edge-functions.json": "d125f2bc80b193f4ef798b36566707b2e1b7f05abd28ff9acddb80d9864c13a8",
+    ".artifacts/release-gate-migration-window.json": "2fa6c4bd691da3e51cf89fd0ef0d353d66fc5ee3022988caf908c228f7d5412f",
+    ".artifacts/release-gate-postgres-final.log": "3a1c60c45d16090349d43cf1b42578b686a137ba5b87e5ee055c437ff838dca7",
+    ".artifacts/release-gate-collaboration-postgres.log": "f8a970d0f1a6ee8d4a0b0749a7e2288c83a8cbe9e3a0a51cc6a93f67248b74c9",
+    ".artifacts/release-gate-realtime-browser.json": "624641339b6d0d57672ed28b5aefd9639a7f27e3194ceaaf427501d3ab0fd6c1",
+    ".artifacts/release-gate-browser-final.log": "9e1fe718c525628720290c203c75da28416815df15ada8857b97e93c1959e48c",
+    ".artifacts/release-gate-typecheck-final.log": "d66548006c5c7c54f315f252a8864713f539323f6c6187c23bb7db83274361fa",
+    ".artifacts/release-gate-lint-final.log": "cc5a0b39c7052d24c24888403c48018b4fcccc9d799f81be6c9c30c9e19c85fc",
+    ".artifacts/release-gate-test.log": "647e47e548a235a33ee07c7a306b44576c6cc59bf15c26a305728555efe8d8cc",
+    ".artifacts/release-gate-prior-evidence-index.json": "faa9c53daee9cd47e87afe7209af885139e16e7456b01d6fa10d485d73d20178"
+  },
+  "protectedOriginalSha256": {
+    "C:\\Projects\\pozanuta-stage-1\\.codex\\config.toml": "b3129521d573035ce05bc8ae85086fe3f3a25093fc26e69d9c72b440f4c4291b",
+    "C:\\Projects\\pozanuta-stage-1\\docs\\features\\kunestu-production-readiness.md": "49e74b1ed9ca42b0d3fb578fb19f2a3348393a35558fe8e31bca3393ff728b62"
+  },
+  "existingBackupFilesUnchanged": 40,
+  "secretScan": {
+    "highConfidenceFindings": 0,
+    "scope": "current allowlisted task files, not entire Git history"
+  },
+  "commitCreated": false,
+  "productionMutations": false,
+  "deployment": false,
+  "push": false,
+  "decision": "NO-GO for production execution; local security correction verified",
+  "preCommitLineEndingNormalization": {
+    "reason": "cached diff check detects CRLF as trailing whitespace",
+    "files": [
+      "docs/features/enterprise-release-gate-evidence.json",
+      "docs/features/enterprise-release-gate-files.json"
+    ],
+    "semanticsChanged": false
+  }
+}
