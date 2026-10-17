@@ -12,7 +12,7 @@ const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${appPort}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: /(?:public-event-session-identity|theme-runtime)\.local\.spec\.ts/,
+  testMatch: /(?:public-event-session-identity|theme-runtime|queue-collaboration)\.local\.spec\.ts/,
   timeout: 90_000,
   expect: {
     timeout: 15_000,

@@ -22,9 +22,11 @@ export function useQueueRealtime({
   audience,
   identity,
   onInvalidate,
+  getRevision,
 }: {
   audience: QueueRealtimeAudience;
   identity: number | string | null | undefined;
+  getRevision?: () => string;
   onInvalidate: (
     reason: QueueRealtimeInvalidateReason,
     signal: AbortSignal,
@@ -38,10 +40,12 @@ export function useQueueRealtime({
     status: "connecting",
   });
   const onInvalidateRef = useRef(onInvalidate);
+  const revisionRef = useRef(getRevision);
 
   useEffect(() => {
     onInvalidateRef.current = onInvalidate;
-  }, [onInvalidate]);
+    revisionRef.current = getRevision;
+  }, [onInvalidate, getRevision]);
 
   useEffect(() => {
     if (!identity) {
@@ -61,6 +65,7 @@ export function useQueueRealtime({
     let refreshInFlight = false;
     let refreshQueued: QueueRealtimeInvalidateReason | null = null;
     let refreshController: AbortController | null = null;
+    let advertisedRevision = -1n;
     let channel:
       | ReturnType<ReturnType<typeof createClient>["channel"]>
       | undefined;
@@ -85,6 +90,8 @@ export function useQueueRealtime({
         .finally(() => {
           refreshInFlight = false;
           refreshController = null;
+          // Only API snapshots establish a trusted watermark, never broadcasts.
+          advertisedRevision = BigInt(revisionRef.current?.() ?? '0');
 
           if (active && refreshQueued) {
             const queuedReason = refreshQueued;
@@ -121,6 +128,13 @@ export function useQueueRealtime({
               : getPublicQueueRealtimeInvalidateReason(message.payload);
 
           if (active && reason) {
+            if (audience === 'dashboard' && revisionRef.current && typeof message.payload?.revision === 'string') {
+              const revision=BigInt(message.payload.revision), known=BigInt(revisionRef.current());
+              if (revision<=known || (refreshInFlight && revision<=advertisedRevision)) return;
+              advertisedRevision=revision;
+              invalidate(revision>known+1n ? 'reconnect' : reason);
+              return;
+            }
             invalidate(reason);
           }
         })

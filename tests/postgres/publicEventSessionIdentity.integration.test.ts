@@ -112,6 +112,7 @@ for (const image of images) {
         closed_at = clock_timestamp(), close_reason = 'manual'`;
       await applyPostgresMigration(sql, 27);
       await applyPostgresMigration(sql, 30);
+    await applyPostgresMigration(sql, 32);
       for (const event of lifecycle) {
         await sql`update public.events set status = ${event.status}, starts_at = ${event.starts_at},
           auto_close_at = ${event.auto_close_at}, ends_at = ${event.ends_at}, closed_at = ${event.closed_at},

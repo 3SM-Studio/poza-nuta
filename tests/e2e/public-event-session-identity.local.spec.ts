@@ -1,3 +1,4 @@
+import {createQueueOperation} from '../../src/lib/queue-collaboration';
 import { expect, test } from "@playwright/test";
 
 import {
@@ -41,7 +42,7 @@ test.describe("Fair Queue with local Supabase Auth", () => {
     const requestRow = (name: string, title: string) => dashboard.locator("[data-queue-request-id]").filter({ hasText: name }).filter({ hasText: title });
     const action = async (name: string, title: string, label: string) => {
       const saved = dashboard.waitForResponse(response => new URL(response.url()).pathname.startsWith(apiPath) &&
-        new URL(response.url()).pathname.endsWith("/action") && response.request().method() === "POST" && response.status() === 200);
+        new URL(response.url()).pathname.endsWith("/sync") && response.request().method() === "POST" && response.status() === 200);
       await requestRow(name, title).getByRole("button", { name: new RegExp(`^${label}`) }).click();
       await saved;
       await expect(dashboard.getByText("Trwa zapis…", { exact: true })).toHaveCount(0);
@@ -69,7 +70,7 @@ test.describe("Fair Queue with local Supabase Auth", () => {
       await expect.poll(fairNames).toEqual(["Fair E2E C", "Fair E2E A", "Fair E2E B", "Fair E2E A"]);
       // Use the shared scroll-aware pointer helper; A has two distinct songs.
       await dashboard.setViewportSize({ width: 1440, height: 1800 });
-      const moved = dashboard.waitForResponse(response => new URL(response.url()).pathname.startsWith(apiPath) && new URL(response.url()).pathname.endsWith("/placement") && response.status() === 200);
+      const moved = dashboard.waitForResponse(response => new URL(response.url()).pathname.startsWith(apiPath) && new URL(response.url()).pathname.endsWith("/sync") && response.request().method() === "POST" && response.status() === 200);
       await dragQueueRequest({ page: dashboard, sourceLane: "approved", requestName: "Fair E2E A",
         requestTitle: "E2E Second Song", targetLane: "approved", targetRequestName: "Fair E2E C" });
       await moved;
@@ -89,9 +90,7 @@ test.describe("Fair Queue with local Supabase Auth", () => {
       await expect(dialog.getByRole("button", { name: "Zastosuj kolejność" })).toBeEnabled();
       expect(await dashboard.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       // A real concurrent operator write invalidates the displayed revision.
-      const concurrent = await dashboardContext.request.post(`${apiPath}/requests/${afterInsert[0].requestId}/move`, {
-        headers: { origin: new URL(dashboard.url()).origin }, data: { targetPosition: 5 },
-      });
+      const concurrent = await postSemanticMove(dashboard,apiPath,afterInsert[0].requestId,5);
       expect(concurrent.status()).toBe(200);
       await dialog.getByRole("button", { name: "Zastosuj kolejność" }).click();
       await expect(dialog.getByRole("alert")).toContainText("Kolejka zmieniła się od podglądu");
@@ -357,7 +356,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
       await signInLocalOperator(dashboardPage, fixture);
 
       const queuePath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
-      const dashboardQueueApiPath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+      const dashboardQueueApiPath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue/sync`;
       const participantQueueApiPath = `/api/s/${fixture.publicToken}/queue`;
       const participantRequestsApiPath = `/api/s/${fixture.publicToken}/requests/mine`;
       const dashboardRealtimeConnection = dashboardPage.waitForEvent(
@@ -548,7 +547,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
         const row = queue.locator("[data-queue-request-id]").filter({ hasText: name }).filter({ hasText: title });
         for (const label of [/^Zaakceptuj/, /^Rozpocznij/, /^Oznacz jako zagrane/]) {
           const saved = queue.waitForResponse(response => response.request().method() === "POST" &&
-            new URL(response.url()).pathname.endsWith("/action"));
+            new URL(response.url()).pathname.endsWith("/sync"));
           await row.getByRole("button", { name: label }).click();
           expect((await saved).status()).toBe(200);
           await expect(queue.getByText("Trwa zapis…", { exact: true })).toHaveCount(0);
@@ -835,9 +834,9 @@ test.describe("public event and session identity with local Supabase Auth", () =
       const firstRequest = (await fixture.readParticipantRequests("E2E Limit Participant"))
         .find(({ songTitle }) => songTitle === "E2E Song");
       expect(firstRequest).toBeDefined();
-      const restorePath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue/requests/${firstRequest!.requestId}/action`;
+      const restorePath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue/sync`;
       expectedConflictPaths.add(restorePath);
-      const restoreResponse = dashboard.waitForResponse((response) => new URL(response.url()).pathname === restorePath);
+      const restoreResponse = dashboard.waitForResponse((response) => new URL(response.url()).pathname === restorePath && response.request().method() === "POST");
       await rejected.getByRole("button", { name: "Przywróć" }).click();
       const deniedRestore = await restoreResponse;
       expect(deniedRestore.status()).toBe(409);
@@ -867,7 +866,7 @@ test.describe("public event and session identity with local Supabase Auth", () =
     try {
       await signInLocalOperator(dashboardPage, fixture);
       const dashboardQueuePath = `/dashboard/org/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
-      const dashboardQueueApiPath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue`;
+      const dashboardQueueApiPath = `/api/dashboard/organizations/${fixture.organizationPublicId}/events/${fixture.eventPublicId}/queue/sync`;
       const dashboardRealtimeConnection = dashboardPage.waitForEvent(
         "websocket",
         {
@@ -1671,6 +1670,8 @@ async function dragQueueRequest({
 
   await expect(source).toBeVisible();
   await expect(target).toBeVisible();
+  // Measure only after the initial authorised snapshot enables the handle and row actions.
+  await expect(handle).toBeEnabled();
   await source.scrollIntoViewIfNeeded();
   const sourceBox = await source.boundingBox();
   const handleBox = await handle.boundingBox();
@@ -1883,7 +1884,7 @@ test.describe("Enterprise DnD contract", () => {
     const row = (name: string) => page.locator('[data-queue-request-id]').filter({ has: page.locator('strong', { hasText: new RegExp(`^${name}$`) }) });
     const names = () => queueRequestNamesInLane(queueLane(page, "approved"));
     const canonical = async () => (await fixture.readQueueRows()).filter(row => row.status === "approved").sort((a,b) => a.position-b.position).map(row => row.displayName);
-    let placements = 0; page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/placement')) placements++; });
+    let placements = 0; page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/sync') && request.postDataJSON()?.kind === 'placement') placements++; });
     const begin = async (name: string) => {
       await page.bringToFront();
       await page.waitForLoadState('networkidle');
@@ -1909,10 +1910,10 @@ test.describe("Enterprise DnD contract", () => {
       const indicator=page.locator('[data-queue-insertion-indicator]');
       await expect(indicator).toHaveAttribute('data-target-position',String(expectedPosition));
       const order=await names(); const expected=order.filter(value=>value!==name); expected.splice(expectedPosition-1,0,name);
-      const written=page.waitForResponse(response=>response.url().endsWith('/placement')&&response.request().method()==='POST');
+      const written=page.waitForResponse(response=>response.url().endsWith('/sync')&&response.request().method()==='POST');
       await page.mouse.up(); expect((await written).status()).toBe(200);
       await expect.poll(names).toEqual(expected); await expect.poll(canonical).toEqual(expected);
-      await expect(page.getByText('Zmiana kolejki zapisana.',{exact:true})).toBeVisible();
+      await expect(page.locator('[data-queue-sync-state]:visible')).toHaveAttribute('data-queue-sync-state','synced');
     };
     try {
       // Tall Drag 2 and short Drag 6 must use their own midpoint, in both directions.
@@ -1969,15 +1970,20 @@ test.describe("Enterprise DnD contract", () => {
       await liftKeyboard(); await page.keyboard.press('End');
       await expect(page.locator('[data-queue-insertion-indicator]')).toHaveAttribute('data-target-position','6'); await page.keyboard.press('Space');
       await expect.poll(async()=> (await canonical()).at(-1)).toBe('Drag 2');
-      // Backend 500 -> optimistic rollback and canonical recovery, no stale success.
-      await page.route('**/placement',route=>route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE',message:'Retry.'}})}),{times:1});
-      const beforeFailure=await canonical(); await begin('Drag 3'); await pointAt(row('Drag 2'),0.95); await page.mouse.up();
-      await expect(page.getByText('Nie udało się zapisać zmiany',{exact:true})).toBeVisible(); await expect.poll(names).toEqual(beforeFailure); expect(await canonical()).toEqual(beforeFailure);
+      // A transient 500 retains the intent and retries the same operation ID; no false success.
+      let injectedFailures=0;
+      const failOnce=async(route:import('@playwright/test').Route)=>{if(route.request().method()==='POST'){
+        injectedFailures++;await route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE'}})});await page.unroute('**/sync',failOnce);
+      }else await route.continue();};
+      await page.route('**/sync',failOnce);
+      await begin('Drag 3'); await pointAt(row('Drag 2'),0.95); await page.mouse.up();
+      await expect.poll(async()=> (await canonical()).at(-1)).toBe('Drag 3');expect(injectedFailures).toBe(1);
+      await expect(page.locator('[data-queue-sync-state]')).toHaveAttribute('data-queue-sync-state','synced');
       // Two tabs/operators: real Realtime invalidates a gesture and does not write it.
       await expect(page.locator('[data-realtime-status]')).toHaveAttribute('data-realtime-status','live');
       await other.reload(); const third=other.locator('[data-queue-request-id]').filter({hasText:'Drag 3'});
       previous=placements; await begin('Drag 3');
-      await third.getByRole('button',{name:/^Przesuń zgłoszenie w dół/}).click();
+      await third.getByRole('button',{name:/^Przesuń zgłoszenie w górę/}).click();
       await expect(page.locator('[data-queue-drag-overlay]')).toHaveCount(0); await page.mouse.up(); expect(placements).toBe(previous);
       await expect(page.getByRole('alertdialog')).toHaveCount(0);
       await expect.poll(names).toEqual(await canonical());
@@ -1991,16 +1997,18 @@ test.describe("Enterprise DnD contract", () => {
       // The actual gesture still sends its frozen version and must get a 409.
       await page.waitForLoadState('networkidle'); await other.reload();
       const beforeConflict=await names(); const sourceName=beforeConflict[0], targetName=beforeConflict.at(-1)!;
-      const competitor=(await fixture.readQueueRows()).find(row=>row.displayName===beforeConflict[1])!;
-      await page.route('**/placement',async route=>{
-        expect((await other.request.post(`${api}/requests/${competitor.requestId}/move`,{data:{direction:'up'}})).status()).toBe(200);
-        await route.continue();
-      },{times:1});
+      const competitor=(await fixture.readQueueRows()).find(row=>row.displayName===beforeConflict[0])!;
+      const competeOnce=async(route:import('@playwright/test').Route)=>{
+        if(route.request().method()!=='POST'){await route.continue();return;}
+        expect((await postSemanticMove(other,api,competitor.requestId,2)).status()).toBe(200);
+        await route.continue();await page.unroute('**/sync',competeOnce);
+      };
+      await page.route('**/sync',competeOnce);
       await begin(sourceName); await pointAt(row(targetName),0.95);
-      const conflict=page.waitForResponse(response=>response.url().endsWith('/placement'));
+      const conflict=page.waitForResponse(response=>response.url().endsWith('/sync')&&response.request().method()==='POST');
       await page.mouse.up(); const stale=await conflict;
-      expect(stale.status()).toBe(409); expect((await stale.json()).error.code).toBe('QUEUE_PLACEMENT_STALE');
-      await expect(page.getByText(/Kolejka została zmieniona przez innego operatora/)).toBeVisible();
+      expect(stale.status()).toBe(409); expect((await stale.json()).error.code).toBe('QUEUE_INTENT_CONFLICT');
+      await expect(page.locator('[data-queue-conflict]')).toBeVisible();
       await expect.poll(names).toEqual(await canonical());
       await page.reload(); await expect.poll(names).toEqual(await canonical());
       expect(await row('Drag Now').getByRole('button',{name:/^Przeciągnij/}).count()).toBe(0);
@@ -2053,4 +2061,10 @@ async function liftQueueKeyboard(page: import("@playwright/test").Page, handle: 
   await handle.focus(); await handle.press("Space");
   await expect(page.locator("[data-queue-drag-overlay]")).toBeVisible();
   await page.evaluate(() => new Promise(requestAnimationFrame));
+}
+
+async function postSemanticMove(page:import('@playwright/test').Page,api:string,requestId:number,position:number){
+  const deviceId=crypto.randomUUID();const response=await page.request.get(api+'/sync?deviceId='+deviceId);expect(response.status()).toBe(200);
+  const snapshot=await response.json();const operation=createQueueOperation(snapshot.items,deviceId,snapshot.actorId,snapshot.sortRevision,Number(requestId),{kind:'placement',lane:'approved',position});
+  if(!operation)throw new Error('Missing source in owned fixture');return page.request.post(api+'/sync',{headers:{origin:new URL(page.url()).origin},data:operation});
 }

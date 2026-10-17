@@ -28,6 +28,27 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 describe("useQueueRealtime", () => {
+  it('deduplicates committed revisions, detects sequence gaps and always recovers after reconnect',async()=>{
+    let revision='5';const onInvalidate=vi.fn<(reason:QueueRealtimeInvalidateReason,signal:AbortSignal)=>Promise<void>>(async()=>{revision='8';});
+    renderHook(()=>useQueueRealtime({audience:'dashboard',identity:7,onInvalidate,getRevision:()=>revision}));
+    await waitFor(()=>expect(realtime.subscribe).not.toBeNull());
+    const payload=(value:string)=>({eventId:7,type:'queue_changed',operation:'UPDATE',changedAt:'now',revision:value});
+    await act(async()=>{realtime.broadcast?.({payload:payload('4')});realtime.broadcast?.({payload:payload('5')});});
+    expect(onInvalidate).not.toHaveBeenCalled();
+    await act(async()=>realtime.broadcast?.({payload:payload('8')}));expect(onInvalidate.mock.calls[0]?.[0]).toBe('reconnect');
+    await act(async()=>realtime.broadcast?.({payload:payload('8')}));expect(onInvalidate).toHaveBeenCalledTimes(1);
+    await act(async()=>realtime.subscribe?.('SUBSCRIBED'));await act(async()=>realtime.subscribe?.('SUBSCRIBED'));
+    expect(onInvalidate).toHaveBeenCalledTimes(3);
+  });
+  it('does not let an untrusted advertised revision suppress subsequent legitimate invalidations',async()=>{
+    const onInvalidate=vi.fn(async()=>undefined);
+    renderHook(()=>useQueueRealtime({audience:'dashboard',identity:7,onInvalidate,getRevision:()=> '5'}));
+    await waitFor(()=>expect(realtime.subscribe).not.toBeNull());
+    const payload=(value:string)=>({eventId:7,type:'queue_changed',operation:'UPDATE',changedAt:'now',revision:value});
+    await act(async()=>realtime.broadcast?.({payload:payload('999999')}));
+    await act(async()=>realtime.broadcast?.({payload:payload('6')}));expect(onInvalidate).toHaveBeenCalledTimes(2);
+    await act(async()=>realtime.broadcast?.({payload:payload('not-a-number')}));expect(onInvalidate).toHaveBeenCalledTimes(2);
+  });
   beforeEach(() => {
     realtime.broadcast = null;
     realtime.subscribe = null;

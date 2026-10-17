@@ -108,7 +108,8 @@ test("queue feedback is immediate and keeps destructive confirmation", () => {
     "utf8",
   );
 
-  assert.match(panel, /toast\.success\(tx\("Kolejka zaktualizowana"/);
+  assert.match(panel, /data-queue-sync-state/);
+  assert.doesNotMatch(panel, /toast\.success/);
   assert.match(panel, /<AlertDialog key=\{action\}>/);
   assert.match(panel, /<AlertDialogCancel>\{tx\("Anuluj"\)\}<\/AlertDialogCancel>/);
   assert.match(panel, /<RequestStatusBadge status=\{item\.status\}/);
@@ -577,20 +578,13 @@ test("event queue panel uses Supabase Realtime invalidation without polling", ()
 
   assert.match(panelSource, /onClick=\{\(\) => void refreshQueue\(\)\}/);
   assert.match(panelSource, /useDashboardQueueRealtime/);
-  assert.match(panelSource, /applyOptimisticDashboardEventQueueAction/);
-  assert.match(panelSource, /type QueueOptimisticState/);
-  assert.match(panelSource, /replayQueueOptimisticOperations/);
-  assert.match(panelSource, /reconcileDashboardEventQueueItem/);
-  assert.match(panelSource, /pendingOperations/);
-  assert.match(panelSource, /localMutationVersionRef/);
-  assert.match(panelSource, /realtimeRefreshQueuedRef/);
-  assert.match(panelSource, /flushQueuedRealtimeRefresh/);
-  assert.match(panelSource, /mutationQueueRef/);
-  assert.match(panelSource, /scheduleMutation/);
-  assert.match(
-    panelSource,
-    /getDashboardEventQueue\(\s*organizationId,\s*eventId,\s*signal/s,
-  );
+  const core = readFileSync('src/lib/queue-collaboration.ts','utf8');
+  assert.match(panelSource, /useQueueCollaboration/);
+  assert.match(core, /applyOptimisticDashboardEventQueueAction/);
+  assert.match(core, /replayQueueIntent/);
+  assert.match(core, /inflight.size<4/);
+  assert.match(core, /acknowledged/);
+  assert.doesNotMatch(panelSource, /mutationQueueRef|flushQueuedRealtimeRefresh/);
   assert.doesNotMatch(panelSource, /const isBusy = pendingOperation !== null/);
   assert.doesNotMatch(panelSource, /disabled=\{pendingOperation !== null\}/);
   assert.doesNotMatch(panelSource, /Zapisywanie\.\.\./);

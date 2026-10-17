@@ -54,6 +54,7 @@ const dashboardEventQueueItemSelection = {
   position: songRequests.position,
   requestedBy: songRequests.requestedBy,
   version: songRequests.version,
+  intentVersion: songRequests.intentVersion,
   createdAt: songRequests.createdAt,
   updatedAt: songRequests.updatedAt,
   startedAt: songRequests.startedAt,
@@ -75,6 +76,7 @@ type DashboardEventQueueItemRow = {
   position: number;
   requestedBy: "public" | "operator";
   version: number;
+  intentVersion: number;
   createdAt: Date;
   updatedAt: Date;
   startedAt: Date | null;
@@ -124,9 +126,8 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
   action: DashboardEventQueueAction;
   /** Internal manual-placement contract. Ordinary action routes never populate this. */
   placement?: QueueDropInput;
-}) {
-  return traceDbTransaction("operator.queue.action", "operator.queue.action", (onStarted) => getDb().transaction(async (transaction) => {
-    onStarted();
+}, existingTransaction?: DatabaseTransaction) {
+  const run = async (transaction: DatabaseTransaction) => {
     await setLocalDatabaseTimeouts(transaction);
     const context = await requireEventQueueManagerContext(
       transaction,
@@ -256,6 +257,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
         position: targetPosition,
         updatedAt: changedAt,
         version: sql`${songRequests.version} + 1`,
+        intentVersion: sql`${songRequests.intentVersion} + 1`,
         ...(input.action === "start"
           ? { startedAt: changedAt, completedAt: null }
           : {}),
@@ -337,6 +339,10 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       request: updatedRequest,
       items: await loadDashboardEventQueueItems(transaction, context.event.id),
     };
+  };
+  if (existingTransaction) return run(existingTransaction);
+  return traceDbTransaction("operator.queue.action", "operator.queue.action", onStarted => getDb().transaction(async transaction => {
+    onStarted(); return run(transaction);
   }));
 }
 
@@ -473,6 +479,7 @@ export async function moveDashboardOrganizationEventQueueRequestForAuthUser(inpu
           position: request.position,
           updatedAt: changedAt,
           version: sql`${songRequests.version} + 1`,
+          ...(request.id === input.requestId ? { intentVersion: sql`${songRequests.intentVersion} + 1` } : {}),
         })
         .where(
           and(
@@ -829,6 +836,7 @@ function toDashboardEventQueueItem(row: DashboardEventQueueItemRow) {
     position: row.position,
     requestedBy: row.requestedBy,
     version: row.version,
+    intentVersion: row.intentVersion ?? 0,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     startedAt: row.startedAt,

@@ -835,6 +835,7 @@ export const songRequests = pgTable(
       { onDelete: "set null" },
     ),
     version: integer("version").notNull().default(1),
+    intentVersion: integer("intent_version").notNull().default(0),
     createdAt: timestampColumn("created_at").notNull().defaultNow(),
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
     startedAt: timestampColumn("started_at"),
@@ -884,6 +885,24 @@ export const operatorSessions = pgTable(
 ).enableRLS();
 
 export type AuditPayload = Record<string, unknown>;
+
+// Server-only coordination metadata. No browser policies or participant data.
+export const queueStreams = pgTable("queue_streams", {
+  eventId: bigint("event_id", { mode: "number" }).primaryKey().references(() => events.id, { onDelete: "cascade" }),
+  revision: bigint("revision", { mode: "bigint" }).notNull().default(sql`0`),
+}).enableRLS();
+
+export const queueOperationReceipts = pgTable("queue_operation_receipts", {
+  eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id, { onDelete: "cascade" }),
+  operationId: uuid("operation_id").notNull(),
+  deviceId: uuid("device_id").notNull(),
+  operatorId: bigint("operator_id", { mode: "number" }).notNull().references(() => operatorUsers.id, { onDelete: "restrict" }),
+  fingerprint: text("fingerprint").notNull(),
+  requestId: bigint("request_id", { mode: "number" }).notNull(),
+  createdAt: timestampColumn("created_at").notNull().defaultNow(),
+}, table => [primaryKey({ columns: [table.eventId, table.operationId] }),
+  index("queue_operation_receipts_actor_idx").on(table.eventId, table.operatorId, table.deviceId),
+]).enableRLS();
 
 export const operatorAuditLog = pgTable(
   "operator_audit_log",

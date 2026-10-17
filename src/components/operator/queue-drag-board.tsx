@@ -40,6 +40,7 @@ export function QueueDragBoard({ id, generation, items, canDrag, onDraggingChang
   const [activeGeneration, setActiveGeneration] = useState(generation);
   const [target, setTarget] = useState<SlotData | null>(null);
   const revisionRef = useRef("");
+  const interactionRevisionRef = useRef("");
   const keyboardTargetRef = useRef<string | null>(null);
   const mountedRef = useRef(false);
   useEffect(() => {
@@ -138,6 +139,7 @@ export function QueueDragBoard({ id, generation, items, canDrag, onDraggingChang
       const data = event.active.data.current as RequestData;
       if (!canDrag || !mountedRef.current) return;
       revisionRef.current = queuePlacementRevision(items);
+      interactionRevisionRef.current = interactionRevision(items);
       keyboardTargetRef.current = null;
       setActiveGeneration(generation);
       setActiveId(data.requestId); setTarget(null); onDraggingChange(true, data.requestId);
@@ -149,7 +151,7 @@ export function QueueDragBoard({ id, generation, items, canDrag, onDraggingChang
       const source = event.active.data.current as RequestData;
       const destination = event.over?.data.current as SlotData | undefined;
       finish();
-      if (!staleGesture && canDrag && destination?.type === "slot" && destination.allowed && queuePlacementRevision(items) === revisionRef.current) {
+      if (!staleGesture && canDrag && destination?.type === "slot" && destination.allowed && interactionRevision(items) === interactionRevisionRef.current) {
         const current = board.approved.findIndex(row => row.id === source.requestId) + 1;
         if (source.lane === "approved" && destination.lane === "approved" && current === destination.position) return;
         onDrop(source.requestId, { lane: destination.lane, position: destination.position, expectedRevision: revisionRef.current });
@@ -249,3 +251,5 @@ const DraggableRow = memo(function DraggableRow({ item, lane, canDrag, renderRow
 });
 
 function getI18nRecord_labels() { return labels; }
+
+function interactionRevision(items:DashboardEventQueueItemDto[]){return items.map(x=>`${x.id}:${x.status}:${x.position}:${x.intentVersion??0}`).join("|");}

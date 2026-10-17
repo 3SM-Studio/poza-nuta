@@ -54,6 +54,7 @@ export type LocalSupabaseFixture = {
   >;
   resetQueue(): Promise<void>;
   seedDragQueue(count?: number): Promise<void>;
+  createPeerOperator(): Promise<{email: string; password: string; operatorId: number}>;
   readParticipantPresence(displayName: string): Promise<{ memberId: number; liveConnections: number; connections: number }>;
   readParticipantCredentialCount(displayName: string): Promise<number>;
   cleanup(): Promise<void>;
@@ -91,6 +92,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
   let workspaceId: number | null = null;
   let operatorId: number | null = null;
   let songIds: number[] = [];
+  const peers: {authId: string; operatorId: number}[] = [];
 
   try {
     const authResult = await admin.auth.admin.createUser({
@@ -609,6 +611,28 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       });
     }
 
+    async function createPeerOperator() {
+      const peerEmail = `peer-${randomUUID()}@example.test`;
+      const peerPassword = `${randomBytes(24).toString('base64url')}Aa1!`;
+      const result = await admin.auth.admin.createUser({email: peerEmail, password: peerPassword, email_confirm: true});
+      if(result.error || !result.data.user) throw new Error('Isolated peer Auth creation failed.');
+      try {
+        const peerId = await sql.begin(async tx => {
+          const [peer] = await tx<{id: number}[]>`INSERT INTO public.operator_users
+            (name,display_name,profile_completed_at,auth_user_id,password_hash,active)
+            VALUES ('Synthetic peer','Synthetic peer',now(),${result.data.user.id}::uuid,'supabase-auth-managed',true) RETURNING id`;
+          await tx`INSERT INTO public.workspace_members (workspace_id,operator_user_id,role,active)
+            VALUES (${workspaceId},${peer.id},'operator',true)`;
+          return Number(peer.id);
+        });
+        peers.push({authId: result.data.user.id,operatorId: peerId});
+        return {email: peerEmail,password: peerPassword,operatorId: peerId};
+      } catch(error) {
+        await admin.auth.admin.deleteUser(result.data.user.id);
+        throw error;
+      }
+    }
+
     async function cleanup() {
       try {
         // Only this isolated fixture's event. Linking rows intentionally retain
@@ -628,6 +652,14 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
           DELETE FROM public.events
           WHERE public_id = ${eventPublicId}::uuid
         `;
+
+        for(const peer of peers) {
+          await sql`DELETE FROM public.operator_audit_log WHERE operator_id=${peer.operatorId}`;
+          await sql`DELETE FROM public.workspace_members WHERE operator_user_id=${peer.operatorId}`;
+          await sql`DELETE FROM public.operator_users WHERE id=${peer.operatorId}`;
+          const deleted=await admin.auth.admin.deleteUser(peer.authId);
+          if(deleted.error)throw new Error('Isolated peer Auth cleanup failed.');
+        }
 
         if (workspaceId !== null) {
           await sql`
@@ -680,6 +712,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       readParticipantCredentialCount,
       resetQueue,
       seedDragQueue,
+      createPeerOperator,
       cleanup,
     };
   } catch (error) {

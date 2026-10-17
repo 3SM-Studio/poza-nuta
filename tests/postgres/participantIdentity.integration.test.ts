@@ -30,6 +30,7 @@ for (const image of images) {
       await installPostgresCompatibilityFixture(sql);
       await applyPostgresMigrations(sql, 24);
       await applyPostgresMigration(sql, 30);
+    await applyPostgresMigration(sql, 32);
       const [queueTrigger] = await sql<{ enabled: string }[]>`
         SELECT tgenabled AS enabled
         FROM pg_trigger
@@ -714,6 +715,7 @@ for (const image of images) {
       await installPostgresCompatibilityFixture(sql);
       await applyPostgresMigrations(sql, 24);
       await applyPostgresMigration(sql, 30);
+    await applyPostgresMigration(sql, 32);
       const fixture = await seedFixture(sql);
       const [thirdSong] = await sql<{ id: number }[]>`
         INSERT INTO public.songs (
@@ -906,6 +908,7 @@ for (const image of images) {
       await installPostgresCompatibilityFixture(sql);
       await applyPostgresMigrations(sql, 29);
       await applyPostgresMigration(sql, 30);
+    await applyPostgresMigration(sql, 32);
       const fixture = await seedFixture(sql, 6);
       await sql.unsafe(`CREATE TABLE public.test_participant_broadcasts (payload jsonb, event_name text, topic text, private boolean);
         CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event_name text, topic_name text, private_channel boolean)
@@ -1117,6 +1120,7 @@ test("postgres:17-alpine: presence leases, races, retention, privacy and isolati
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, 29);
     await applyPostgresMigration(sql, 30);
+    await applyPostgresMigration(sql, 32);
     const [{ version }] = await sql`select current_setting('server_version_num')::integer as version`;
     assert.ok(version >= 170000 && version < 180000);
     const fixture = await seedFixture(sql, 6);
@@ -1558,7 +1562,10 @@ test("postgres:17-alpine: Slice 4 manual claim, two-owner merge, history, event 
     assert.ok(audit.some(row => row.action === "participant_request_merged"));
     const broadcasts = await sql`select payload, private from public.test_slice4_broadcasts`;
     assert.ok(broadcasts.length > 0); assert.ok(broadcasts.every(row => row.private));
-    for (const row of broadcasts) assert.ok(Object.keys(row.payload).every(key => ["eventId", "type", "changedAt", "operation", "reason"].includes(key)));
+    for (const row of broadcasts) {
+      assert.ok(Object.keys(row.payload).every(key => ["eventId", "type", "changedAt", "operation", "reason", "revision"].includes(key)));
+      if ("revision" in row.payload) assert.match(row.payload.revision, /^\d{1,19}$/);
+    }
     const serialized = JSON.stringify([...audit, ...broadcasts]);
     for (const secret of [a.credential, b.credential, invitation.token, receiver.challenge]) assert.ok(!serialized.includes(secret), "No token in audit or Realtime");
   });
@@ -1714,6 +1721,7 @@ async function withSlice4Fixture(name: string, action: (sql: ReturnType<typeof c
   try {
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, 30);
+    await applyPostgresMigration(sql, 32);
     const fixture = await seedFixture(sql, 6);
     await sql.unsafe(`create table public.test_slice4_broadcasts (payload jsonb, private boolean);
       create or replace function realtime.send(payload jsonb, event_name text, topic_name text, private_channel boolean)

@@ -7,6 +7,7 @@ import {
 
 import { OperatorClientError, type SongSource } from "./api";
 import type { QueueDropInput } from "@/lib/queue-placement";
+import type { QueueOperation } from "@/lib/queue-operation";
 
 export type DashboardEventQueueItemDto = {
   id: number;
@@ -19,6 +20,7 @@ export type DashboardEventQueueItemDto = {
   position: number;
   requestedBy: "public" | "operator";
   version: number;
+  intentVersion?: number;
   createdAt: string;
   updatedAt: string;
   startedAt: string | null;
@@ -181,6 +183,22 @@ export function getDashboardEventQueueMoveApiPath(
     organizationId,
     eventId,
   )}/requests/${encodeURIComponent(requestId)}/move`;
+}
+
+export type QueueSyncSnapshot = {
+  actorId: number; eventId: number; revision: string; sortRevision: string;
+  items: DashboardEventQueueItemDto[]; acknowledged: string[];
+  canManage?: boolean; lifecycle?: string;
+};
+export function getQueueSync(organizationId: string,eventId: string,deviceId: string,operationIds: string[],signal?: AbortSignal) {
+  const query=new URLSearchParams({deviceId});
+  for (const id of operationIds) query.append('operationId',id);
+  return requestJson<QueueSyncSnapshot>(`${getDashboardEventQueueApiPath(organizationId,eventId)}/sync?${query}`,{signal});
+}
+export function sendQueueOperation(organizationId: string,eventId: string,operation: QueueOperation,signal?: AbortSignal) {
+  return requestJson<QueueSyncSnapshot & { operationId:string }>(`${getDashboardEventQueueApiPath(organizationId,eventId)}/sync`,{
+    method:'POST',body:JSON.stringify(operation),signal,
+  });
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {

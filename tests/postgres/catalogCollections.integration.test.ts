@@ -29,6 +29,7 @@ for (const image of images) {
       await installPostgresCompatibilityFixture(sql);
       await applyPostgresMigrations(sql, 26);
       await applyPostgresMigration(sql, 30);
+    await applyPostgresMigration(sql, 32);
       const fixture = await seedFixture(sql);
       await assertDatabaseInvariants(sql, fixture);
       await assertRuntimeRoleAccess(sql);

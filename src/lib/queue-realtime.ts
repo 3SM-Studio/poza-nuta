@@ -33,6 +33,7 @@ export type DashboardQueueRealtimeOperation =
   | "DELETE";
 
 export type DashboardQueueChangedPayload = {
+  revision?: string;
   eventId: number;
   type: typeof queueRealtimeEvent;
   operation: DashboardQueueRealtimeOperation;
@@ -69,6 +70,7 @@ export function isDashboardQueueChangedPayload(
   return (
     payload.type === queueRealtimeEvent &&
     payload.eventId === eventId &&
+    (payload.revision === undefined || (typeof payload.revision === 'string' && /^\d{1,19}$/.test(payload.revision))) &&
     isDashboardQueueRealtimeOperation(payload.operation) &&
     typeof payload.changedAt === "string"
   );

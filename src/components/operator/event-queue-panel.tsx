@@ -7,7 +7,6 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -24,7 +23,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+
 
 import { RequestStatusBadge } from "@/components/request-status-badge";
 import {
@@ -55,30 +54,18 @@ import {
   type DashboardEventQueueMoveDirection,
   type DashboardEventQueueRequestStatus,
 } from "@/lib/dashboard-event-queue";
-import {
-  applyOptimisticDashboardEventQueueAction,
-  applyOptimisticDashboardEventQueueMove,
-  applyOptimisticDashboardEventQueueMoveToPosition,
-  reconcileDashboardEventQueueItem,
-} from "@/lib/dashboard-event-queue-optimistic";
-import type {
-  QueueRealtimeConnectionStatus,
-  QueueRealtimeInvalidateReason,
-} from "@/lib/queue-realtime";
+import type { QueueRealtimeConnectionStatus } from '@/lib/queue-realtime';
+import { createQueueOperation } from '@/lib/queue-collaboration';
+import type { QueueOperation } from '@/lib/queue-operation';
+import { useQueueCollaboration } from './use-queue-collaboration';
 import { formatWarsawDateTime } from "@/lib/warsaw-time";
 
-import { formatDuration, OperatorClientError } from "./api";
-import {
-  getDashboardEventQueue,
-  placeDashboardEventQueueRequest,
-  moveDashboardEventQueueRequest,
-  runDashboardEventQueueAction,
-  type DashboardEventQueueItemDto,
-} from "./event-queue-api";
+import { formatDuration } from "./api";
+import type { DashboardEventQueueItemDto } from './event-queue-api';
 import { useDashboardQueueRealtime } from "./use-dashboard-queue-realtime";
 import { FairQueueControl } from "./fair-queue-control";
 import { QueueDragBoard, QueueDragNotice } from "./queue-drag-board";
-import { queuePlacementRevision, type QueueDropInput } from "@/lib/queue-placement";
+import { type QueueDropInput } from "@/lib/queue-placement";
 
 const actionLabels: Record<DashboardEventQueueAction, string> = {
   approve: "Zaakceptuj",
@@ -101,731 +88,67 @@ type EventQueuePanelProps = {
   initialItems: DashboardEventQueueItemDto[];
 };
 
-type QueueRefreshReason = QueueRealtimeInvalidateReason | "local";
-
-type QueueOptimisticOperation =
-  | { id: number; kind: "placement"; requestId: number; placement: QueueDropInput; changedAt: string }
-  | {
-      id: number;
-      kind: "action";
-      requestId: number;
-      action: DashboardEventQueueAction;
-      changedAt: string;
+export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canManage,lifecycle,publicQueueEnabled,initialItems }:EventQueuePanelProps) {
+  const tx=useUiText();
+  const {client,state,deviceId}=useQueueCollaboration(organizationId,eventId,initialItems);
+  const items=state.items;
+  const [dragActive,setDragActive]=useState(false),[dragEpoch,setDragEpoch]=useState(0);
+  const dragActiveRef=useRef(false),dragEpochRef=useRef(0),gestureRevision=useRef('');
+  const [dragNotice,setDragNotice]=useState<string|null>(null);
+  const [pendingReject,setPendingReject]=useState<{requestId:number;placement:QueueDropInput}|null>(null);
+  const rejectionOperationRef=useRef<QueueOperation|null>(null),rejectionFocusRequestRef=useRef<number|null>(null);
+  const [fairQueueBusy,setFairQueueBusy]=useState(false);
+  const queuePanelRef=useRef<HTMLElement|null>(null);
+  const pendingMutationCount=state.entries.length;
+  const queueClosedDetected=state.closed;
+  const canMutate=canManage&&lifecycle==='active'&&!state.closed&&state.ready&&!pendingReject;
+  const isRefreshing=false,isSyncing=false,placementBusy=false;
+  const error=state.error,errorSource=error?'refresh':null;
+  const currentItem=items.find(x=>x.status==='now')??null;
+  const approvedItems=items.filter(x=>x.status==='approved').sort((a,b)=>a.position-b.position||a.id-b.id);
+  const closedItems=items.filter(x=>x.status==='done'||x.status==='skipped');
+  const refreshFromRealtime=useCallback(async()=>{await client?.refresh();},[client]);
+  const liveStatus=useDashboardQueueRealtime(realtimeEventId,refreshFromRealtime,client?.getRevision);
+  const scheduleQueueRequestFocus=useCallback((id:number)=>requestAnimationFrame(()=>{
+    queuePanelRef.current?.querySelector<HTMLElement>(`[data-queue-request-id="${id}"]`)?.focus({preventScroll:true});
+  }),[]);
+  useEffect(()=>client?.subscribe(()=>{
+    if(dragActiveRef.current&&gestureRevision.current!==queueGestureRevision(client.getSnapshot().items)){
+      dragActiveRef.current=false;setDragActive(false);dragEpochRef.current++;setDragEpoch(dragEpochRef.current);
+      setDragNotice('Kolejka została zaktualizowana. Przeciągnij zgłoszenie ponownie.');
     }
-  | {
-      id: number;
-      kind: "move";
-      requestId: number;
-      direction: DashboardEventQueueMoveDirection;
-      changedAt: string;
-    }
-;
-
-type QueueOptimisticOperationInput =
-  | Omit<Extract<QueueOptimisticOperation, { kind: "placement" }>, "id" | "changedAt">
-  | Omit<Extract<QueueOptimisticOperation, { kind: "action" }>, "id" | "changedAt">
-  | Omit<Extract<QueueOptimisticOperation, { kind: "move" }>, "id" | "changedAt">
-;
-
-type QueueOptimisticState = {
-  baseItems: DashboardEventQueueItemDto[];
-  pendingOperations: QueueOptimisticOperation[];
-};
-
-export function EventQueuePanel({
-  organizationId,
-  eventId,
-  realtimeEventId,
-  canManage,
-  lifecycle,
-  publicQueueEnabled,
-  initialItems,
-}: EventQueuePanelProps) {
-  const tx = useUiText();
-
-  const [queueState, setQueueState] = useState<QueueOptimisticState>({
-    baseItems: initialItems,
-    pendingOperations: [],
-  });
-  const queueStateRef = useRef(queueState);
-  const items = useMemo(
-    () =>
-      replayQueueOptimisticOperations(
-        queueState.baseItems,
-        queueState.pendingOperations,
-      ),
-    [queueState],
-  );
-  const dragActiveRef = useRef(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [dragEpoch, setDragEpoch] = useState(0);
-  const dragEpochRef = useRef(0);
-  const [dragNotice, setDragNotice] = useState<string | null>(null);
-  const [pendingReject, setPendingReject] = useState<{ requestId: number; placement: QueueDropInput } | null>(null);
-  const rejectionFocusRequestRef = useRef<number | null>(null);
-  const [placementBusy, setPlacementBusy] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [errorSource, setErrorSource] = useState<
-    "mutation" | "refresh" | null
-  >(null);
-  const errorSourceRef = useRef(errorSource);
-  useEffect(() => {
-    errorSourceRef.current = errorSource;
-  }, [errorSource]);
-  const [queueClosedDetected, setQueueClosedDetected] = useState(false);
-  const queuePanelRef = useRef<HTMLElement | null>(null);
-  const focusRequestIdRef = useRef<number | null>(null);
-  const operationFocusRequestIdsRef = useRef(new Map<number, number>());
-  const localMutationVersionRef = useRef(0);
-  const canonicalRequestGenerationRef = useRef(0);
-  const queueClosedRef = useRef(false);
-  const mutationAllowedByPropsRef = useRef(
-    canManage && lifecycle === "active",
-  );
-  const mountedRef = useRef(false);
-  const focusAnimationFrameRef = useRef<number | null>(null);
-  const localRefreshAbortControllerRef = useRef<AbortController | null>(null);
-  const realtimeRefreshInFlightRef = useRef(false);
-  const realtimeRefreshQueuedRef = useRef(false);
-  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const [fairQueueBusy, setFairQueueBusy] = useState(false);
-  const fairQueueBusyRef = useRef(false);
-  const refreshFromRealtimeRef = useRef<
-    | ((
-        reason: QueueRefreshReason,
-        signal: AbortSignal,
-      ) => Promise<void>)
-    | null
-  >(null);
-  const updateQueueState = useCallback(
-    (update: (currentState: QueueOptimisticState) => QueueOptimisticState) => {
-      const nextState = update(queueStateRef.current);
-      queueStateRef.current = nextState;
-      if (mountedRef.current) {
-        setQueueState(nextState);
-      }
-    },
-    [],
-  );
-  const replaceQueueBase = useCallback(
-    (baseItems: DashboardEventQueueItemDto[]) => {
-      updateQueueState((currentState) => ({
-        ...currentState,
-        baseItems,
-      }));
-    },
-    [updateQueueState],
-  );
-  const scheduleQueueRequestFocus = useCallback((requestId: number) => {
-    if (focusAnimationFrameRef.current !== null) {
-      window.cancelAnimationFrame(focusAnimationFrameRef.current);
-    }
-
-    focusAnimationFrameRef.current = window.requestAnimationFrame(() => {
-      focusAnimationFrameRef.current = null;
-      if (!mountedRef.current) {
-        return;
-      }
-
-      const requestRow = queuePanelRef.current?.querySelector<HTMLElement>(
-        `[data-queue-request-id="${requestId}"]`,
-      );
-      if (
-        requestRow?.isConnected &&
-        requestRow.hasAttribute("tabindex") &&
-        !requestRow.closest('[hidden], [inert], [aria-hidden="true"]')
-      ) {
-        requestRow.focus({ preventScroll: true });
-        focusRequestIdRef.current = null;
-      }
-    });
-  }, []);
-  const canMutate =
-    canManage && lifecycle === "active" && !queueClosedDetected && !fairQueueBusy && !placementBusy && !pendingReject;
-  const pendingMutationCount = queueState.pendingOperations.length;
-  const currentItem = useMemo(
-    () => items.find((item) => item.status === "now") ?? null,
-    [items],
-  );
-  const approvedItems = useMemo(
-    () =>
-      items
-        .filter((item) => item.status === "approved")
-        .sort(
-          (left, right) =>
-            left.position - right.position || left.id - right.id,
-        ),
-    [items],
-  );
-  const closedItems = useMemo(
-    () =>
-      items.filter(
-        (item) => item.status === "done" || item.status === "skipped",
-      ),
-    [items],
-  );
-  const beginCanonicalRequest = useCallback(() => {
-    canonicalRequestGenerationRef.current += 1;
-    return canonicalRequestGenerationRef.current;
-  }, []);
-  const isCanonicalRequestCurrent = useCallback(
-    (generation: number) =>
-      mountedRef.current &&
-      canonicalRequestGenerationRef.current === generation,
-    [],
-  );
-  const flushQueuedRealtimeRefresh = useCallback(() => {
-    if (
-      !mountedRef.current ||
-      queueStateRef.current.pendingOperations.length > 0 ||
-      realtimeRefreshInFlightRef.current ||
-      !realtimeRefreshQueuedRef.current
-    ) {
-      return;
-    }
-
-    realtimeRefreshQueuedRef.current = false;
-    const controller = new AbortController();
-    localRefreshAbortControllerRef.current?.abort();
-    localRefreshAbortControllerRef.current = controller;
-    void refreshFromRealtimeRef.current?.("local", controller.signal).finally(
-      () => {
-        if (localRefreshAbortControllerRef.current === controller) {
-          localRefreshAbortControllerRef.current = null;
-        }
-      },
-    );
-  }, []);
-  const refreshFromRealtime = useCallback(
-    async (
-      reason: QueueRefreshReason,
-      signal: AbortSignal,
-    ) => {
-      if (
-        fairQueueBusyRef.current || queueStateRef.current.pendingOperations.length > 0 ||
-        realtimeRefreshInFlightRef.current
-      ) {
-        realtimeRefreshQueuedRef.current = true;
-        return;
-      }
-
-      const canonicalGeneration = beginCanonicalRequest();
-      const mutationVersionAtStart = localMutationVersionRef.current;
-      const showSyncIndicator = reason !== "subscribe" && reason !== "local";
-      realtimeRefreshInFlightRef.current = true;
-      setIsRefreshing(false);
-      if (!dragActiveRef.current) setIsSyncing(showSyncIndicator);
-
-      try {
-        const response = await getDashboardEventQueue(
-          organizationId,
-          eventId,
-          signal,
-        );
-
-        if (!isCanonicalRequestCurrent(canonicalGeneration)) {
-          return;
-        }
-
-        if (
-          queueStateRef.current.pendingOperations.length > 0 ||
-          localMutationVersionRef.current !== mutationVersionAtStart
-        ) {
-          realtimeRefreshQueuedRef.current = true;
-          return;
-        }
-
-        const sameRevision = queuePlacementRevision(response.items) === queuePlacementRevision(queueStateRef.current.baseItems);
-        if (dragActiveRef.current && !sameRevision) {
-          dragActiveRef.current = false;
-          setDragActive(false);
-          dragEpochRef.current += 1;
-          setDragEpoch(dragEpochRef.current);
-          setDragNotice("Kolejka została zaktualizowana. Przeciągnij zgłoszenie ponownie.");
-        }
-        // Focus/reconnect can refetch unchanged data. Keep the gesture and its
-        // DOM stable; only a changed canonical version invalidates the intent.
-        if (!dragActiveRef.current || !sameRevision) replaceQueueBase(response.items);
-        // A background invalidation must not dismiss feedback about a denied
-        // operator action. The next action or explicit refresh clears it.
-        if (errorSourceRef.current !== "mutation" && !dragActiveRef.current) {
-          setError(null);
-          setErrorSource(null);
-        }
-      } catch (caughtError) {
-        if (
-          signal.aborted ||
-          isAbortError(caughtError) ||
-          !isCanonicalRequestCurrent(canonicalGeneration)
-        ) {
-          return;
-        }
-
-        if (
-          queueStateRef.current.pendingOperations.length > 0 ||
-          localMutationVersionRef.current !== mutationVersionAtStart
-        ) {
-          realtimeRefreshQueuedRef.current = true;
-          return;
-        }
-
-        if (
-          caughtError instanceof OperatorClientError &&
-          caughtError.status === 401
-        ) {
-          window.location.replace("/sign-in");
-          return;
-        }
-
-        setError(getRefreshErrorMessage());
-        setErrorSource("refresh");
-      } finally {
-        realtimeRefreshInFlightRef.current = false;
-
-        if (isCanonicalRequestCurrent(canonicalGeneration) && !dragActiveRef.current) {
-          setIsSyncing(false);
-        }
-
-        if (mountedRef.current) {
-          flushQueuedRealtimeRefresh();
-        }
-      }
-    },
-    [
-      beginCanonicalRequest,
-      eventId,
-      flushQueuedRealtimeRefresh,
-      isCanonicalRequestCurrent,
-      organizationId,
-      replaceQueueBase,
-    ],
-  );
-  useEffect(() => {
-    mountedRef.current = true;
-    refreshFromRealtimeRef.current = refreshFromRealtime;
-    const operationFocusRequestIds = operationFocusRequestIdsRef.current;
-
-    return () => {
-      mountedRef.current = false;
-      canonicalRequestGenerationRef.current += 1;
-      operationFocusRequestIds.clear();
-      if (focusAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(focusAnimationFrameRef.current);
-        focusAnimationFrameRef.current = null;
-      }
-      localRefreshAbortControllerRef.current?.abort();
-      localRefreshAbortControllerRef.current = null;
-      refreshFromRealtimeRef.current = null;
-    };
-  }, [refreshFromRealtime]);
-  useEffect(() => {
-    mutationAllowedByPropsRef.current = canManage && lifecycle === "active";
-
-    if (lifecycle === "active") {
-      queueClosedRef.current = false;
-      let cancelled = false;
-      queueMicrotask(() => {
-        if (!cancelled && mountedRef.current) {
-          setQueueClosedDetected(false);
-        }
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [canManage, lifecycle]);
-  useEffect(() => {
-    const focusRequestId = focusRequestIdRef.current;
-
-    if (focusRequestId === null) {
-      return;
-    }
-
-    scheduleQueueRequestFocus(focusRequestId);
-  }, [items, scheduleQueueRequestFocus]);
-  const liveStatus = useDashboardQueueRealtime(
-    realtimeEventId,
-    refreshFromRealtime,
-  );
-
-  async function refreshQueue({
-    announceSuccess = true,
-  }: { announceSuccess?: boolean } = {}): Promise<boolean> {
-    if (fairQueueBusyRef.current) return false;
-    const canonicalGeneration = beginCanonicalRequest();
-    const mutationVersionAtStart = localMutationVersionRef.current;
-    const controller = new AbortController();
-
-    localRefreshAbortControllerRef.current?.abort();
-    localRefreshAbortControllerRef.current = controller;
-
-    setIsRefreshing(true);
-    setIsSyncing(false);
-    setError(null);
-    setErrorSource(null);
-
-    try {
-      const response = await getDashboardEventQueue(
-        organizationId,
-        eventId,
-        controller.signal,
-      );
-
-      if (!isCanonicalRequestCurrent(canonicalGeneration)) {
-        return false;
-      }
-
-      if (
-        queueStateRef.current.pendingOperations.length > 0 ||
-        localMutationVersionRef.current !== mutationVersionAtStart
-      ) {
-        realtimeRefreshQueuedRef.current = true;
-        return false;
-      }
-
-      replaceQueueBase(response.items);
-      setError(null);
-      setErrorSource(null);
-      if (announceSuccess) toast.success(tx("Kolejka zaktualizowana"));
-      return true;
-    } catch (caughtError) {
-      if (
-        controller.signal.aborted ||
-        isAbortError(caughtError) ||
-        !isCanonicalRequestCurrent(canonicalGeneration)
-      ) {
-        return false;
-      }
-
-      if (!handleAuthenticationError(caughtError)) {
-        setError(getRefreshErrorMessage());
-        setErrorSource("refresh");
-      }
-      return false;
-    } finally {
-      if (localRefreshAbortControllerRef.current === controller) {
-        localRefreshAbortControllerRef.current = null;
-      }
-      if (isCanonicalRequestCurrent(canonicalGeneration)) {
-        setIsRefreshing(false);
-        flushQueuedRealtimeRefresh();
-      }
-    }
+  }),[client]);
+  function enqueue(requestId:number,intent:Parameters<typeof createQueueOperation>[5]){
+    const actor=client?.getActorId();if(!client||!actor||!canMutate)return;
+    const snapshot=client.getSnapshot();const op=createQueueOperation(snapshot.items,deviceId,actor,snapshot.sortRevision,requestId,intent);
+    if(op)client.enqueue(op);
   }
-
-  function handleAction(
-    requestId: number,
-    action: DashboardEventQueueAction,
-    restoreFocus = false,
-  ) {
-    if (!canMutate || dragActiveRef.current) {
-      return;
+  function handleAction(requestId:number,action:DashboardEventQueueAction,restoreFocus=false){
+    if(dragActiveRef.current)return;
+    enqueue(requestId,{kind:'action',action});if(restoreFocus)scheduleQueueRequestFocus(requestId);
+  }
+  function handleMove(requestId:number,direction:DashboardEventQueueMoveDirection){
+    if(dragActiveRef.current)return;
+    const index=approvedItems.findIndex(x=>x.id===requestId);if(index<0)return;
+    enqueue(requestId,{kind:'placement',lane:'approved',position:index+1+(direction==='up'?-1:1)});
+  }
+  function handlePlacement(requestId:number,placement:QueueDropInput){
+    if(!canMutate)return;
+    const actor=client?.getActorId();if(!client||!actor)return;
+    const snapshot=client.getSnapshot();
+    const op=createQueueOperation(snapshot.items,deviceId,actor,snapshot.sortRevision,requestId,{kind:'placement',...placement});
+    if(!op)return;
+    if(placement.lane==='rejected'&&!placement.confirmed){
+      rejectionFocusRequestRef.current=requestId;rejectionOperationRef.current=op;setPendingReject({requestId,placement});return;
     }
-
-    const operation = beginLocalMutation(
-      {
-        kind: "action",
-        requestId,
-        action,
-      },
-      restoreFocus ? requestId : null,
-    );
-    setError(null);
-    setErrorSource(null);
-
-    scheduleMutation(async () => {
-      if (!canRunMutationTask()) {
-        discardOptimisticOperation(operation.id);
-        return;
-      }
-
-      try {
-        const result = await runDashboardEventQueueAction(
-          organizationId,
-          eventId,
-          requestId,
-          action,
-        );
-
-        confirmOptimisticOperation(operation.id, result.request, result.items);
-      } catch (caughtError) {
-        await handleMutationError(caughtError, operation.id);
-      }
-    });
+    client.enqueue(op);
   }
-
-  function handleMove(
-    requestId: number,
-    direction: DashboardEventQueueMoveDirection,
-  ) {
-    if (!canMutate || dragActiveRef.current) {
-      return;
-    }
-
-    const operation = beginLocalMutation({
-      kind: "move",
-      requestId,
-      direction,
-    });
-    setError(null);
-    setErrorSource(null);
-
-    scheduleMutation(async () => {
-      if (!canRunMutationTask()) {
-        discardOptimisticOperation(operation.id);
-        return;
-      }
-
-      try {
-        const result = await moveDashboardEventQueueRequest(
-          organizationId,
-          eventId,
-          requestId,
-          direction,
-        );
-
-        if (result.moved) {
-          confirmOptimisticOperation(operation.id, result.request, result.items);
-        } else {
-          discardOptimisticOperation(operation.id);
-        }
-      } catch (caughtError) {
-        await handleMutationError(caughtError, operation.id);
-      }
-    });
+  function submitPlacement(requestId:number,placement:QueueDropInput){
+    const op=rejectionOperationRef.current;
+    if(op?.kind==='placement'&&op.requestId===requestId){client?.enqueue({...op,confirmed:true});rejectionOperationRef.current=null;}
+    else handlePlacement(requestId,placement);
   }
-
-  function handlePlacement(requestId: number, placement: QueueDropInput) {
-    if (!canMutate || queueStateRef.current.pendingOperations.length > 0) return;
-    setDragNotice(null);
-    if (placement.lane === "rejected" && !placement.confirmed) {
-      rejectionFocusRequestRef.current = requestId;
-      setPendingReject({ requestId, placement });
-      return;
-    }
-    submitPlacement(requestId, placement);
-  }
-
-  function submitPlacement(requestId: number, placement: QueueDropInput) {
-    const operation = beginLocalMutation({ kind: "placement", requestId, placement }, requestId);
-    beginCanonicalRequest();
-    setPlacementBusy(true);
-    setError(null); setErrorSource(null);
-    scheduleMutation(async () => {
-      try {
-        if (!canRunMutationTask()) { discardOptimisticOperation(operation.id); return; }
-        const result = await placeDashboardEventQueueRequest(organizationId, eventId, requestId, placement);
-        confirmOptimisticOperation(operation.id, result.request, result.items);
-        if (mountedRef.current) setDragNotice("Zmiana kolejki zapisana.");
-      } catch (caughtError) {
-        await handleMutationError(caughtError, operation.id);
-      } finally {
-        if (mountedRef.current) setPlacementBusy(false);
-      }
-    });
-  }
-
-  function beginLocalMutation(
-    operation: QueueOptimisticOperationInput,
-    focusRequestId: number | null = null,
-  ) {
-    localMutationVersionRef.current += 1;
-    realtimeRefreshQueuedRef.current = true;
-    const queuedOperation = {
-      ...operation,
-      id: localMutationVersionRef.current,
-      changedAt: new Date().toISOString(),
-    } as QueueOptimisticOperation;
-
-    if (focusRequestId !== null) {
-      operationFocusRequestIdsRef.current.set(
-        queuedOperation.id,
-        focusRequestId,
-      );
-      focusRequestIdRef.current = focusRequestId;
-    }
-
-    updateQueueState((currentState) => ({
-      ...currentState,
-      pendingOperations: [
-        ...currentState.pendingOperations,
-        queuedOperation,
-      ],
-    }));
-
-    return queuedOperation;
-  }
-
-  function scheduleMutation(task: () => Promise<void>) {
-    const queuedTask = mutationQueueRef.current.then(task, task);
-
-    mutationQueueRef.current = queuedTask.then(
-      () => finishLocalMutation(),
-      () => finishLocalMutation(),
-    );
-  }
-
-  function finishLocalMutation() {
-    flushQueuedRealtimeRefresh();
-  }
-
-  async function handleMutationError(
-    caughtError: unknown,
-    operationId: number,
-  ) {
-    const queueWasClosed = isEventQueueClosedError(caughtError);
-    const activeDuplicate = isQueueAdmissionConflictError(caughtError);
-
-    if (queueWasClosed) {
-      queueClosedRef.current = true;
-    }
-
-    discardOptimisticOperation(operationId);
-
-    if (!mountedRef.current) {
-      return;
-    }
-
-    if (handleAuthenticationError(caughtError)) {
-      return;
-    }
-
-    if (queueWasClosed) {
-      localMutationVersionRef.current += 1;
-      discardAllOptimisticOperations();
-      setQueueClosedDetected(true);
-      setError(null);
-      setErrorSource(null);
-      realtimeRefreshQueuedRef.current = false;
-
-      const canonicalGeneration = beginCanonicalRequest();
-      const controller = new AbortController();
-      localRefreshAbortControllerRef.current?.abort();
-      localRefreshAbortControllerRef.current = controller;
-      setIsRefreshing(false);
-      setIsSyncing(false);
-
-      try {
-        const response = await getDashboardEventQueue(
-          organizationId,
-          eventId,
-          controller.signal,
-        );
-        if (
-          controller.signal.aborted ||
-          !isCanonicalRequestCurrent(canonicalGeneration)
-        ) {
-          return;
-        }
-        replaceQueueBase(response.items);
-      } catch (refreshError) {
-        if (
-          !controller.signal.aborted &&
-          !isAbortError(refreshError) &&
-          isCanonicalRequestCurrent(canonicalGeneration) &&
-          !handleAuthenticationError(refreshError)
-        ) {
-          setError(
-            "Nie udało się odświeżyć kolejki po jej zamknięciu. Spróbuj ponownie.",
-          );
-          setErrorSource("refresh");
-        }
-      } finally {
-        if (localRefreshAbortControllerRef.current === controller) {
-          localRefreshAbortControllerRef.current = null;
-        }
-      }
-
-      return;
-    }
-
-    if (activeDuplicate) {
-      const refreshed = await refreshQueue({ announceSuccess: false });
-      if (mountedRef.current) {
-        setError(
-          refreshed
-            ? `${getClientErrorMessage(caughtError)} Kolejka została odświeżona.`
-            : `${getClientErrorMessage(caughtError)} Nie udało się odświeżyć kolejki. Odśwież ją ręcznie.`,
-        );
-        setErrorSource("mutation");
-      }
-      return;
-    }
-
-    setError(getClientErrorMessage(caughtError));
-    setErrorSource("mutation");
-  }
-
-  function confirmOptimisticOperation(
-    operationId: number,
-    confirmedRequest: DashboardEventQueueItemDto,
-    canonicalItems?: DashboardEventQueueItemDto[],
-  ) {
-    operationFocusRequestIdsRef.current.delete(operationId);
-    updateQueueState((currentState) => {
-      const operation = currentState.pendingOperations.find(
-        (candidate) => candidate.id === operationId,
-      );
-
-      if (!operation) {
-        return currentState;
-      }
-
-      return {
-        baseItems: canonicalItems ?? reconcileDashboardEventQueueItem(
-          applyQueueOptimisticOperation(currentState.baseItems, operation),
-          confirmedRequest,
-        ),
-        pendingOperations: currentState.pendingOperations.filter(
-          (candidate) => candidate.id !== operationId,
-        ),
-      };
-    });
-  }
-
-  function discardOptimisticOperation(operationId: number) {
-    const focusRequestId = operationFocusRequestIdsRef.current.get(operationId);
-    operationFocusRequestIdsRef.current.delete(operationId);
-
-    if (focusRequestId !== undefined && mountedRef.current) {
-      focusRequestIdRef.current = focusRequestId;
-    }
-
-    updateQueueState((currentState) => ({
-      ...currentState,
-      pendingOperations: currentState.pendingOperations.filter(
-        (operation) => operation.id !== operationId,
-      ),
-    }));
-  }
-
-  function discardAllOptimisticOperations() {
-    operationFocusRequestIdsRef.current.clear();
-    updateQueueState((currentState) => ({
-      ...currentState,
-      pendingOperations: [],
-    }));
-  }
-
-  function handleAuthenticationError(caughtError: unknown) {
-    if (
-      caughtError instanceof OperatorClientError &&
-      caughtError.status === 401
-    ) {
-      window.location.replace("/sign-in");
-      return true;
-    }
-
-    return false;
-  }
-
-  function canRunMutationTask() {
-    return mutationAllowedByPropsRef.current && !queueClosedRef.current && !fairQueueBusyRef.current;
-  }
-
+  async function refreshQueue(){if(!state.ready)client?.reconnect();else await client?.refresh();}
   return (
     <section
       ref={queuePanelRef}
@@ -841,7 +164,7 @@ export function EventQueuePanel({
           >
             {tx("Kolejka operacyjna")}</h2>
           <p className="mt-1 max-w-[70ch] text-sm text-muted-foreground">
-            {tx("Zgłoszenia tego wydarzenia. Zmiany są widoczne od razu, a zapis odbywa się kolejno w tle.")}</p>
+            {tx("Zgłoszenia tego wydarzenia. Zmiany są widoczne od razu, a niezależne operacje zapisują się równolegle w tle.")}</p>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -872,7 +195,7 @@ export function EventQueuePanel({
             <Badge variant="secondary" role="status">
               {tx("Synchronizacja…")}</Badge>
           ) : null}
-          {pendingMutationCount > 0 ? (
+          {state.entries.some(entry=>entry.phase==='sending') ? (
             <Badge variant="secondary" role="status">
               {tx("Trwa zapis…")}</Badge>
           ) : null}
@@ -884,20 +207,8 @@ export function EventQueuePanel({
             organizationId={organizationId}
             eventId={eventId}
             disabled={lifecycle !== "active" || queueClosedDetected || pendingMutationCount > 0 || isRefreshing || dragActive || !!pendingReject || placementBusy}
-            onBusyChange={busy => {
-              fairQueueBusyRef.current = busy;
-              setFairQueueBusy(busy);
-              if (busy) {
-                localMutationVersionRef.current += 1;
-                beginCanonicalRequest();
-              } else {
-                realtimeRefreshQueuedRef.current = true;
-                flushQueuedRealtimeRefresh();
-              }
-            }}
-            onApplied={canonicalItems => {
-              if (mountedRef.current) replaceQueueBase(canonicalItems);
-            }}
+            onBusyChange={setFairQueueBusy}
+            onApplied={() => {void client?.refresh();}}
           /> : null}
           <Button
             variant="outline"
@@ -915,6 +226,15 @@ export function EventQueuePanel({
         </div>
       </header>
 
+      <div className="flex flex-wrap items-center gap-2" data-queue-sync-state={!state.online?'offline':state.error?'local':state.entries.some(x=>x.phase==='conflict')?'conflict':state.entries.some(x=>x.phase==='sending')?'saving':pendingMutationCount?'local':state.ready?'synced':'loading'}>
+        <Badge variant="secondary" role="status">{tx(!state.online?'Offline — zmiany zachowane lokalnie':state.error?'Brak aktualnego potwierdzenia synchronizacji':state.entries.some(x=>x.phase==='conflict')?'Konflikt — wymagana decyzja':state.entries.some(x=>x.phase==='sending')?'Zapisuję':pendingMutationCount?'Lokalnie — oczekiwanie na potwierdzenie':state.ready?'Zsynchronizowano':'Odtwarzanie synchronizacji…')}</Badge>
+        {state.entries.some(x=>x.phase==='uncertain')?<Button variant="outline" onClick={()=>client?.retryUncertain()}>{tx("Ponów bezpiecznie")}</Button>:null}
+      </div>
+      {state.entries.filter(x=>x.phase==='conflict').map(entry=><Alert variant="destructive" key={entry.operation.operationId} data-queue-conflict>
+        <AlertTitle>{tx("Zmiana zgłoszenia #{v0} nie została zapisana",{v0:entry.operation.requestId})}</AlertTitle>
+        <AlertDescription>{tx(entry.error)} {tx("Sprawdź aktualną kolejkę. Odrzucenie dotyczy wyłącznie tej zachowanej lokalnej intencji.")}</AlertDescription>
+        <Button variant="outline" onClick={()=>client?.discard(entry.operation.operationId)}>{tx("Odrzuć lokalną intencję")}</Button>
+      </Alert>)}
       {!canManage || lifecycle !== "active" || queueClosedDetected ? (
         <Alert
           data-queue-closed={
@@ -940,7 +260,7 @@ export function EventQueuePanel({
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>
-            {errorSource === "mutation" ? tx("Nie udało się zapisać zmiany") : tx("Nie udało się zsynchronizować kolejki")}
+            {tx("Nie udało się zsynchronizować kolejki")}
           </AlertTitle>
           <AlertDescription>{tx(error)}</AlertDescription>
         </Alert>
@@ -975,6 +295,7 @@ export function EventQueuePanel({
         {currentItem ? (
           <EventQueueRequestRow
             item={currentItem}
+            unconfirmed={state.unconfirmedIds.includes(currentItem.id)}
             canManage={canMutate}
             canMoveUp={false}
             canMoveDown={false}
@@ -992,25 +313,18 @@ export function EventQueuePanel({
         generation={dragEpoch}
         id={`event-queue:${organizationId}:${eventId}`}
         items={items}
-        canDrag={canMutate && pendingMutationCount === 0 && !isRefreshing}
+        canDrag={canMutate}
         onDraggingChange={(active, requestId) => {
           dragActiveRef.current = active; setDragActive(active);
-          if (!active) setIsSyncing(false);
-          if (active) {
-            setDragNotice(null);
-            focusRequestIdRef.current = null;
-            if (focusAnimationFrameRef.current !== null) {
-              window.cancelAnimationFrame(focusAnimationFrameRef.current);
-              focusAnimationFrameRef.current = null;
-            }
-          }
+
+          if (active) {setDragNotice(null);gestureRevision.current=queueGestureRevision(items);}
           if (!active && requestId !== undefined) scheduleQueueRequestFocus(requestId);
         }}
         onDrop={(requestId, placement) => {
           if (dragEpoch === dragEpochRef.current) handlePlacement(requestId, placement);
         }}
         renderRow={(item, dragHandle, overlay) => <EventQueueRequestRow
-          item={item} isDragOverlay={overlay} dragHandle={dragHandle}
+          item={item} isDragOverlay={overlay} dragHandle={dragHandle} unconfirmed={state.unconfirmedIds.includes(item.id)}
           canManage={canMutate && !overlay}
           canMoveUp={approvedItems.findIndex(row => row.id === item.id) > 0}
           canMoveDown={item.status === "approved" && approvedItems.findIndex(row => row.id === item.id) < approvedItems.length - 1}
@@ -1057,6 +371,7 @@ export function EventQueuePanel({
               <EventQueueRequestRow
                 key={item.id}
                 item={item}
+                unconfirmed={state.unconfirmedIds.includes(item.id)}
                 canManage={canMutate}
                 canMoveUp={false}
                 canMoveDown={false}
@@ -1081,6 +396,7 @@ type EventQueueRequestRowProps = {
   canMoveDown: boolean;
   dragHandle?: ReactNode;
   isDragOverlay?: boolean;
+  unconfirmed?: boolean;
   onAction: (
     requestId: number,
     action: DashboardEventQueueAction,
@@ -1099,6 +415,7 @@ function EventQueueRequestRow({
   canMoveDown,
   dragHandle,
   isDragOverlay = false,
+  unconfirmed = false,
   onAction,
   onMove,
 }: EventQueueRequestRowProps) {
@@ -1114,6 +431,7 @@ function EventQueueRequestRow({
       aria-label={tx("Zgłoszenie: {v0}", {v0: requestLabel})}
       aria-hidden={isDragOverlay ? true : undefined}
       data-queue-request-id={isDragOverlay ? undefined : item.id}
+      data-queue-unconfirmed={unconfirmed || undefined}
       tabIndex={isDragOverlay ? undefined : -1}
       className={[
         "relative grid min-w-0 grid-cols-1 gap-x-3 gap-y-2.5 rounded-xl border px-3 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:grid-cols-[minmax(0,1fr)_auto]",
@@ -1129,6 +447,7 @@ function EventQueueRequestRow({
         <div className="flex flex-wrap items-center gap-1.5 pr-10 [&_strong]:text-sm">
           <strong>{item.displayName || item.singerName}</strong>
           <RequestStatusBadge status={item.status} />
+          {unconfirmed ? <Badge variant="secondary">{tx("Lokalnie — oczekiwanie na potwierdzenie")}</Badge> : null}
           <Badge variant="outline">
             {item.requestedBy === "public" ? tx("Link sesji") : tx("Operator")}
           </Badge>
@@ -1309,46 +628,6 @@ function getClosedQueueDescription(
   return "Wydarzenie jeszcze się nie rozpoczęło. Zarządzanie kolejką będzie dostępne po jego rozpoczęciu.";
 }
 
-function getClientErrorMessage(error: unknown) {
-  if (!(error instanceof OperatorClientError)) {
-    return "Nie udało się zapisać zmiany. Spróbuj ponownie.";
-  }
-
-  switch (error.code) {
-    case "WORKSPACE_EVENT_QUEUE_MANAGE_FORBIDDEN":
-      return "Nie masz uprawnień do zarządzania tą kolejką.";
-    case "EVENT_NOT_FOUND":
-    case "REQUEST_NOT_FOUND":
-    case "WORKSPACE_NOT_FOUND":
-      return "Nie znaleziono wydarzenia albo zgłoszenia.";
-    case "INVALID_STATUS_TRANSITION":
-      return "Status zgłoszenia zmienił się i ta akcja nie jest już dostępna.";
-    case "QUEUE_PLACEMENT_STALE":
-      return "Kolejka została zmieniona przez innego operatora. Sprawdź aktualną kolejność i przeciągnij ponownie.";
-    case "QUEUE_ACTION_CONFLICT":
-      return "Zgłoszenie zostało w międzyczasie zmienione. Odśwież kolejkę.";
-    case "QUEUE_ACTIVE_DUPLICATE":
-      return "Ta osoba ma już aktywne zgłoszenie tej piosenki.";
-    case "SESSION_REQUEST_LIMIT_REACHED":
-      return "Ta osoba ma już 2 aktywne zgłoszenia. Zakończ, odrzuć lub anuluj jedno z nich przed przywróceniem kolejnego.";
-    case "QUEUE_REQUEST_NOT_REORDERABLE":
-      return "Można zmieniać kolejność tylko zaakceptowanych zgłoszeń.";
-    case "EVENT_QUEUE_CLOSED":
-      return "Wydarzenie zostało zamknięte. Kolejka jest dostępna tylko do odczytu.";
-    case "SERVICE_UNAVAILABLE":
-      return "Usługa jest chwilowo niedostępna. Spróbuj ponownie za moment.";
-    case "VALIDATION_ERROR":
-    case "INVALID_JSON":
-      return "Nie udało się poprawnie odczytać operacji.";
-    default:
-      return "Nie udało się zapisać zmiany. Spróbuj ponownie.";
-  }
-}
-
-function getRefreshErrorMessage() {
-  return "Nie udało się pobrać aktualnych danych. Dotychczasowa kolejka pozostaje widoczna.";
-}
-
 function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
   switch (status) {
     case "live":
@@ -1360,61 +639,6 @@ function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
   }
 }
 
-function isEventQueueClosedError(error: unknown) {
-  return (
-    error instanceof OperatorClientError && error.code === "EVENT_QUEUE_CLOSED"
-  );
-}
-
-function isQueueAdmissionConflictError(error: unknown) {
-  return (
-    error instanceof OperatorClientError &&
-    (error.code === "QUEUE_ACTIVE_DUPLICATE" || error.code === "SESSION_REQUEST_LIMIT_REACHED")
-  );
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function replayQueueOptimisticOperations(
-  baseItems: DashboardEventQueueItemDto[],
-  operations: QueueOptimisticOperation[],
-) {
-  return operations.reduce(applyQueueOptimisticOperation, baseItems);
-}
-
-function applyQueueOptimisticOperation(
-  items: DashboardEventQueueItemDto[],
-  operation: QueueOptimisticOperation,
-) {
-  switch (operation.kind) {
-    case "placement": {
-      const current = items.find(row => row.id === operation.requestId);
-      let next = items;
-      if (current?.status !== operation.placement.lane) {
-        next = applyOptimisticDashboardEventQueueAction(items, operation.requestId,
-          operation.placement.lane === "approved" ? "approve" : operation.placement.lane === "pending" ? "restore" : "reject", operation.changedAt);
-      }
-      return operation.placement.lane === "approved"
-        ? applyOptimisticDashboardEventQueueMoveToPosition(next, operation.requestId, operation.placement.position, operation.changedAt) : next;
-    }
-    case "action":
-      return applyOptimisticDashboardEventQueueAction(
-        items,
-        operation.requestId,
-        operation.action,
-        operation.changedAt,
-      );
-    case "move":
-      return applyOptimisticDashboardEventQueueMove(
-        items,
-        operation.requestId,
-        operation.direction,
-        operation.changedAt,
-      );
-
-  }
-}
-
 function getI18nRecord_actionLabels() { return actionLabels; }
+
+function queueGestureRevision(items:DashboardEventQueueItemDto[]){return items.map(x=>`${x.id}:${x.status}:${x.position}:${x.intentVersion??0}`).join("|");}

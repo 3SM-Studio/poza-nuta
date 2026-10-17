@@ -42,6 +42,7 @@ test(`${image}: guest request and event-scoped organizer queue lifecycle`, async
     // No active fixture exists until all current migrations have completed.
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, 30);
+    await applyPostgresMigration(sql, 32);
     const legacyFixture = await seedLegacyActiveEvent(sql);
     const fixture = await seedFixture(sql);
     process.env.DATABASE_URL = makeDatabaseUrl(harness);
