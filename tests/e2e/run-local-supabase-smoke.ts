@@ -26,6 +26,8 @@ const PLAYWRIGHT_FAILURES_DIRECTORY = join(
 const LOCAL_ORIGIN = `http://localhost:${APP_PORT}`;
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
 const optimizedBuild = process.env.LOCAL_E2E_OPTIMIZED === "1" || process.env.LOCAL_E2E_PERFORMANCE === "1";
+const searchEngine = process.env.LOCAL_E2E_SEARCH_ENGINE ?? "legacy";
+if (searchEngine !== "legacy" && searchEngine !== "unicode-v2") throw new Error("Unknown isolated search engine.");
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const projectRoot = await mkdtemp(join(tmpdir(), "pozanuta-p3-e2e-"));
@@ -88,6 +90,7 @@ try {
     LOCAL_E2E_SUPABASE_SECRET_KEY: secretKey,
     NEXT_DIST_DIR: NEXT_DIST_DIRECTORY,
     KUNESTU_FAIR_QUEUE_ENGINE:process.env.LOCAL_E2E_FAIR_ENGINE==='rotation-v2'?'rotation-v2':'legacy',
+    SONG_SEARCH_ENGINE: searchEngine,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
     NEXT_PUBLIC_SUPABASE_URL: API_ORIGIN,
     SITE_URL: LOCAL_ORIGIN,

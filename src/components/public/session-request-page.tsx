@@ -386,6 +386,9 @@ export function SessionRequestPage({
       setSearchMessage(page.items.length === 0 ? "Brak wyników. Spróbuj wpisać tytuł i wykonawcę." : null);
     } catch (caughtError) {
       if (controller.signal.aborted || isAbortError(caughtError) || requestVersion !== searchVersionRef.current) return;
+      lastDispatchedSearchQueryRef.current = null;
+      setSearchResults([]);
+      setSearchNextCursor(null);
       setSearchMessage("Nie udało się wyszukać piosenek. Spróbuj ponownie.");
     } finally {
       if (!controller.signal.aborted && requestVersion === searchVersionRef.current) setIsSearching(false);

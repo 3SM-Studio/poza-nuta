@@ -327,7 +327,7 @@ test("session API remains anonymous, identity-scoped and rate limited", () => {
 
   for (const route of routes) {
     const source = readFileSync(route, "utf8");
-    assert.match(source, /requireSessionApiRateLimit\(request\)/);
+    assert.match(source, /requireSessionApiRateLimit\(request(?:, "search")?\)/);
     assert.doesNotMatch(source, /requireOperatorSession/);
   }
 

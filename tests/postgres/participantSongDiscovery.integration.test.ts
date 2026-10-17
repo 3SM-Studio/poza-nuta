@@ -192,6 +192,11 @@ for (const image of images) {
           hitCount: 1,
           plusCount: 0,
         });
+        const simultaneousDiscovery=await Promise.all(Array.from({length:20},()=>service.getPublicSessionSongDiscovery(fixture.activeToken)));
+        for(const result of simultaneousDiscovery) assert.deepEqual(result,discovery);
+        // A warm catalog cache must never bypass session lifecycle/access checks.
+        await assert.rejects(service.getPublicSessionSongDiscovery(fixture.scheduledToken),hasPublicError(403,"SESSION_EVENT_NOT_STARTED"));
+        await assert.rejects(service.getPublicSessionSongDiscovery("Z".repeat(22)),hasPublicError(404,"SESSION_LINK_INVALID"));
 
         assert.equal(
           validation.validatePublicSongBrowseQuery(

@@ -8,6 +8,7 @@ import { normalizeSongSearchQuery, normalizeSongSearchText } from "../../src/lib
 import { decodeSongSearchCursor } from "../../src/lib/song-search-cursor.ts";
 import {
   applyPostgresMigrations,
+  applyPostgresMigration,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
   removePostgresTestHarness,
@@ -24,6 +25,7 @@ test("adversarial search review", async () => {
   try {
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 31 : 27);
+    if (process.env.SONG_SEARCH_ENGINE === "unicode-v2") await applyPostgresMigration(sql,34);
     await seedTargets(sql);
 
     await withApplicationDatabase(harness, async () => {

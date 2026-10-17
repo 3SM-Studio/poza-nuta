@@ -10,6 +10,9 @@ import { tokenizeLegacySongSearchQuery } from "../lib/song-search";
 import { isUnicodeSongSearchEnabled } from "../lib/song-search-engine";
 import { searchUnicodeCatalogSongs } from "./song-search-unicode";
 import { getDb } from "./db";
+import { traceDbOperation } from "./db-telemetry";
+import { createSongSearchSingleFlight } from "./song-search-single-flight";
+import { withSongSearchAdmission } from "./song-search-admission";
 
 export const SONG_SEARCH_RESULT_LIMIT = 50;
 export const SONG_SEARCH_STRONG_CANDIDATE_LIMIT = 500;
@@ -46,21 +49,29 @@ export type SongSearchPage = {
   nextCursor: string | null;
 };
 
+const coalesceSongSearch = createSongSearchSingleFlight<SongSearchPage>();
+
 export async function searchCatalogSongs(
   query: string | null,
   cursor: SongSearchCursor | null = null,
 ): Promise<SongSearchPage> {
-  if (isUnicodeSongSearchEnabled()) return searchUnicodeCatalogSongs(query, cursor);
-  if (query === null || query.length < 2) {
+  const unicode = isUnicodeSongSearchEnabled();
+  if (query === null || (!unicode && query.length < 2)) {
     return { items: [], nextCursor: null };
   }
+  return coalesceSongSearch(getDb(), JSON.stringify([unicode ? 2 : 1, query, cursor]), () =>
+    traceDbOperation("song_search", unicode ? "song_search.unicode_v2" : "song_search.legacy", () => loadCatalogSongs(query, cursor, unicode)));
+}
+
+async function loadCatalogSongs(query: string, cursor: SongSearchCursor | null, unicode: boolean): Promise<SongSearchPage> {
+  if (unicode) return searchUnicodeCatalogSongs(query, cursor);
 
   const tokens = tokenizeLegacySongSearchQuery(query);
   const phrasePattern = containsPattern(query);
   const tokenPredicate = allTokensMatch(tokens);
   const cursorPredicate = afterSongSearchCursor(cursor);
 
-  return getDb().transaction(async (transaction) => {
+  return withSongSearchAdmission(async (transaction) => {
     await transaction.execute(
       sql`select set_config('pg_trgm.strict_word_similarity_threshold', ${String(SONG_SEARCH_FUZZY_THRESHOLD)}, true)`,
     );

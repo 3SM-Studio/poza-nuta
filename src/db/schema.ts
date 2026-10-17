@@ -314,6 +314,7 @@ export const songSearchDocuments = pgTable("song_search_documents", {
   index("song_search_documents_artist_idx").on(table.normalizedArtist),
   index("song_search_documents_grams_idx").using("gin", table.shortGrams),
   index("song_search_documents_trgm_idx").using("gin", table.searchText.op("gin_trgm_ops")),
+  index("song_search_documents_fuzzy_distance_idx").using("gist", sql`(${table.searchText} || '') gist_trgm_ops(siglen=256)`),
   check("song_search_documents_version_check", sql`${table.normalizationVersion} = 2`),
 ]).enableRLS();
 

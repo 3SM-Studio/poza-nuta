@@ -7,6 +7,7 @@ import { test, vi } from "vitest";
 import { normalizeSongSearchText } from "../../src/lib/song-search.ts";
 import {
   applyPostgresMigrations,
+  applyPostgresMigration,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
   removePostgresTestHarness,
@@ -78,6 +79,7 @@ test("professional song search corpus ranks normal human queries prominently", a
   try {
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 31 : 27);
+    if (process.env.SONG_SEARCH_ENGINE === "unicode-v2") await applyPostgresMigration(sql,34);
     await seedSongs(sql);
 
     await withApplicationDatabase(harness, async () => {

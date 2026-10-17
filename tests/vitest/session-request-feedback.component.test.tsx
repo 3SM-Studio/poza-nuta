@@ -434,6 +434,32 @@ describe("session request feedback", () => {
     expect(searchSongs).toHaveBeenCalledOnce();
   });
 
+  it("retries the identical query on Enter after a server failure", async () => {
+    searchSongs.mockRejectedValueOnce(new Error("Service temporarily unavailable"));
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    const searchbox = screen.getByRole("searchbox");
+    fireEvent.change(searchbox, { target: { value: "ABBA" } });
+    fireEvent.submit(searchbox.closest("form")!);
+    expect(await screen.findByText("Nie udało się wyszukać piosenek. Spróbuj ponownie.")).toBeVisible();
+    expect(searchSongs).toHaveBeenCalledTimes(1);
+    fireEvent.submit(searchbox.closest("form")!);
+    await waitFor(() => expect(searchSongs).toHaveBeenCalledTimes(2));
+    expect(searchbox).toHaveValue("ABBA");
+    await waitFor(() => expect(screen.queryByText("Nie udało się wyszukać piosenek. Spróbuj ponownie.")).toBeNull());
+  });
+
+  it("does not present results of the previous query as results of a failed new query", async () => {
+    render(<SessionRequestPage sessionToken="AbCdEfGhIjKlMnOpQrStUv" event={event} />);
+    const searchbox=screen.getByRole('searchbox');
+    fireEvent.change(searchbox,{target:{value:'ABBA'}}); fireEvent.submit(searchbox.closest('form')!);
+    expect(await screen.findByRole('button',{name:new RegExp(song.title)})).toBeVisible();
+    searchSongs.mockRejectedValueOnce(new Error('Service unavailable'));
+    fireEvent.change(searchbox,{target:{value:'Queen'}}); fireEvent.submit(searchbox.closest('form')!);
+    expect(await screen.findByText('Nie udało się wyszukać piosenek. Spróbuj ponownie.')).toBeVisible();
+    expect(screen.queryByRole('button',{name:new RegExp(song.title)})).toBeNull();
+    expect(searchbox).toHaveValue('Queen');
+  });
+
   it("initializes a direct Search route from q and performs one request", async () => {
     navigationState.pathname = "/s/AbCdEfGhIjKlMnOpQrStUv/search";
     navigationState.searchParams = new URLSearchParams("q=abba");

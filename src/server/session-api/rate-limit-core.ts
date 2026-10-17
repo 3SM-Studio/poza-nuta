@@ -3,18 +3,21 @@ type RateLimitBucket = {
   resetAt: number;
 };
 
-export type SessionRateLimitScope = "page" | "api" | "presence" | "linking";
+export type SessionRateLimitScope = "page" | "api" | "presence" | "linking" | "search" | "search-network";
 
 const limits: Record<SessionRateLimitScope, { max: number; windowMs: number }> = {
   page: { max: 12, windowMs: 60_000 },
   api: { max: 120, windowMs: 60_000 },
   presence: { max: 240, windowMs: 60_000 },
   linking: { max: 60, windowMs: 60_000 },
+  search: { max: 120, windowMs: 60_000 },
+  "search-network": { max: 2400, windowMs: 60_000 },
 };
 
 const globalRateLimit = globalThis as typeof globalThis & {
   pozaNutaSessionRateLimit?: Map<string, RateLimitBucket>;
   pozaNutaPresenceRateLimit?: Map<string, RateLimitBucket>;
+  pozaNutaSearchRateLimit?: Map<string, RateLimitBucket>;
 };
 
 // Defense-in-depth only. Production enumeration protection is provided by a
@@ -24,6 +27,8 @@ const buckets =
 globalRateLimit.pozaNutaSessionRateLimit = buckets;
 const presenceBuckets = globalRateLimit.pozaNutaPresenceRateLimit ?? new Map<string, RateLimitBucket>();
 globalRateLimit.pozaNutaPresenceRateLimit = presenceBuckets;
+const searchBuckets = globalRateLimit.pozaNutaSearchRateLimit ?? new Map<string, RateLimitBucket>();
+globalRateLimit.pozaNutaSearchRateLimit = searchBuckets;
 let nextPresenceCleanupAt = 0;
 
 export function consumeSessionRateLimit(input: {
@@ -32,10 +37,12 @@ export function consumeSessionRateLimit(input: {
   now?: number;
 }) {
   const now = input.now ?? Date.now();
-  const bounded = input.scope === "presence" || input.scope === "linking";
-  const store = bounded ? presenceBuckets : buckets;
-  if (bounded && now >= nextPresenceCleanupAt) {
-    for (const [key, bucket] of presenceBuckets) if (bucket.resetAt <= now) presenceBuckets.delete(key);
+  const store = input.scope === "search" || input.scope === "search-network" ? searchBuckets
+    : input.scope === "presence" || input.scope === "linking" ? presenceBuckets : buckets;
+  if (now >= nextPresenceCleanupAt) {
+    for (const cache of [buckets, presenceBuckets, searchBuckets]) {
+      for (const [key, bucket] of cache) if (bucket.resetAt <= now) cache.delete(key);
+    }
     nextPresenceCleanupAt = now + 60_000;
   }
   const limit = limits[input.scope];
@@ -43,7 +50,7 @@ export function consumeSessionRateLimit(input: {
   const current = store.get(bucketKey);
 
   if (!current || current.resetAt <= now) {
-    if (bounded && !current && store.size >= 10_000) return { allowed: false as const, retryAfterSeconds: 60 };
+    if (!current && store.size >= 10_000) return { allowed: false as const, retryAfterSeconds: 60 };
     store.set(bucketKey, { count: 1, resetAt: now + limit.windowMs });
     return { allowed: true as const, retryAfterSeconds: 0 };
   }
@@ -62,5 +69,6 @@ export function consumeSessionRateLimit(input: {
 export function resetSessionRateLimitForTests() {
   buckets.clear();
   presenceBuckets.clear();
+  searchBuckets.clear();
   nextPresenceCleanupAt = 0;
 }

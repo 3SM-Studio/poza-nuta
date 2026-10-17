@@ -1,0 +1,739 @@
+{
+  "startedAt": "2026-10-17T21:25:34.009Z",
+  "corpus": "92,014 synthetic songs + multilingual fixtures; not provider data",
+  "node": "v24.19.0",
+  "cpu": "AMD Ryzen 7 5700X3D 8-Core Processor           ",
+  "logicalCpus": 16,
+  "ramGiB": 31.927772521972656,
+  "poolMax": 2,
+  "cpuLimit": "2",
+  "signatureBytes": 256,
+  "postgres": "PostgreSQL 17.10 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+  "idleResources": "3.16% 171MiB / 15.58GiB",
+  "indexBuildMs": 2178.634699999995,
+  "indexBytes": 19767296,
+  "loads": [
+    {
+      "name": "baseline",
+      "concurrency": 1,
+      "n": 4,
+      "p50": 618.4239999999991,
+      "p95": 668.2492999999959,
+      "p99": 668.2492999999959,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 2069.0967999999993,
+      "sqlStatements": 8,
+      "resources": "204.87% 184.1MiB / 15.58GiB"
+    },
+    {
+      "name": "baseline",
+      "concurrency": 5,
+      "n": 20,
+      "p50": 3172.8488999999972,
+      "p95": 3787.678799999994,
+      "p99": 4585.696100000001,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 12449.749200000006,
+      "sqlStatements": 40,
+      "resources": "200.90% 194.6MiB / 15.58GiB"
+    },
+    {
+      "name": "baseline",
+      "concurrency": 20,
+      "n": 80,
+      "p50": 13123.7543,
+      "p95": 15600.05290000001,
+      "p99": 15986.827900000004,
+      "timeouts": 9,
+      "capacity": 0,
+      "totalMs": 53373.412200000006,
+      "sqlStatements": 160,
+      "resources": "200.07% 194.4MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-sql",
+      "concurrency": 1,
+      "n": 4,
+      "p50": 309.02659999998286,
+      "p95": 647.0802000000258,
+      "p99": 647.0802000000258,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 1642.054999999993,
+      "sqlStatements": 12,
+      "resources": "158.65% 194.3MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-sql",
+      "concurrency": 5,
+      "n": 20,
+      "p50": 1320.10070000001,
+      "p95": 1862.2869000000064,
+      "p99": 1889.5873999999894,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 5985.711100000015,
+      "sqlStatements": 60,
+      "resources": "203.11% 190.1MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-sql",
+      "concurrency": 20,
+      "n": 80,
+      "p50": 5909.523799999995,
+      "p95": 6555.869999999995,
+      "p99": 6686.1322999999975,
+      "timeouts": 0,
+      "capacity": 8,
+      "totalMs": 24828.579699999973,
+      "sqlStatements": 216,
+      "resources": "199.67% 193.6MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-service",
+      "concurrency": 1,
+      "n": 4,
+      "p50": 324.1342000000004,
+      "p95": 707.4673000000184,
+      "p99": 707.4673000000184,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 1722.5236999999906,
+      "sqlStatements": 12,
+      "resources": "171.02% 186.3MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-service",
+      "concurrency": 5,
+      "n": 20,
+      "p50": 344.497400000022,
+      "p95": 1175.1183999999776,
+      "p99": 1325.0547000000079,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 2640.2632999999914,
+      "sqlStatements": 21,
+      "resources": "164.36% 191.7MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-service",
+      "concurrency": 20,
+      "n": 80,
+      "p50": 661.5200000000186,
+      "p95": 1336.795299999998,
+      "p99": 1336.845100000006,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 3323.2370999999985,
+      "sqlStatements": 21,
+      "resources": "195.98% 195.4MiB / 15.58GiB"
+    }
+  ],
+  "rapid": [
+    {
+      "name": "baseline",
+      "totalMs": 2905.38029999999,
+      "sqlStatements": 20,
+      "debounceApplied": false
+    },
+    {
+      "name": "optimized-service",
+      "totalMs": 1545.5264999999781,
+      "sqlStatements": 30,
+      "debounceApplied": false
+    }
+  ],
+  "categories": [
+    {
+      "cached": false,
+      "requests": 20,
+      "aggregateSql": 40,
+      "totalMs": 3384.1312000000034
+    },
+    {
+      "cached": true,
+      "requests": 20,
+      "aggregateSql": 2,
+      "totalMs": 151.86139999999432
+    }
+  ],
+  "connections": [
+    {
+      "clients": 4
+    }
+  ],
+  "distinctLoads": [
+    {
+      "name": "baseline",
+      "poolMax": 2,
+      "requests": 20,
+      "p50": 9569.280800000008,
+      "p95": 18787.036699999997,
+      "p99": 18915.945399999997,
+      "timeouts": 3,
+      "capacity": 0,
+      "totalMs": 18934.356100000005,
+      "sqlStatements": 40,
+      "resources": "205.62% 200.3MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-service",
+      "poolMax": 2,
+      "requests": 20,
+      "p50": 1765.794900000008,
+      "p95": 3515.9318000000203,
+      "p99": 3549.435200000007,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 3559.998099999997,
+      "sqlStatements": 60,
+      "resources": "196.47% 196.6MiB / 15.58GiB"
+    },
+    {
+      "name": "baseline",
+      "poolMax": 20,
+      "requests": 20,
+      "p50": 2179.608100000012,
+      "p95": 2181.4182999999903,
+      "p99": 2273.473499999993,
+      "timeouts": 20,
+      "capacity": 0,
+      "totalMs": 2282.9069000000018,
+      "sqlStatements": 40,
+      "resources": "200.37% 299.8MiB / 15.58GiB"
+    },
+    {
+      "name": "optimized-service",
+      "poolMax": 20,
+      "requests": 20,
+      "p50": 2397.5887999999977,
+      "p95": 4387.4493000000075,
+      "p99": 4419.987900000007,
+      "timeouts": 0,
+      "capacity": 0,
+      "totalMs": 4427.291399999987,
+      "sqlStatements": 324,
+      "resources": "195.83% 272.5MiB / 15.58GiB"
+    }
+  ],
+  "finishedAt": "2026-10-17T21:29:47.881Z",
+  "measurements": [
+    {
+      "name": "baseline",
+      "query": "lo",
+      "ms": 65.27390000000014,
+      "count": 50,
+      "responseBytes": 8546
+    },
+    {
+      "name": "baseline",
+      "query": "love",
+      "ms": 69.82480000000214,
+      "count": 50,
+      "responseBytes": 8549
+    },
+    {
+      "name": "baseline",
+      "query": "love tonight",
+      "ms": 34.15140000000247,
+      "count": 50,
+      "responseBytes": 8559
+    },
+    {
+      "name": "baseline",
+      "query": "queen dancing",
+      "ms": 39.95109999999113,
+      "count": 50,
+      "responseBytes": 8620
+    },
+    {
+      "name": "baseline",
+      "query": "dancing queen",
+      "ms": 39.106400000004214,
+      "count": 50,
+      "responseBytes": 8620
+    },
+    {
+      "name": "baseline",
+      "query": "dancin queen",
+      "ms": 35.425900000002,
+      "count": 50,
+      "responseBytes": 8621
+    },
+    {
+      "name": "baseline",
+      "query": "biala",
+      "ms": 26.800400000007357,
+      "count": 50,
+      "responseBytes": 8587
+    },
+    {
+      "name": "baseline",
+      "query": "тиха",
+      "ms": 28.338100000008126,
+      "count": 50,
+      "responseBytes": 8849
+    },
+    {
+      "name": "baseline",
+      "query": "周",
+      "ms": 6.5609999999869615,
+      "count": 1,
+      "responseBytes": 184
+    },
+    {
+      "name": "baseline",
+      "query": "光",
+      "ms": 20.430500000002212,
+      "count": 50,
+      "responseBytes": 8526
+    },
+    {
+      "name": "baseline",
+      "query": "unrelatedzzzxxyy",
+      "ms": 10.221199999999953,
+      "count": 0,
+      "responseBytes": 30
+    },
+    {
+      "name": "baseline",
+      "query": "love tonight 90000",
+      "ms": 151.43309999999474,
+      "count": 50,
+      "responseBytes": 8637
+    },
+    {
+      "name": "baseline",
+      "query": "artist 30000",
+      "ms": 765.3761999999988,
+      "count": 50,
+      "responseBytes": 8632
+    },
+    {
+      "name": "baseline",
+      "query": "artistt",
+      "ms": 583.0440999999992,
+      "count": 50,
+      "responseBytes": 8400
+    },
+    {
+      "name": "baseline",
+      "query": "pop",
+      "ms": 131.34299999999348,
+      "count": 50,
+      "responseBytes": 8545
+    },
+    {
+      "name": "baseline",
+      "query": "english",
+      "ms": 137.69150000000081,
+      "count": 50,
+      "responseBytes": 8551
+    },
+    {
+      "name": "baseline",
+      "query": "ar",
+      "ms": 44.351599999994505,
+      "count": 50,
+      "responseBytes": 8544
+    },
+    {
+      "name": "baseline",
+      "query": "song 30000",
+      "ms": 613.6318000000028,
+      "count": 50,
+      "responseBytes": 8622
+    },
+    {
+      "name": "baseline",
+      "query": "danccing queeen",
+      "ms": 194.734300000011,
+      "count": 50,
+      "responseBytes": 8645
+    },
+    {
+      "name": "baseline",
+      "query": "artistt 30000",
+      "ms": 149.26440000000002,
+      "count": 50,
+      "responseBytes": 8628
+    },
+    {
+      "name": "baseline",
+      "query": "songg 30000",
+      "ms": 27.912899999995716,
+      "count": 50,
+      "responseBytes": 8631
+    },
+    {
+      "name": "baseline",
+      "query": "lovee tonite",
+      "ms": 88.82140000000072,
+      "count": 0,
+      "responseBytes": 30
+    },
+    {
+      "name": "baseline",
+      "query": "querywithnosuchwordsatallinthecatalogandnothingelse",
+      "ms": 8.783899999994901,
+      "count": 0,
+      "responseBytes": 30
+    },
+    {
+      "name": "optimized",
+      "query": "lo",
+      "ms": 35.935899999996764,
+      "count": 50,
+      "responseBytes": 8546
+    },
+    {
+      "name": "optimized",
+      "query": "love",
+      "ms": 38.06680000000051,
+      "count": 50,
+      "responseBytes": 8549
+    },
+    {
+      "name": "optimized",
+      "query": "love tonight",
+      "ms": 29.306200000006356,
+      "count": 50,
+      "responseBytes": 8559
+    },
+    {
+      "name": "optimized",
+      "query": "queen dancing",
+      "ms": 41.81459999999788,
+      "count": 50,
+      "responseBytes": 8620
+    },
+    {
+      "name": "optimized",
+      "query": "dancing queen",
+      "ms": 37.60160000000906,
+      "count": 50,
+      "responseBytes": 8620
+    },
+    {
+      "name": "optimized",
+      "query": "dancin queen",
+      "ms": 33.82709999999497,
+      "count": 50,
+      "responseBytes": 8621
+    },
+    {
+      "name": "optimized",
+      "query": "biala",
+      "ms": 26.672399999995832,
+      "count": 50,
+      "responseBytes": 8587
+    },
+    {
+      "name": "optimized",
+      "query": "тиха",
+      "ms": 41.873400000011316,
+      "count": 50,
+      "responseBytes": 8849
+    },
+    {
+      "name": "optimized",
+      "query": "周",
+      "ms": 7.399499999999534,
+      "count": 1,
+      "responseBytes": 184
+    },
+    {
+      "name": "optimized",
+      "query": "光",
+      "ms": 20.7384999999922,
+      "count": 50,
+      "responseBytes": 8526
+    },
+    {
+      "name": "optimized",
+      "query": "unrelatedzzzxxyy",
+      "ms": 9.395000000004075,
+      "count": 0,
+      "responseBytes": 30
+    },
+    {
+      "name": "optimized",
+      "query": "love tonight 90000",
+      "ms": 295.51800000001094,
+      "count": 50,
+      "responseBytes": 8637
+    },
+    {
+      "name": "optimized",
+      "query": "artist 30000",
+      "ms": 325.17720000000554,
+      "count": 50,
+      "responseBytes": 8632
+    },
+    {
+      "name": "optimized",
+      "query": "artistt",
+      "ms": 719.8942999999999,
+      "count": 50,
+      "responseBytes": 8400
+    },
+    {
+      "name": "optimized",
+      "query": "pop",
+      "ms": 122.54260000000068,
+      "count": 50,
+      "responseBytes": 8545
+    },
+    {
+      "name": "optimized",
+      "query": "english",
+      "ms": 171.18590000001132,
+      "count": 50,
+      "responseBytes": 8551
+    },
+    {
+      "name": "optimized",
+      "query": "ar",
+      "ms": 50.11039999999048,
+      "count": 50,
+      "responseBytes": 8544
+    },
+    {
+      "name": "optimized",
+      "query": "song 30000",
+      "ms": 300.57540000000154,
+      "count": 50,
+      "responseBytes": 8622
+    },
+    {
+      "name": "optimized",
+      "query": "danccing queeen",
+      "ms": 358.66900000000896,
+      "count": 50,
+      "responseBytes": 8645
+    },
+    {
+      "name": "optimized",
+      "query": "artistt 30000",
+      "ms": 204.94509999999718,
+      "count": 50,
+      "responseBytes": 8628
+    },
+    {
+      "name": "optimized",
+      "query": "songg 30000",
+      "ms": 36.349300000001676,
+      "count": 50,
+      "responseBytes": 8631
+    },
+    {
+      "name": "optimized",
+      "query": "lovee tonite",
+      "ms": 87.63900000001013,
+      "count": 0,
+      "responseBytes": 30
+    },
+    {
+      "name": "optimized",
+      "query": "querywithnosuchwordsatallinthecatalogandnothingelse",
+      "ms": 10.357799999997951,
+      "count": 0,
+      "responseBytes": 30
+    }
+  ],
+  "plans": [
+    {
+      "name": "baseline",
+      "query": "lo",
+      "planningMs": 2.646,
+      "executionMs": 32.077
+    },
+    {
+      "name": "baseline",
+      "query": "love",
+      "planningMs": 2.788,
+      "executionMs": 43.591
+    },
+    {
+      "name": "baseline",
+      "query": "dancin queen",
+      "planningMs": 1.703,
+      "executionMs": 27.239
+    },
+    {
+      "name": "baseline",
+      "query": "love tonight 90000",
+      "planningMs": 1.84,
+      "executionMs": 151.045
+    },
+    {
+      "name": "baseline",
+      "query": "artist 30000",
+      "planningMs": 1.935,
+      "executionMs": 701.727
+    },
+    {
+      "name": "baseline",
+      "query": "artistt",
+      "planningMs": 1.708,
+      "executionMs": 663.442
+    },
+    {
+      "name": "baseline",
+      "query": "pop",
+      "planningMs": 1.511,
+      "executionMs": 144.148
+    },
+    {
+      "name": "baseline",
+      "query": "english",
+      "planningMs": 1.636,
+      "executionMs": 171.138
+    },
+    {
+      "name": "baseline",
+      "query": "ar",
+      "planningMs": 0.84,
+      "executionMs": 55.694
+    },
+    {
+      "name": "baseline",
+      "query": "song 30000",
+      "planningMs": 1.67,
+      "executionMs": 692.106
+    },
+    {
+      "name": "baseline",
+      "query": "danccing queeen",
+      "planningMs": 1.874,
+      "executionMs": 134.272
+    },
+    {
+      "name": "baseline",
+      "query": "artistt 30000",
+      "planningMs": 1.819,
+      "executionMs": 137.777
+    },
+    {
+      "name": "baseline",
+      "query": "songg 30000",
+      "planningMs": 1.859,
+      "executionMs": 21.788
+    },
+    {
+      "name": "baseline",
+      "query": "lovee tonite",
+      "planningMs": 1.972,
+      "executionMs": 70.403
+    },
+    {
+      "name": "baseline",
+      "query": "querywithnosuchwordsatallinthecatalogandnothingelse",
+      "planningMs": 1.903,
+      "executionMs": 1.02
+    },
+    {
+      "name": "optimized",
+      "query": "lo",
+      "planningMs": 1.353,
+      "executionMs": 21.721
+    },
+    {
+      "name": "optimized",
+      "query": "love",
+      "planningMs": 1.441,
+      "executionMs": 35.847
+    },
+    {
+      "name": "optimized",
+      "query": "dancin queen",
+      "planningMs": 0.79,
+      "executionMs": 27.361
+    },
+    {
+      "name": "optimized",
+      "query": "love tonight 90000",
+      "planningMs": 0.766,
+      "executionMs": 318.114
+    },
+    {
+      "name": "optimized",
+      "query": "artist 30000",
+      "planningMs": 0.739,
+      "executionMs": 322.431
+    },
+    {
+      "name": "optimized",
+      "query": "artistt",
+      "planningMs": 1.36,
+      "executionMs": 771.738
+    },
+    {
+      "name": "optimized",
+      "query": "pop",
+      "planningMs": 1.502,
+      "executionMs": 123.948
+    },
+    {
+      "name": "optimized",
+      "query": "english",
+      "planningMs": 1.357,
+      "executionMs": 176.371
+    },
+    {
+      "name": "optimized",
+      "query": "ar",
+      "planningMs": 1.3,
+      "executionMs": 55.965
+    },
+    {
+      "name": "optimized",
+      "query": "song 30000",
+      "planningMs": 1.031,
+      "executionMs": 344.749
+    },
+    {
+      "name": "optimized",
+      "query": "danccing queeen",
+      "planningMs": 1.151,
+      "executionMs": 370.472
+    },
+    {
+      "name": "optimized",
+      "query": "artistt 30000",
+      "planningMs": 0.831,
+      "executionMs": 209.698
+    },
+    {
+      "name": "optimized",
+      "query": "songg 30000",
+      "planningMs": 0.768,
+      "executionMs": 29.173
+    },
+    {
+      "name": "optimized",
+      "query": "lovee tonite",
+      "planningMs": 0.917,
+      "executionMs": 85.717
+    },
+    {
+      "name": "optimized",
+      "query": "querywithnosuchwordsatallinthecatalogandnothingelse",
+      "planningMs": 2.707,
+      "executionMs": 1.199
+    }
+  ],
+  "rawEvidenceSha256": "5ee69f6c0ebd22549da3e52c0708438219ab618fa4d3a79791464f246c1d07f0",
+  "limits": [
+    "92,014 synthetic scale songs plus multilingual fixtures; not provider recall validation.",
+    "Final implementation with database-wide admission, two-CPU Docker quota and 256-byte GiST signature.",
+    "Service times include local pool/admission waiting; exclude HTTP/access/DOM/network.",
+    "Counters include Drizzle execute statements, not transaction BEGIN/COMMIT or admin queries.",
+    "Docker samples are snapshots, not peak/CPU accounting/cloud billing.",
+    "Nearest-rank p50/p95/p99 with small n; p95/p99 at n4 equal maximum.",
+    "Simplified category pair benchmark excludes feature counts and authorization.",
+    "Uncoalesced SQL-only control has capacity rejections and does not pass final-service acceptance."
+  ]
+}

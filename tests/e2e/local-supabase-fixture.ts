@@ -54,6 +54,7 @@ export type LocalSupabaseFixture = {
   >;
   resetQueue(): Promise<void>;
   seedDragQueue(count?: number): Promise<void>;
+  seedSearchCatalog(): Promise<void>;
   createPeerOperator(): Promise<{email: string; password: string; operatorId: number}>;
   readParticipantPresence(displayName: string): Promise<{ memberId: number; liveConnections: number; connections: number }>;
   readParticipantCredentialCount(displayName: string): Promise<number>;
@@ -595,6 +596,14 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       `;
     }
 
+    async function seedSearchCatalog() {
+      for (const [title,artist] of [['To nie ja','Edyta Górniak'],['Группа крови','Кино'],['光','宇多田ヒカル']]) {
+        const [song]=await sql<{id:number}[]>`insert into public.songs(source,title,artist,normalized_title,normalized_artist,search_text)
+          values('manual',${title},${artist},'', '', '') returning id::integer`;
+        songIds.push(song.id);
+      }
+    }
+
     async function seedDragQueue(count = 6) {
       await sql.begin(async tx => {
         const [event] = await tx`select id from public.events where public_id=${eventPublicId}::uuid`;
@@ -712,6 +721,7 @@ export async function createLocalSupabaseFixture(): Promise<LocalSupabaseFixture
       readParticipantCredentialCount,
       resetQueue,
       seedDragQueue,
+      seedSearchCatalog,
       createPeerOperator,
       cleanup,
     };

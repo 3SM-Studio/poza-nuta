@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { test, vi } from "vitest";
-import { applyPostgresMigrations, createPostgresTestClient, installPostgresCompatibilityFixture, removePostgresTestHarness, startPostgresTestHarness } from "./postgresTestHarness.ts";
+import { applyPostgresMigrations, applyPostgresMigration, createPostgresTestClient, installPostgresCompatibilityFixture, removePostgresTestHarness, startPostgresTestHarness } from "./postgresTestHarness.ts";
 vi.mock("server-only", () => ({}));
 
 test("Unicode search pool recovers after PostgreSQL statement cancellation", async () => {
@@ -10,7 +10,7 @@ test("Unicode search pool recovers after PostgreSQL statement cancellation", asy
   const priorUrl=process.env.DATABASE_URL,priorEngine=process.env.SONG_SEARCH_ENGINE;
   const registry=globalThis as typeof globalThis & { pozaNutaDatabase?: ReturnType<typeof import("../../src/server/db.ts").getDb> };
   try {
-    await installPostgresCompatibilityFixture(admin);await applyPostgresMigrations(admin,31);
+    await installPostgresCompatibilityFixture(admin);await applyPostgresMigrations(admin,31);await applyPostgresMigration(admin,34);
     // A restricted importer may write songs, but cannot call private helpers
     // or write the projection directly. The fixed-path trigger owns that work.
     await admin`create role unicode_import_fixture nologin`;

@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { canFuzzySearchSongs, isMeaningfulSongSearch, normalizeSongSearchQuery, songSearchGrams, tokenizeSongSearchQuery } from "../lib/song-search";
 import type { SongSearchCursor } from "../lib/song-search-cursor";
-import { getDb } from "./db";
+import { withSongSearchAdmission } from "./song-search-admission";
 import { afterSongSearchCursor, toSongSearchPage, type SongSearchRow } from "./song-search";
 
 export function searchGramArray(query: string) {
@@ -26,6 +26,14 @@ export async function searchUnicodeCatalogSongs(rawQuery: string | null, cursor:
   const allTokens = tokens.length ? sql.join(tokens.map(token => sql`d.search_text like ${contains(token)}`), sql` and `) : sql`false`;
   const identityTokens = tokens.length ? sql.join(tokens.map(token => sql`(d.normalized_title like ${contains(token)} or d.normalized_artist like ${contains(token)})`), sql` and `) : sql`false`;
   const canFuzzy = hasGrams && canFuzzySearchSongs(query);
+  // The expression GiST index cannot divert literal/short-query plans from GIN.
+  // Single-word dense ties keep the original GIN/scan strategy. For multi-word
+  // fuzzy KNN, score DESC breaks rounded-distance ties before the original ID.
+  // Distance is monotonic in score; candidate membership/order remain identical.
+  const fuzzyText = tokens.length > 1 ? sql`(search_text || '')` : sql`search_text`;
+  const fuzzyOrder = tokens.length > 1
+    ? sql`${fuzzyText} <->>> ${query}, strict_word_similarity(${query}, search_text) desc, song_id`
+    : sql`strict_word_similarity(${query}, search_text) desc, song_id`;
   const tier = sql`case
     when d.normalized_title || ' ' || d.normalized_artist = ${query} or d.normalized_artist || ' ' || d.normalized_title = ${query} then 1200
     when d.normalized_title = ${query} then 1100
@@ -36,7 +44,7 @@ export async function searchUnicodeCatalogSongs(rawQuery: string | null, cursor:
     when ${identityTokens} then 750
     when d.normalized_title || ' ' || d.normalized_artist like ${contains(query)} or d.normalized_artist || ' ' || d.normalized_title like ${contains(query)} then 650
     when d.search_text like ${contains(query)} then 500 else 300 end`;
-  return getDb().transaction(async transaction => {
+  return withSongSearchAdmission(async transaction => {
     await transaction.execute(sql`select set_config('statement_timeout', '2000', true),
       set_config('pg_trgm.strict_word_similarity_threshold', '0.5', true)`);
     const rows = await transaction.execute<SongSearchRow>(sql`
@@ -57,8 +65,8 @@ export async function searchUnicodeCatalogSongs(rawQuery: string | null, cursor:
         group by a.song_id order by alias_tier desc, a.song_id limit 200
       ), fuzzy_candidates as materialized (
         select song_id from song_search_documents
-        where ${canFuzzy} and (select count(*) from strong) < 100 and search_text %>> ${query}
-        order by strict_word_similarity(${query}, search_text) desc, song_id limit 200
+        where ${canFuzzy} and (select count(*) from strong) < 100 and ${fuzzyText} %>> ${query}
+        order by ${fuzzyOrder} limit 200
       ), candidates as materialized (
         select song_id from strong union select song_id from alias_candidates union select song_id from fuzzy_candidates
       ), ranked as materialized (

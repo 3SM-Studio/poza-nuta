@@ -46,6 +46,7 @@ import {
   type SessionEventAccessStatus,
 } from "../../lib/session-event-access";
 import { getDb } from "../db";
+import { createCatalogDiscoveryCache } from "../catalog-discovery-cache";
 import { traceDbOperation, traceDbTransaction, traceForUpdateSelect } from "../db-telemetry";
 import { setLocalDatabaseTimeouts } from "../database-transaction-timeouts";
 import { PublicApiError } from "../public-api/errors";
@@ -353,7 +354,13 @@ export async function getPublicSessionSongDiscovery(
   return getSongDiscovery();
 }
 
+const discoveryCache = createCatalogDiscoveryCache<PublicSongDiscovery>();
+
 async function getSongDiscovery(): Promise<PublicSongDiscovery> {
+  return discoveryCache.get(getDb(), loadSongDiscovery);
+}
+
+async function loadSongDiscovery(): Promise<PublicSongDiscovery> {
   const genres = await listSongDiscoveryCategories(songs.genres);
   const languages = await listSongDiscoveryCategories(songs.languages);
   const featureRows = await getDb()

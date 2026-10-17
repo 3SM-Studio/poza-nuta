@@ -10,6 +10,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { normalizeSongSearchText } from "../../src/lib/song-search.ts";
 import {
   applyPostgresMigrations,
+  applyPostgresMigration,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
   removePostgresTestHarness,
@@ -89,6 +90,7 @@ test("real PostgreSQL ranking flows through the API into SessionRequestPage pagi
   try {
     await installPostgresCompatibilityFixture(sql);
     await applyPostgresMigrations(sql, process.env.SONG_SEARCH_ENGINE === "unicode-v2" ? 31 : 27);
+    if (process.env.SONG_SEARCH_ENGINE === "unicode-v2") await applyPostgresMigration(sql,34);
     await seedSqlApiUiSongs(sql);
 
     await withApplicationDatabase(harness, async () => {

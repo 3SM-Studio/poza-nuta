@@ -29,6 +29,7 @@ test("Unicode search: additive migration, parity, backfill, imports, ranking, sa
     const original = await connection`select id::text, public_id, title, artist, normalized_title, normalized_artist, search_text from songs order by id`;
     await applyPostgresMigration(connection, 31);
     assert.equal((await connection`select * from song_search_documents`).length, 0, "expand must not eagerly rewrite the catalog");
+    await applyPostgresMigration(connection,34);
     const database = drizzle(connection);
     assert.equal(await backfillUnicodeSongSearchBatch(database, 5), 5);
     let written = 5, batch;

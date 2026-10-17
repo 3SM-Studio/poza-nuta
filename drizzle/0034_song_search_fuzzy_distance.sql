@@ -1,0 +1,1 @@
+CREATE INDEX "song_search_documents_fuzzy_distance_idx" ON "song_search_documents" USING gist (("search_text" || '') gist_trgm_ops(siglen=256));
