@@ -65,11 +65,17 @@ export async function writeApprovedOrder(transaction: Transaction, eventId: numb
   }
   const positions = new Map(order.map((id, index) => [id, index + 1]));
   const changes = approved.filter(row => row.position !== positions.get(row.id)).sort((a, b) => a.id - b.id);
-  for (const row of changes) {
-    await transaction.update(songRequests).set({
-      position: positions.get(row.id)!, updatedAt: changedAt,
-      ...(row.id === newlyApprovedId ? {} : { version: sql`${songRequests.version} + 1` }),
-    }).where(and(eq(songRequests.id, row.id), eq(songRequests.eventId, eventId), eq(songRequests.status, "approved")));
+  if(changes.length){
+    // One statement under the existing event mutex; explicitly retain ID lock
+    // order and per-row version/trigger semantics while avoiding N wire trips.
+    const values=sql.join(changes.map(row=>sql`(${row.id}::integer,${positions.get(row.id)!}::integer)`),sql`, `);
+    await transaction.execute(sql`with locked as materialized (
+      select r.id,r.version,v.position from ${songRequests} r
+      join (values ${values}) v(id,position) on v.id=r.id
+      where r.event_id=${eventId} and r.status='approved' order by r.id for update of r
+    ) update ${songRequests} r set position=l.position,updated_at=${changedAt.toISOString()}::timestamptz,
+      version=case when r.id=${newlyApprovedId??null} then l.version else l.version+1 end
+      from locked l where r.id=l.id and r.event_id=${eventId} and r.status='approved'`);
   }
   return changes.length;
 }

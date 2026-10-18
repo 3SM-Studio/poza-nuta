@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { canFuzzySearchSongs, isMeaningfulSongSearch, normalizeSongSearchQuery, songSearchGrams, tokenizeSongSearchQuery } from "../lib/song-search";
 import type { SongSearchCursor } from "../lib/song-search-cursor";
 import { withSongSearchAdmission } from "./song-search-admission";
+import {traceDbOperation} from './db-telemetry';
 import { afterSongSearchCursor, toSongSearchPage, type SongSearchRow } from "./song-search";
 
 export function searchGramArray(query: string) {
@@ -47,7 +48,7 @@ export async function searchUnicodeCatalogSongs(rawQuery: string | null, cursor:
   return withSongSearchAdmission(async transaction => {
     await transaction.execute(sql`select set_config('statement_timeout', '2000', true),
       set_config('pg_trgm.strict_word_similarity_threshold', '0.5', true)`);
-    const rows = await transaction.execute<SongSearchRow>(sql`
+    const rows = await traceDbOperation('song_search','song_search.unicode.statement',()=>transaction.execute<SongSearchRow>(sql`
       with exact_title as materialized (
         select song_id from song_search_documents where normalized_title = ${query} order by song_id limit 500
       ), exact_artist as materialized (
@@ -84,7 +85,7 @@ export async function searchUnicodeCatalogSongs(rawQuery: string | null, cursor:
         relevance_tier as "relevanceTier", fuzzy_relevance as "fuzzyRelevance"
       from ranked where ${afterSongSearchCursor(cursor)}
       order by relevance_tier desc, fuzzy_relevance desc, normalized_artist, normalized_title, source, id limit 51
-    `);
+    `));
     return toSongSearchPage(Array.from(rows), query, 2);
   });
 }

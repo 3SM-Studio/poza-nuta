@@ -1,0 +1,18 @@
+{
+  "capturedUtc": "2026-10-18T13:09:31.642Z",
+  "source": "Vercel read-only runtime logs, 12:17:33–12:17:38 UTC",
+  "deployment": "dpl_4YxXwaAFhks3tDs1HLEQ5KKwJzCH",
+  "route": "/api/s/[token]/songs/search",
+  "note": "Only semantic telemetry; request paths and session tokens excluded.",
+  "lines": [
+    "    public_api_infrastructure_failure error_code=\"57014\" error_message=\"Operation failed.\"",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"da4bdf69-15d0-4645-806d-91115c404220\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"song_search.unicode_v2\",\"phase\":\"failure\",\"operation_duration_ms\":2572.5772920000018,\"error_class\":\"DB_STATEMENT_TIMEOUT\"}",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"da4bdf69-15d0-4645-806d-91115c404220\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"song_search.unicode_v2\",\"phase\":\"start\"}",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"da4bdf69-15d0-4645-806d-91115c404220\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"public_session.lookup\",\"phase\":\"success\",\"operation_duration_ms\":189.6217829999514}",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"da4bdf69-15d0-4645-806d-91115c404220\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"public_session.lookup\",\"phase\":\"start\"}",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"3aea2c95-aa2a-46b6-ab6a-2e0e43286c9d\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"song_search.unicode_v2\",\"phase\":\"success\",\"operation_duration_ms\":704.405345999985}",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"3aea2c95-aa2a-46b6-ab6a-2e0e43286c9d\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"song_search.unicode_v2\",\"phase\":\"start\"}",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"3aea2c95-aa2a-46b6-ab6a-2e0e43286c9d\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"public_session.lookup\",\"phase\":\"success\",\"operation_duration_ms\":189.61430200003088}",
+    "    {\"event\":\"db_telemetry\",\"request_id\":\"3aea2c95-aa2a-46b6-ab6a-2e0e43286c9d\",\"runtime_id\":\"e04670c5-6069-444c-9a04-e3b85f2facee\",\"route\":\"session_token_songs_search\",\"commit\":\"6c6d3f884a1e26919d98db75b816bb19f3c58344\",\"region\":\"iad1\",\"operation\":\"public_session.lookup\",\"phase\":\"start\"}"
+  ]
+}

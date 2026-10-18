@@ -46,6 +46,11 @@ type DatabaseTransaction = Parameters<
   Parameters<ReturnType<typeof getDb>["transaction"]>[0]
 >[0];
 
+type QueueManagerContext = Awaited<ReturnType<typeof requireEventQueueManagerContext>>;
+// A proof is local to this exact transaction and validated scope. It cannot be
+// supplied by HTTP or reused across requests/transactions after membership changes.
+const verifiedQueueContexts = new WeakMap<object, {transaction:DatabaseTransaction;authUserId:string;organizationId:string;eventId:string}>();
+
 const dashboardEventQueueItemSelection = {
   id: songRequests.id,
   eventId: songRequests.eventId,
@@ -127,16 +132,19 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
   action: DashboardEventQueueAction;
   /** Internal manual-placement contract. Ordinary action routes never populate this. */
   placement?: QueueDropInput;
-}, existingTransaction?: DatabaseTransaction) {
+}, existingTransaction?: DatabaseTransaction, verifiedContext?: QueueManagerContext) {
   const run = async (transaction: DatabaseTransaction) => {
-    await setLocalDatabaseTimeouts(transaction);
-    const context = await requireEventQueueManagerContext(
+    if(verifiedContext){const proof=verifiedQueueContexts.get(verifiedContext);
+      if(!existingTransaction||proof?.transaction!==transaction||proof.authUserId!==input.authUserId||proof.organizationId!==input.organizationId||proof.eventId!==input.eventId)
+        throw new OperatorApiError(403,'WORKSPACE_EVENT_QUEUE_MANAGE_FORBIDDEN','Invalid transaction authorization.');
+    }else await setLocalDatabaseTimeouts(transaction);
+    const context = verifiedContext ?? await requireEventQueueManagerContext(
       transaction,
       input.authUserId,
       input.organizationId,
       input.eventId,
     );
-    if (input.placement && queuePlacementRevision(await loadDashboardEventQueueItems(transaction, context.event.id)) !== input.placement.expectedRevision) {
+    if (input.placement && queuePlacementRevision(await transaction.select({id:songRequests.id,version:songRequests.version,status:songRequests.status,position:songRequests.position}).from(songRequests).where(eq(songRequests.eventId,context.event.id))) !== input.placement.expectedRevision) {
       throw new OperatorApiError(409, "QUEUE_PLACEMENT_STALE", "The queue changed. Refresh before moving the request again.");
     }
     const queueRequestLock = startForUpdateSelect("operator.queue.action", "operator.queue_request.lock", "song_request");
@@ -740,10 +748,12 @@ export async function requireEventQueueManagerContext(
     );
   }
 
-  return {
+  const context = {
     organization: recheckedOrganization,
     event,
   };
+  verifiedQueueContexts.set(context,{transaction,authUserId,organizationId,eventId});
+  return context;
 }
 
 async function findEventQueueManagerOrganization(

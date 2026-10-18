@@ -53,6 +53,27 @@ const apply=(op:QueueOperation,authUserId:string=auth)=>service.applyQueueOperat
 const code=(value:string)=>expect.objectContaining({code:value});
 
 describe('PG17 transactional collaboration',()=>{
+  it('rejects forged, cross-transaction and cross-scope authorization proofs before writes',async()=>{
+    const db=registry.pozaNutaDatabase!;
+    const input={...scope,requestId:ids[0],action:'start' as const};
+    const before=await snapshot();
+    await db.transaction(async transaction=>{
+      const context=await legacy.requireEventQueueManagerContext(transaction,auth,organizationId,scope.eventId);
+      await expect(legacy.applyDashboardOrganizationEventQueueActionForAuthUser(input,transaction,{...context})).rejects.toMatchObject({status:403});
+      await expect(legacy.applyDashboardOrganizationEventQueueActionForAuthUser({...input,authUserId:auth2},transaction,context)).rejects.toMatchObject({status:403});
+      await expect(db.transaction(other=>legacy.applyDashboardOrganizationEventQueueActionForAuthUser(input,other,context))).rejects.toMatchObject({status:403});
+    });
+    expect((await snapshot()).items).toEqual(before.items);
+    expect((await connection`select count(*)::int n from queue_operation_receipts where event_id=${eventId}`)[0].n).toBe(0);
+  });
+  it('snapshot authorization rejects inactive profiles, memberships and other organizations',async()=>{
+    await expect(service.getQueueSyncSnapshot({...scope,organizationId:'notthisworkspace001'},device,[])).rejects.toMatchObject({status:404});
+    await connection`update workspace_members set active=false where workspace_id=${workspace} and operator_user_id=${actor2}`;
+    try{await expect(snapshot(auth2,device2)).rejects.toMatchObject({status:404});}finally{await connection`update workspace_members set active=true where workspace_id=${workspace} and operator_user_id=${actor2}`;}
+    await connection`update operator_users set active=false where id=${actor2}`;
+    try{await expect(snapshot(auth2,device2)).rejects.toMatchObject({status:404});}finally{await connection`update operator_users set active=true where id=${actor2}`;}
+    expect((await snapshot(viewer)).canManage).toBe(false);
+  });
   it('new event v2 and emergency legacy fallback invalidate previews without changing a live order',async()=>{
     vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE',undefined);
     try{

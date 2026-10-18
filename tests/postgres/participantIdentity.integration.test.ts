@@ -8,7 +8,6 @@ import { runFaultProcess } from "./faultProcessHarness";
 import { queuePlacementRevision } from "../../src/lib/queue-placement";
 
 import {
-  applyPostgresMigration,
   applyPostgresMigrations,
   createPostgresTestClient,
   installPostgresCompatibilityFixture,
@@ -28,10 +27,7 @@ for (const image of images) {
 
     try {
       await installPostgresCompatibilityFixture(sql);
-      await applyPostgresMigrations(sql, 24);
-      await applyPostgresMigration(sql, 30);
-    await applyPostgresMigration(sql, 32);
-    await applyPostgresMigration(sql, 33);
+      await applyPostgresMigrations(sql, 36);
       const [queueTrigger] = await sql<{ enabled: string }[]>`
         SELECT tgenabled AS enabled
         FROM pg_trigger
@@ -714,10 +710,7 @@ for (const image of images) {
     const sql = createPostgresTestClient(harness, "postgres", 8);
     try {
       await installPostgresCompatibilityFixture(sql);
-      await applyPostgresMigrations(sql, 24);
-      await applyPostgresMigration(sql, 30);
-    await applyPostgresMigration(sql, 32);
-    await applyPostgresMigration(sql, 33);
+      await applyPostgresMigrations(sql, 36);
       const fixture = await seedFixture(sql);
       const [thirdSong] = await sql<{ id: number }[]>`
         INSERT INTO public.songs (
@@ -908,10 +901,7 @@ for (const image of images) {
     const sql = createPostgresTestClient(harness, "postgres", 8);
     try {
       await installPostgresCompatibilityFixture(sql);
-      await applyPostgresMigrations(sql, 29);
-      await applyPostgresMigration(sql, 30);
-    await applyPostgresMigration(sql, 32);
-    await applyPostgresMigration(sql, 33);
+      await applyPostgresMigrations(sql, 36);
       const fixture = await seedFixture(sql, 6);
       await sql.unsafe(`CREATE TABLE public.test_participant_broadcasts (payload jsonb, event_name text, topic text, private boolean);
         CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event_name text, topic_name text, private_channel boolean)
@@ -1121,10 +1111,7 @@ test("postgres:17-alpine: presence leases, races, retention, privacy and isolati
   const sql = createPostgresTestClient(harness, "postgres", 16);
   try {
     await installPostgresCompatibilityFixture(sql);
-    await applyPostgresMigrations(sql, 29);
-    await applyPostgresMigration(sql, 30);
-    await applyPostgresMigration(sql, 32);
-    await applyPostgresMigration(sql, 33);
+    await applyPostgresMigrations(sql, 36);
     const [{ version }] = await sql`select current_setting('server_version_num')::integer as version`;
     assert.ok(version >= 170000 && version < 180000);
     const fixture = await seedFixture(sql, 6);
@@ -1724,9 +1711,7 @@ async function withSlice4Fixture(name: string, action: (sql: ReturnType<typeof c
   const sql = createPostgresTestClient(harness, "postgres", 10);
   try {
     await installPostgresCompatibilityFixture(sql);
-    await applyPostgresMigrations(sql, 30);
-    await applyPostgresMigration(sql, 32);
-    await applyPostgresMigration(sql, 33);
+    await applyPostgresMigrations(sql, 36);
     const fixture = await seedFixture(sql, 6);
     await sql.unsafe(`create table public.test_slice4_broadcasts (payload jsonb, private boolean);
       create or replace function realtime.send(payload jsonb, event_name text, topic_name text, private_channel boolean)
@@ -1755,7 +1740,7 @@ async function blockedSlice4Race(sql: ReturnType<typeof createPostgresTestClient
   check(await race);
 }
 
-async function seedFixture(sql: ReturnType<typeof createPostgresTestClient>, codeDigits = 8) {
+async function seedFixture(sql: ReturnType<typeof createPostgresTestClient>, codeDigits = 6) {
   const authUserId = randomUUID();
   const organizationId = "participanttest00001";
   await sql`INSERT INTO auth.users (id) VALUES (${authUserId})`;
@@ -1934,7 +1919,12 @@ async function fairQueueTools(sql: ReturnType<typeof createPostgresTestClient>, 
   return { sql, fixture, scope, service, participants, queue, fair, merge, member, request, approve, ids, snapshot, move, action, history, base };
 }
 async function withFairQueueFixture(name: string, run: (tools: Awaited<ReturnType<typeof fairQueueTools>>) => Promise<void>) {
-  await withSlice4Fixture(`fair-${name}`, async (sql, fixture) => run(await fairQueueTools(sql, fixture)));
+  await withSlice4Fixture(`fair-${name}`, async (sql, fixture) => {
+    // Slice 5 asserts the historical legacy algorithm. New-event rotation-v2
+    // defaults and v2 collaboration have their own current-schema integration suite.
+    await sql`update events set fair_queue_engine='legacy' where id=${fixture.eventA}`;
+    return run(await fairQueueTools(sql, fixture));
+  });
 }
 
 test("postgres:17-alpine: Slice 5 Fair Insert, explicit preview, history, audit, versions and 2/2", async () => {

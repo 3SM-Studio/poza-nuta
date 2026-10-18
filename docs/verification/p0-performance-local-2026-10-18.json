@@ -1,0 +1,2039 @@
+{
+  "capturedUtc": "2026-10-18T12:58:01.712Z",
+  "environment": {
+    "os": "Windows-11-10.0.26300-SP0",
+    "node": "24.19.0",
+    "postgres": "17-alpine Docker",
+    "appPoolMax": 2,
+    "prepare": false
+  },
+  "queue": [
+    {
+      "label": "p0-queue-baseline-90",
+      "utc": "2026-10-18T12:48:05.329Z",
+      "delayPerResponseMs": 90,
+      "calibrationMs": null,
+      "measurements": [
+        {
+          "action": "placement",
+          "ms": 9450.445499999998,
+          "sqlCount": 49,
+          "phases": []
+        },
+        {
+          "action": "approve",
+          "ms": 7857.090899999999,
+          "sqlCount": 41,
+          "phases": []
+        },
+        {
+          "action": "start",
+          "ms": 7500.083000000002,
+          "sqlCount": 39,
+          "phases": []
+        },
+        {
+          "action": "done",
+          "ms": 7105.055500000002,
+          "sqlCount": 37,
+          "phases": []
+        },
+        {
+          "action": "replay",
+          "ms": 2803.5602,
+          "sqlCount": 14,
+          "phases": []
+        },
+        {
+          "action": "snapshot",
+          "ms": 2352.2371000000057,
+          "sqlCount": 12,
+          "phases": []
+        }
+      ]
+    },
+    {
+      "label": "p0-queue-final-90",
+      "utc": "2026-10-18T12:57:20.198Z",
+      "delayPerResponseMs": 90,
+      "calibrationMs": [
+        185.91069999999945,
+        186.9985000000006,
+        187.27089999999953,
+        187.54119999999966,
+        188.3127000000004
+      ],
+      "measurements": [
+        {
+          "action": "placement",
+          "ms": 5335.722900000001,
+          "sqlCount": 27,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 187.76490000000013
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 943.2087999999985
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 190.0054
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 3055.0105999999996
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 385.3324999999986
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 185.0527000000002
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 5228.5244999999995,
+              "transaction_attempt_duration_ms": 5335.0684
+            }
+          ]
+        },
+        {
+          "action": "approve",
+          "ms": 4667.092100000002,
+          "sqlCount": 24,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 184.73839999999836
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 924.1598999999987
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 183.7534999999989
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 2428.010000000002
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 371.9412999999986
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 200.26480000000083
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 4571.840199999999,
+              "transaction_attempt_duration_ms": 4666.9447999999975
+            }
+          ]
+        },
+        {
+          "action": "start",
+          "ms": 4322.839599999999,
+          "sqlCount": 22,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 184.34240000000136
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 928.5637999999999
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 185.34460000000036
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_empty"
+            },
+            {
+              "operation": "operator.queue.renumber",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue.renumber",
+              "phase": "success",
+              "operation_duration_ms": 387.4805000000015
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 2086.5557999999983
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 384.65279999999984
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 183.8770000000004
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 4231.7312999999995,
+              "transaction_attempt_duration_ms": 4322.720099999999
+            }
+          ]
+        },
+        {
+          "action": "done",
+          "ms": 3961.7821000000004,
+          "sqlCount": 20,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 184.8202999999994
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 935.7333999999973
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 187.91760000000068
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 1719.6695000000036
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 373.31639999999607
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 187.19199999999546
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 3870.4594000000034,
+              "transaction_attempt_duration_ms": 3961.716899999996
+            }
+          ]
+        },
+        {
+          "action": "replay",
+          "ms": 2435.7168999999994,
+          "sqlCount": 12,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 187.45460000000458
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 936.4922000000006
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 2342.3948999999993,
+              "transaction_attempt_duration_ms": 2435.6249000000025
+            }
+          ]
+        },
+        {
+          "action": "snapshot",
+          "ms": 1603.3747000000003,
+          "sqlCount": 8,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 1402.4951999999976,
+              "transaction_attempt_duration_ms": 1603.2174000000014
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "p0-queue-final-0",
+      "utc": "2026-10-18T12:58:01.712Z",
+      "delayPerResponseMs": 0,
+      "calibrationMs": [
+        30.67159999999967,
+        30.195999999999913,
+        30.895900000000438,
+        30.686499999999796,
+        30.347000000000662
+      ],
+      "measurements": [
+        {
+          "action": "placement",
+          "ms": 868.2097000000003,
+          "sqlCount": 27,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 30.149499999999534
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 154.6298000000006
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 31.104099999999562
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 497.8032000000003
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 61.46550000000025
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 29.726200000000063
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 853.3094999999994,
+              "transaction_attempt_duration_ms": 867.7017999999998
+            }
+          ]
+        },
+        {
+          "action": "approve",
+          "ms": 768.8238000000001,
+          "sqlCount": 24,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 31.270800000000236
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 155.08780000000024
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 30.429399999999987
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 400.90399999999954
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 60.468699999999444
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 30.403299999999945
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 753.1403,
+              "transaction_attempt_duration_ms": 768.7130999999999
+            }
+          ]
+        },
+        {
+          "action": "start",
+          "ms": 715.6003000000001,
+          "sqlCount": 22,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 30.319799999999304
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 152.72749999999905
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 31.010299999999916
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_empty"
+            },
+            {
+              "operation": "operator.queue.renumber",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue.renumber",
+              "phase": "success",
+              "operation_duration_ms": 61.830299999999625
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 344.77520000000004
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 62.372300000000905
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 31.68159999999989
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 700.2038000000011,
+              "transaction_attempt_duration_ms": 715.5187000000005
+            }
+          ]
+        },
+        {
+          "action": "done",
+          "ms": 637.5745000000006,
+          "sqlCount": 20,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 32.33230000000003
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 157.15029999999933
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.initial_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 22.193899999998393
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_request.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.mutation",
+              "phase": "success",
+              "operation_duration_ms": 273.58150000000023
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.receipt_and_audit",
+              "phase": "success",
+              "operation_duration_ms": 62.3174999999992
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "start"
+            },
+            {
+              "operation": "queue.sync.final_snapshot",
+              "phase": "success",
+              "operation_duration_ms": 30.443600000000515
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 622.7060000000001,
+              "transaction_attempt_duration_ms": 637.4907999999996
+            }
+          ]
+        },
+        {
+          "action": "replay",
+          "ms": 384.6363000000001,
+          "sqlCount": 12,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "start"
+            },
+            {
+              "operation": "operator.event.lifecycle.guard",
+              "phase": "success",
+              "operation_duration_ms": 31.396099999999933
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "for_update_select_start"
+            },
+            {
+              "operation": "operator.queue_mutex.lock",
+              "phase": "lock_acquired"
+            },
+            {
+              "operation": "queue.sync.authorize_and_lock",
+              "phase": "success",
+              "operation_duration_ms": 153.78490000000056
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 369.3959999999988,
+              "transaction_attempt_duration_ms": 384.5488999999998
+            }
+          ]
+        },
+        {
+          "action": "snapshot",
+          "ms": 262.3315999999995,
+          "sqlCount": 8,
+          "phases": [
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_attempt_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "transaction_start"
+            },
+            {
+              "operation": "queue.sync.transaction",
+              "phase": "commit",
+              "transaction_duration_ms": 232.0054999999993,
+              "transaction_attempt_duration_ms": 262.2361000000001
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "search": {
+    "rows": 92014,
+    "utc": "2026-10-18T13:03:30.096Z",
+    "catalogOnly": true,
+    "usersCopied": 0,
+    "plans": [
+      {
+        "label": "baseline",
+        "query": "Beyoncé",
+        "samplesMs": [
+          40.85420000000158,
+          20.43520000000717
+        ],
+        "errors": [],
+        "executionMs": 8.314,
+        "planningMs": 3.215,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "love",
+        "samplesMs": [
+          43.223199999993085,
+          43.594899999996414
+        ],
+        "errors": [],
+        "executionMs": 38.064,
+        "planningMs": 4.034,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "love tonight",
+        "samplesMs": [
+          95.84120000000985,
+          80.79399999999441
+        ],
+        "errors": [],
+        "executionMs": 75.923,
+        "planningMs": 2.933,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "dancin queen",
+        "samplesMs": [
+          50.91969999999856,
+          47.14070000000356
+        ],
+        "errors": [],
+        "executionMs": 34.842,
+        "planningMs": 2.691,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "Biała",
+        "samplesMs": [
+          19.21930000001157,
+          20.10459999999148
+        ],
+        "errors": [],
+        "executionMs": 10.189,
+        "planningMs": 2.412,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "Океан",
+        "samplesMs": [
+          13.266499999997905,
+          12.056700000001001
+        ],
+        "errors": [],
+        "executionMs": 3.241,
+        "planningMs": 2.203,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "周",
+        "samplesMs": [
+          9.577600000004168,
+          8.465400000000955
+        ],
+        "errors": [],
+        "executionMs": 0.981,
+        "planningMs": 0.735,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "artistt 30000",
+        "samplesMs": [
+          28.3807000000088,
+          30.523000000001048
+        ],
+        "errors": [],
+        "executionMs": 17.202,
+        "planningMs": 2.453,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "lo",
+        "samplesMs": [
+          37.173399999999674,
+          43.05950000000303
+        ],
+        "errors": [],
+        "executionMs": 47.638,
+        "planningMs": 0.755,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "ar",
+        "samplesMs": [
+          79.3698000000004,
+          76.81650000000081
+        ],
+        "errors": [],
+        "executionMs": 66.277,
+        "planningMs": 1.213,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "el la",
+        "samplesMs": [
+          67.03140000000712,
+          50.138100000011036
+        ],
+        "errors": [],
+        "executionMs": 39.765,
+        "planningMs": 3.069,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "i love you",
+        "samplesMs": [
+          42.829899999997,
+          39.17859999999928
+        ],
+        "errors": [],
+        "executionMs": 43.509,
+        "planningMs": 2.408,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "love of my life",
+        "samplesMs": [
+          142.4479999999894,
+          110.76300000000629
+        ],
+        "errors": [],
+        "executionMs": 110.041,
+        "planningMs": 2.766,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "zzzzzz qqqqqq",
+        "samplesMs": [
+          26.989099999991595,
+          28.74059999999008
+        ],
+        "errors": [],
+        "executionMs": 15.054,
+        "planningMs": 2.445,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "danccing queeen",
+        "samplesMs": [
+          48.24519999999029,
+          46.48420000000624
+        ],
+        "errors": [],
+        "executionMs": 34.429,
+        "planningMs": 2.873,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "baseline",
+        "query": "querywithnosuchwordsatallinthecatalogandnothingelse",
+        "samplesMs": [
+          48.77700000000186,
+          45.400399999998626
+        ],
+        "errors": [],
+        "executionMs": 34.039,
+        "planningMs": 3.132,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "Beyoncé",
+        "samplesMs": [
+          19.816900000005262,
+          19.738899999996647
+        ],
+        "errors": [],
+        "executionMs": 7.548,
+        "planningMs": 2.508,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "love",
+        "samplesMs": [
+          47.198199999998906,
+          47.28190000000177
+        ],
+        "errors": [],
+        "executionMs": 27.928,
+        "planningMs": 2.225,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "love tonight",
+        "samplesMs": [
+          85.30569999999716,
+          88.20389999999315
+        ],
+        "errors": [],
+        "executionMs": 71.619,
+        "planningMs": 2.723,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "dancin queen",
+        "samplesMs": [
+          54.96010000001115,
+          50.05470000000787
+        ],
+        "errors": [],
+        "executionMs": 47.802,
+        "planningMs": 3.33,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "Biała",
+        "samplesMs": [
+          30.097199999989243,
+          20.02390000000014
+        ],
+        "errors": [],
+        "executionMs": 9.942,
+        "planningMs": 2.511,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "Океан",
+        "samplesMs": [
+          16.294099999999162,
+          13.047600000005332
+        ],
+        "errors": [],
+        "executionMs": 4.341,
+        "planningMs": 2.43,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "周",
+        "samplesMs": [
+          12.571400000000722,
+          12.295199999993201
+        ],
+        "errors": [],
+        "executionMs": 1.004,
+        "planningMs": 0.773,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "artistt 30000",
+        "samplesMs": [
+          29.469200000006822,
+          30.39529999998922
+        ],
+        "errors": [],
+        "executionMs": 17.661,
+        "planningMs": 2.524,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "lo",
+        "samplesMs": [
+          42.11510000000999,
+          38.271200000002864
+        ],
+        "errors": [],
+        "executionMs": 30.374,
+        "planningMs": 0.761,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "ar",
+        "samplesMs": [
+          45.313200000004144,
+          44.6476999999868
+        ],
+        "errors": [],
+        "executionMs": 39.329,
+        "planningMs": 0.693,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "el la",
+        "samplesMs": [
+          44.08680000000459,
+          44.79349999999977
+        ],
+        "errors": [],
+        "executionMs": 37.131,
+        "planningMs": 3.91,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "i love you",
+        "samplesMs": [
+          48.958599999998114,
+          58.0847999999969
+        ],
+        "errors": [],
+        "executionMs": 27.184,
+        "planningMs": 2.428,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "love of my life",
+        "samplesMs": [
+          97.03190000000177,
+          108.15210000000661
+        ],
+        "errors": [],
+        "executionMs": 100.358,
+        "planningMs": 3.674,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "zzzzzz qqqqqq",
+        "samplesMs": [
+          27.95140000000538,
+          30.54769999999553
+        ],
+        "errors": [],
+        "executionMs": 14.725,
+        "planningMs": 2.539,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "danccing queeen",
+        "samplesMs": [
+          44.27139999999781,
+          45.283500000005006
+        ],
+        "errors": [],
+        "executionMs": 36.426,
+        "planningMs": 3.438,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_fuzzy_distance_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      },
+      {
+        "label": "candidate",
+        "query": "querywithnosuchwordsatallinthecatalogandnothingelse",
+        "samplesMs": [
+          46.47759999999835,
+          48.5110999999888
+        ],
+        "errors": [],
+        "executionMs": 34.651,
+        "planningMs": 3.059,
+        "indexNames": [
+          "song_search_documents_artist_idx",
+          "song_search_documents_grams_idx",
+          "song_search_documents_pkey",
+          "song_search_documents_title_idx",
+          "song_search_documents_trgm_idx",
+          "songs_pkey"
+        ],
+        "secondPageParity": "checked when cursor exists"
+      }
+    ],
+    "concurrency": {
+      "utc": "2026-10-18T13:03:31.331Z",
+      "pool": 2,
+      "requests": 20,
+      "concurrent": [
+        {
+          "ms": 86.90519999999378,
+          "query": "love tonight"
+        },
+        {
+          "ms": 91.89299999999639,
+          "query": "dancin queen"
+        },
+        {
+          "ms": 101.77880000000005,
+          "query": "Океан"
+        },
+        {
+          "ms": 101.17299999999523,
+          "query": "周"
+        },
+        {
+          "ms": 188.25280000000203,
+          "query": "love tonight"
+        },
+        {
+          "ms": 149.16890000000421,
+          "query": "dancin queen"
+        },
+        {
+          "ms": 163.76029999999446,
+          "query": "Океан"
+        },
+        {
+          "ms": 173.15629999998782,
+          "query": "周"
+        },
+        {
+          "ms": 252.46089999999094,
+          "query": "love tonight"
+        },
+        {
+          "ms": 236.0112000000081,
+          "query": "dancin queen"
+        },
+        {
+          "ms": 249.34320000000298,
+          "query": "Океан"
+        },
+        {
+          "ms": 258.60629999999946,
+          "query": "周"
+        },
+        {
+          "ms": 332.1371000000072,
+          "query": "love tonight"
+        },
+        {
+          "ms": 304.2366000000038,
+          "query": "dancin queen"
+        },
+        {
+          "ms": 318.9374000000098,
+          "query": "Океан"
+        },
+        {
+          "ms": 328.43640000000596,
+          "query": "周"
+        },
+        {
+          "ms": 414.55449999999837,
+          "query": "love tonight"
+        },
+        {
+          "ms": 379.27610000000277,
+          "query": "dancin queen"
+        },
+        {
+          "ms": 393.6201999999903,
+          "query": "Океан"
+        },
+        {
+          "ms": 402.50359999999637,
+          "query": "周"
+        }
+      ]
+    }
+  },
+  "decision": {
+    "production": "NO-GO",
+    "delayedWirePlacementUnder5000ms": false,
+    "productionSearchTimeoutReproduced": false,
+    "productionWrites": 0
+  },
+  "browser": {
+    "firstConcurrentRun": {
+      "capturedUtc": "2026-10-18T13:14:24.289Z",
+      "environment": {
+        "node": "v24.19.0",
+        "os": "win32",
+        "cpu": "AMD Ryzen 7 5700X3D 8-Core Processor           ",
+        "logicalCpus": 16,
+        "memoryGiB": 32,
+        "build": "optimized",
+        "browser": "Playwright Chromium headless",
+        "physicalTouch": false
+      },
+      "budgets": {
+        "localP95Ms": 100,
+        "syncP95Ms": 2000,
+        "syncMaxMs": 5000
+      },
+      "metrics": [
+        {
+          "scenario": "nickname-rename",
+          "fullFormMs": 5172.63069999998,
+          "acknowledgementToBothOperatorsMs": 121.13819999998668
+        },
+        {
+          "count": 20,
+          "localMs": [
+            35.900000005960464,
+            26,
+            22.19999998807907,
+            22.299999982118607,
+            23.700000017881393,
+            32,
+            26,
+            18.599999994039536,
+            17.5,
+            18
+          ],
+          "syncMs": [
+            408.69190000003437,
+            346.7759000000078,
+            355.27149999997346,
+            296.19379999995,
+            313.1680000000051,
+            387.8837999999523,
+            436.8733999999822,
+            312.0544000000227,
+            356.06060000002617,
+            251.6521000000066
+          ],
+          "acknowledgementMs": [
+            289.7140000000363,
+            252.2787000000244,
+            268.7436999999918,
+            196.58669999998529,
+            221.98019999999087,
+            247.90949999995064,
+            270.88400000002,
+            208.54250000003958,
+            256.4758000000147,
+            171.5346000000136
+          ],
+          "acknowledgementP95Ms": 289.7140000000363,
+          "localP95Ms": 35.900000005960464,
+          "syncP95Ms": 436.8733999999822,
+          "syncMaxMs": 436.8733999999822
+        },
+        {
+          "count": 50,
+          "localMs": [
+            83.19999998807907,
+            41.19999998807907,
+            36.099999994039536,
+            33.69999998807907,
+            45.80000001192093,
+            34.099999994039536,
+            37.80000001192093,
+            36.79999998211861,
+            39.099999994039536,
+            38.30000001192093
+          ],
+          "syncMs": [
+            644.7947000000277,
+            547.2380000000121,
+            494.59619999997085,
+            517.9320999999763,
+            526.3680000000168,
+            577.9953000000096,
+            495.5475999999908,
+            473.9217999999528,
+            563.5760000000009,
+            443.50900000002
+          ],
+          "acknowledgementMs": [
+            410.59149999998044,
+            303.05910000001313,
+            304.50740000000224,
+            266.08340000000317,
+            314.11430000001565,
+            244.60129999998026,
+            296.23930000001565,
+            226.45219999999972,
+            285.56219999998575,
+            246.4774000000325
+          ],
+          "acknowledgementP95Ms": 410.59149999998044,
+          "localP95Ms": 83.19999998807907,
+          "syncP95Ms": 644.7947000000277,
+          "syncMaxMs": 644.7947000000277
+        },
+        {
+          "count": 100,
+          "localMs": [
+            97.10000002384186,
+            83.90000000596046,
+            72.30000001192093,
+            58.30000001192093,
+            92,
+            116.19999998807907,
+            95.40000000596046,
+            64.80000001192093,
+            64.2000000178814,
+            67.80000001192093
+          ],
+          "syncMs": [
+            798.5737000000081,
+            792.663899999985,
+            818.2772000000114,
+            623.1878000000142,
+            722.9805999999517,
+            833.7055999999866,
+            727.1046000000206,
+            768.5719999999856,
+            662.8239000000176,
+            761.3998999999603
+          ],
+          "acknowledgementMs": [
+            427.1437000000151,
+            450.2980000000098,
+            511.48159999999916,
+            321.4140999999945,
+            398.3393999999971,
+            450.62669999996433,
+            385.6660999999731,
+            354.70530000003055,
+            328.9344999999739,
+            379.6589999999851
+          ],
+          "acknowledgementP95Ms": 511.48159999999916,
+          "localP95Ms": 116.19999998807907,
+          "syncP95Ms": 833.7055999999866,
+          "syncMaxMs": 833.7055999999866
+        }
+      ]
+    },
+    "quietRepeat": {
+      "capturedUtc": "2026-10-18T13:25:49.914Z",
+      "environment": {
+        "node": "v24.19.0",
+        "os": "win32",
+        "cpu": "AMD Ryzen 7 5700X3D 8-Core Processor           ",
+        "logicalCpus": 16,
+        "memoryGiB": 32,
+        "build": "optimized",
+        "browser": "Playwright Chromium headless",
+        "physicalTouch": false
+      },
+      "budgets": {
+        "localP95Ms": 100,
+        "syncP95Ms": 2000,
+        "syncMaxMs": 5000
+      },
+      "metrics": [
+        {
+          "scenario": "nickname-rename",
+          "fullFormMs": 5101.927600000003,
+          "acknowledgementToBothOperatorsMs": 88.64919999999984
+        },
+        {
+          "count": 20,
+          "localMs": [
+            20.400000005960464,
+            19.69999998807907,
+            20.099999994039536,
+            18.399999976158142,
+            18.80000001192093,
+            16.69999998807907,
+            36.900000005960464,
+            18.19999998807907,
+            22.399999976158142,
+            19
+          ],
+          "syncMs": [
+            322.5891999999876,
+            299.7920000000013,
+            319.444599999988,
+            253.74920000000566,
+            291.21360000000277,
+            282.4310000000114,
+            389.49280000000726,
+            288.7060000000056,
+            332.1301999999996,
+            307.1831000000093
+          ],
+          "acknowledgementMs": [
+            229.23019999999087,
+            201.78669999999693,
+            226.01750000000175,
+            180.80849999999919,
+            210.58190000000468,
+            194.13340000000608,
+            294.22660000000906,
+            197.89600000000792,
+            233.8978999999963,
+            216.01989999999932
+          ],
+          "acknowledgementP95Ms": 294.22660000000906,
+          "localP95Ms": 36.900000005960464,
+          "syncP95Ms": 389.49280000000726,
+          "syncMaxMs": 389.49280000000726
+        },
+        {
+          "count": 50,
+          "localMs": [
+            37.099999994039536,
+            47.400000005960464,
+            37.70000001788139,
+            33.69999998807907,
+            50.30000001192093,
+            35.20000001788139,
+            33.900000005960464,
+            29.5,
+            32.80000001192093,
+            29.69999998807907
+          ],
+          "syncMs": [
+            555.7790000000095,
+            514.2201999999961,
+            458.581600000005,
+            416.9360000000015,
+            501.8220000000001,
+            438.48790000000736,
+            394.47359999999753,
+            403.68069999999716,
+            482.4887999999919,
+            408.8779000000068
+          ],
+          "acknowledgementMs": [
+            363.0936000000074,
+            319.74259999999776,
+            310.04379999999946,
+            263.8185000000085,
+            320.136599999998,
+            253.45170000000508,
+            243.8289000000077,
+            242.25079999999434,
+            269.22909999999683,
+            227.5527000000002
+          ],
+          "acknowledgementP95Ms": 363.0936000000074,
+          "localP95Ms": 50.30000001192093,
+          "syncP95Ms": 555.7790000000095,
+          "syncMaxMs": 555.7790000000095
+        },
+        {
+          "count": 100,
+          "localMs": [
+            65.09999999403954,
+            71.60000002384186,
+            65.59999999403954,
+            60.29999998211861,
+            56.900000005960464,
+            126.90000000596046,
+            58.69999998807907,
+            65,
+            88.30000001192093,
+            72.2999999821186
+          ],
+          "syncMs": [
+            807.4159999999974,
+            733.3935999999958,
+            701.4792000000016,
+            702.9268000000011,
+            632.3476999999984,
+            915.3632999999973,
+            609.9447000000073,
+            636.8056999999972,
+            780.2462999999989,
+            660.9556000000011
+          ],
+          "acknowledgementMs": [
+            410.7957999999926,
+            408.2497000000003,
+            383.8640000000014,
+            365.3136000000086,
+            307.7584000000061,
+            573.1923999999999,
+            320.9487000000081,
+            325.97219999998924,
+            439.4866000000038,
+            370.8192999999883
+          ],
+          "acknowledgementP95Ms": 573.1923999999999,
+          "localP95Ms": 126.90000000596046,
+          "syncP95Ms": 915.3632999999973,
+          "syncMaxMs": 915.3632999999973
+        }
+      ]
+    },
+    "suiteResults": {
+      "broad": {
+        "passed": 36,
+        "failed": 5,
+        "fixtureInvocationErrors": 4,
+        "realPerformanceFailures": 1
+      },
+      "quietCorrectWrapper": {
+        "passed": 18,
+        "failed": 1,
+        "realPerformanceFailures": 1
+      }
+    },
+    "productionVerified": false
+  }
+}
