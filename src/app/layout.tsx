@@ -10,6 +10,7 @@ import { localeCookie, resolveLocale, resolveUiLocale } from "@/i18n/locale";
 import { VercelInsights } from "@/components/observability/vercel-insights";
 import { AppThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import {OfflineNotice} from '@/components/recovery/recovery-boundary';
 
 import "./globals.css";
 import "./(platform-admin)/admin/admin-theme.css";
@@ -54,6 +55,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       <body>
         <AppIntlProvider preferredLocale={preferredLocale} managementLocale={managementLocale} catalogs={catalogs}>
         <AppThemeProvider>
+          <OfflineNotice/>
           {children}
           <Toaster closeButton position="top-right" />
         </AppThemeProvider>

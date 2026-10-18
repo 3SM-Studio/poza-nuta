@@ -2,7 +2,7 @@ import { applyOptimisticDashboardEventQueueAction, applyOptimisticDashboardEvent
 import { queueAnchor, resolveQueueOperationPosition, type QueueOperation } from './queue-operation.ts';
 import type { DashboardEventQueueItemDto, QueueSyncSnapshot } from '../components/operator/event-queue-api';
 
-export type OutboxEntry = { operation: QueueOperation; changedAt: string; phase: 'queued'|'sending'|'uncertain'|'conflict'; attempts: number; error?: string };
+export type OutboxEntry = { operation: QueueOperation; changedAt: string; phase: 'queued'|'sending'|'uncertain'|'conflict'; attempts: number; error?: string; errorStatus?:number };
 export type QueueCollaborationState = {
   items: DashboardEventQueueItemDto[]; entries: OutboxEntry[]; revision: string; sortRevision: string;
   ready: boolean; online: boolean; error: string|null; closed: boolean;
@@ -83,7 +83,10 @@ export class QueueCollaboration {
     try {
       const s=await this.deps.snapshot([],c.signal);if(!this.active)return;
       this.actorId=s.actorId;
-      this.entries=(await this.deps.load(s.actorId)).map(x=>({...x,phase:x.phase==='conflict'?'conflict':'queued'}));
+      this.entries=(await this.deps.load(s.actorId)).map(x=>({...x,phase:x.phase==='conflict'?'conflict':'queued',
+        // Version-one outboxes stored this exact canonical message, not a status.
+        // Keep the conflict/manual decision; this grants no automatic replay.
+        errorStatus:x.errorStatus??(x.phase==='conflict'&&x.error==='Zaloguj się ponownie. Zmiana zachowana.'?401:undefined)}));
       if(!this.active)return;
       this.entries.forEach(e=>this.persisted.add(e.operation.operationId));
       this.accept(s);this.ready=true;this.publish();
@@ -136,7 +139,7 @@ export class QueueCollaboration {
       const status=typeof error==='object'&&error!==null&&'status'in error?Number(error.status):0;
       e.attempts++;
       if(status>=400&&status<500&&status!==408&&status!==429){
-        e.phase='conflict';e.error=operationFailureMessage(error,status);
+        e.phase='conflict';e.error=operationFailureMessage(error,status);e.errorStatus=status;
       }else{e.phase='uncertain';e.error='Brak potwierdzenia serwera. Operacja zachowana; ponowienie jest bezpieczne.';
         if(e.attempts<3&&this.deps.online()){clearTimeout(this.retryTimer);this.retryTimer=setTimeout(()=>this.retryUncertain(false),250*2**e.attempts);}}
       this.save();this.publish();void this.refresh();
@@ -152,6 +155,15 @@ export class QueueCollaboration {
     finally{clearTimeout(timeout);this.controllers.delete(c);this.refreshing=false;if(this.refreshAgain){this.refreshAgain=false;void this.refresh();}}
   }
   retryUncertain(resetAttempts=true){this.entries.forEach(e=>{if(e.phase==='uncertain'&&(resetAttempts||e.attempts<3)){e.phase='queued';if(resetAttempts)e.attempts=0;}});this.save();this.publish();void this.refresh();this.pump();}
+  async retryAuthorization(id:string){
+    // Revalidate the original actor; preserve operation ID and CAS on retry.
+    await this.refresh();
+    if(this.error||this.closed)return;
+    const e=this.entries.find(x=>x.operation.operationId===id);
+    if(!e||e.phase!=='conflict'||e.errorStatus!==401||this.inflight.has(id))return;
+    e.phase='queued';e.attempts=0;delete e.error;delete e.errorStatus;
+    this.save();this.publish();
+  }
   discard(id:string){
     const e=this.entries.find(x=>x.operation.operationId===id);
     // Never discard an ambiguous commit or an in-flight operation. Confirm via its receipt first.

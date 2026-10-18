@@ -81,7 +81,7 @@ test('official Drizzle batches separate queue DDL from fuzzy index under concurr
      assert.ok(indexPhase.catalogShareSamples>0,'observe the actual index lock, not an empty measurement');
     }
     // Repeating the exact official runner is safe and leaves history unchanged.
-    await migrate(drizzle({client:db}),{migrationsFolder:'drizzle'});assert.equal((await db`select count(*)::int n from drizzle.__drizzle_migrations`)[0].n,36);
+    await migrate(drizzle({client:db}),{migrationsFolder:'drizzle'});assert.equal((await db`select count(*)::int n from drizzle.__drizzle_migrations`)[0].n,migrations.length);
     results.push({mode,phases,trafficWrites:samples.length,maxTrafficMs:Math.max(...samples.map(s=>s.ms)),samples});
    }finally{await db.end({timeout:5});await traffic.end({timeout:5});await observe.end({timeout:5});}
   }

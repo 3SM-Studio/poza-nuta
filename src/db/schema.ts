@@ -177,6 +177,7 @@ export const events = pgTable(
     startsAt: timestampColumn("starts_at").notNull(),
     facebookUrl: text("facebook_url"),
     status: eventStatusEnum("status").notNull().default("draft"),
+    fairQueueEngine: text("fair_queue_engine").$type<"legacy" | "rotation-v2">().notNull().default("rotation-v2"),
     visibility: eventVisibilityEnum("visibility").notNull().default("private"),
     publishedAt: timestampColumn("published_at"),
     isActivePublicEvent: boolean("is_active_public_event")
@@ -199,6 +200,7 @@ export const events = pgTable(
     updatedAt: timestampColumn("updated_at").notNull().defaultNow(),
   },
   (table) => [
+    check("events_fair_queue_engine_check", sql`${table.fairQueueEngine} in ('legacy', 'rotation-v2')`),
     uniqueIndex("events_slug_idx")
       .on(table.slug)
       .where(sql`${table.slug} is not null`),

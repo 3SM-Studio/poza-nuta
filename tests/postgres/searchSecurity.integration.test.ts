@@ -6,7 +6,7 @@ test("backend-only tables and event-trigger grant reduction remain closed on own
   const harness = await startPostgresTestHarness("kunestu-search-security");
   const db = createPostgresTestClient(harness, "postgres", 1);
   try {
-    await installPostgresCompatibilityFixture(db); await applyPostgresMigrations(db, 33);
+    await installPostgresCompatibilityFixture(db); await applyPostgresMigrations(db, 36);
     const exposed = await db`select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
       where n.nspname='public' and c.relkind='r' and
       (not c.relrowsecurity or has_table_privilege('anon',c.oid,'SELECT') or has_table_privilege('authenticated',c.oid,'SELECT'))`;

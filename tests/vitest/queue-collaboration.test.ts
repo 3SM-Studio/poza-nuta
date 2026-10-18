@@ -26,6 +26,30 @@ async function setup(items=[item(1),item(2),item(3)],stored:OutboxEntry[]=[]){
 const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
 
 describe('semantic queue protocol',()=>{
+  it('restores a version-one 401 without inventing a new operation or replaying automatically',async()=>{
+    const first=await setup(),operation=first.operation(1,3);first.c.stop();
+    const t=await setup(undefined,[{operation,phase:'conflict',changedAt:new Date().toISOString(),attempts:1,error:'Zaloguj się ponownie. Zmiana zachowana.'}]);
+    expect(t.c.getSnapshot().entries[0]).toMatchObject({phase:'conflict',errorStatus:401,operation});expect(t.send).not.toHaveBeenCalled();
+    await t.c.retryAuthorization(operation.operationId);await flush();expect(t.send.mock.calls[0][0]).toEqual(operation);
+  });
+  it('retains a 401 intent and retries the exact operation only after same-actor authentication',async()=>{
+    const t=await setup(),op=t.operation(1,3);
+    t.send.mockRejectedValueOnce(Object.assign(new Error('Session expired'),{status:401}));
+    t.c.enqueue(op);await flush();await flush();
+    expect(t.c.getSnapshot().entries[0]).toMatchObject({phase:'conflict',errorStatus:401});
+    expect(t.send).toHaveBeenCalledTimes(1);expect(t.durable[0].operation.operationId).toBe(op.operationId);
+    await t.c.retryAuthorization(op.operationId);await flush();
+    expect(t.send).toHaveBeenCalledTimes(2);expect(t.send.mock.calls[1][0]).toEqual(op);
+  });
+  it('never replays a 403 or an old-account 401 intent after an actor switch',async()=>{
+    for(const status of [401,403]){
+      const t=await setup(),op=t.operation(1,3);t.send.mockRejectedValueOnce(Object.assign(new Error('Denied'),{status}));
+      t.c.enqueue(op);await flush();await flush();
+      if(status===401)t.setServer({actorId:2,revision:'2'});
+      await t.c.retryAuthorization(op.operationId);await flush();
+      expect(t.send).toHaveBeenCalledTimes(1);expect(t.c.getSnapshot().entries).toHaveLength(1);
+    }
+  });
   it('strictly validates operation shape, actor, UUIDs and neighbours',async()=>{
     const t=await setup(),op=t.operation(1,3);expect(parseQueueOperation(op)).toEqual(op);
     for(const bad of [{...op,actorId:0},{...op,operationId:'guess'},{...op,role:'owner'}, {...op,before:{id:1,intentVersion:0}}, {...op,expectedIntentVersion:-1},{...op,lane:['approved']},{...op,expectedStatus:['approved']}])expect(parseQueueOperation(bad)).toBeNull();

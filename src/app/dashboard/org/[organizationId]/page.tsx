@@ -43,7 +43,7 @@ export default async function DashboardOrganizationPage({
   } catch (error) {
     if (isTransientInfrastructureError(error)) {
       return (
-        <DashboardRuntimeError title={tx("Nie udało się wczytać organizacji")} />
+        <DashboardRuntimeError title={tx("Nie udało się wczytać organizacji")} embedded />
       );
     }
 

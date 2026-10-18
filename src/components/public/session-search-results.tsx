@@ -16,6 +16,7 @@ type SessionSearchResultsProps = {
   onBack: () => void;
   onSongSelect: (song: PublicSong) => void;
   onLoadMore?: () => void;
+  onRetry?: () => void;
   hasMore?: boolean;
   heading?: string;
   backLabel?: string;
@@ -31,6 +32,7 @@ export function SessionSearchResults({
   onBack,
   onSongSelect,
   onLoadMore,
+  onRetry,
   hasMore = false,
   heading = `„${query}”`,
   backLabel = "Wróć do katalogu",
@@ -77,9 +79,9 @@ export function SessionSearchResults({
         </p>
       ) : null}
       {isError ? (
-        <p className="py-4 text-sm text-destructive" role="alert">
-          {tx(message)}
-        </p>
+        <div className="py-4"><p className="mb-3 text-sm text-destructive" role="alert">{tx(message)}</p>
+          {onRetry?<Button type="button" variant="outline" disabled={isLoading||isLoadingMore} onClick={onRetry}>{tx("Spróbuj ponownie")}</Button>:null}
+        </div>
       ) : null}
       {songs.length > 0 ? (
         <>

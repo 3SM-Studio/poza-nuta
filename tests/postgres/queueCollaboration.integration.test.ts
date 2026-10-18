@@ -19,7 +19,7 @@ const registry=globalThis as typeof globalThis & {pozaNutaDatabase?:ReturnType<t
 
 beforeAll(async()=>{
   harness=await startPostgresTestHarness('kunestu-collaboration');connection=createPostgresTestClient(harness,'postgres',8);
-  await installPostgresCompatibilityFixture(connection);await applyPostgresMigrations(connection,35);
+  await installPostgresCompatibilityFixture(connection);await applyPostgresMigrations(connection,36);
   registry.pozaNutaDatabase=drizzle({client:connection,schema});
   service=await import('../../src/server/operator-api/queue-sync');legacy=await import('../../src/server/operator-api/event-queue');fair=await import('../../src/server/operator-api/fair-queue');
   [workspace]= (await connection`insert into workspaces(name,handle,public_id) values('Collaboration','collaboration',${organizationId}) returning id::int`).map(x=>x.id);
@@ -53,6 +53,24 @@ const apply=(op:QueueOperation,authUserId:string=auth)=>service.applyQueueOperat
 const code=(value:string)=>expect.objectContaining({code:value});
 
 describe('PG17 transactional collaboration',()=>{
+  it('new event v2 and emergency legacy fallback invalidate previews without changing a live order',async()=>{
+    vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE',undefined);
+    try{
+      const before=await snapshot(),v2=await fair.previewFairEventQueue(scope);expect(v2.engine).toBe('rotation-v2');
+      vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE','legacy');const old=await fair.previewFairEventQueue(scope);expect(old.engine).toBe('legacy');
+      await expect(fair.applyFairEventQueue({...scope,revision:v2.revision})).rejects.toMatchObject({code:'FAIR_QUEUE_PREVIEW_STALE'});
+      expect((await snapshot()).items).toEqual(before.items);
+      vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE',undefined);expect((await fair.previewFairEventQueue(scope)).engine).toBe('rotation-v2');
+      expect((await snapshot()).items).toEqual(before.items);
+      await connection`update events set fair_queue_engine='legacy' where id=${eventId}`;
+      vi.stubEnv('KUNESTU_FAIR_QUEUE_ENGINE','rotation-v2');expect((await fair.previewFairEventQueue(scope)).engine).toBe('legacy');
+      const [pending]=await connection`insert into song_requests(event_id,song_id,singer_name,display_name,status,position,requested_by) values(${eventId},${song},'Fallback','Fallback','pending',0,'operator') returning id::int`;ids.push(pending.id);
+      await apply(await action(ids.length-1,'approve'));
+      const final=await snapshot();expect(final.items).toHaveLength(before.items.length+1);
+      expect(final.items.filter(x=>x.status==='approved'&&x.id!==pending.id).sort((a,b)=>a.position-b.position).map(x=>x.id)).toEqual(before.items.filter(x=>x.status==='approved').sort((a,b)=>a.position-b.position).map(x=>x.id));
+      const [audit]=await connection`select payload->>'engine' engine from operator_audit_log where event_id=${eventId} and action='event_queue_fair_admission' and entity_id=${String(pending.id)} order by id desc limit 1`;expect(audit.engine).toBe('legacy');
+    }finally{vi.unstubAllEnvs();}
+  });
   it('versions no-op Fair Sort and lifecycle snapshots, and permits owned fixture cleanup',async()=>{
     const a=await fair.previewFairEventQueue(scope);await fair.applyFairEventQueue({...scope,revision:a.revision});
     const before=await snapshot(),b=await fair.previewFairEventQueue(scope);await fair.applyFairEventQueue({...scope,revision:b.revision});

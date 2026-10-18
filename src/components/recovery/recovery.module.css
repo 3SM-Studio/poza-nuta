@@ -1,0 +1,19 @@
+.page{min-height:100dvh;display:flex;flex-direction:column;padding:clamp(1.25rem,4vw,3rem);box-sizing:border-box;background:var(--background,#131117);color:var(--foreground,#faf9fc);font-family:var(--font-geist,ui-sans-serif),system-ui,sans-serif;color-scheme:dark}
+.header{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.brand{font-size:1.125rem;font-weight:800;letter-spacing:-.02em;color:inherit;text-decoration:none}
+.content{width:100%;max-width:40rem;margin:auto; padding-block:4rem}
+.icon{color:var(--primary,#f576af);width:2.5rem;height:2.5rem;margin-bottom:1.5rem}
+.content h1{font-size:clamp(2rem,5vw,3.25rem);font-weight:800;line-height:1.12;letter-spacing:-.03em;text-wrap:balance;margin:0 0 1.25rem;overflow-wrap:anywhere}
+.content h1:focus{outline:none}
+.content p{font-size:1rem;line-height:1.7;color:var(--muted-foreground,#c0b8c8);max-width:60ch;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:2rem}
+.action{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:2.75rem;padding:.75rem 1.25rem;border-radius:.75rem;border:1px solid var(--border,#514b59);font:inherit;font-weight:650;color:inherit;background:transparent;text-decoration:none;cursor:pointer;line-height:1.4;text-align:center}
+.primary{background:var(--primary,#f576af);border-color:transparent;color:var(--recovery-primary-foreground,#161019)}
+:global(html.light) .page{--recovery-primary-foreground:#fff;color-scheme:light}
+.action:hover{filter:brightness(1.08)}
+.action:focus-visible,.select:focus-visible{outline:3px solid var(--primary,#f576af);outline-offset:4px}
+.action:disabled{opacity:.65;cursor:wait}
+.select{min-height:2.75rem;background:var(--card,#211e28);color:inherit;border:1px solid var(--border,#514b59);border-radius:.75rem;padding:.5rem .75rem;font:inherit;max-width:100%}
+.notice{padding:.75rem 1.25rem;background:var(--card,#211e28);color:var(--foreground,#faf9fc);border-bottom:1px solid var(--border,#514b59);font-size:.875rem;line-height:1.5}
+@media(max-width:32rem){.actions{flex-direction:column}.action{width:100%}.content{padding-block:3rem}}
+@media(forced-colors:active){.action,.select{border:1px solid ButtonText}.icon{color:CanvasText}}

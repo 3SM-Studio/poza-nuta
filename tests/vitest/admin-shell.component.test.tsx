@@ -124,7 +124,7 @@ describe("AdminShell", () => {
       </AdminLayoutView>,
     );
 
-    expect(screen.getByRole("heading", { name: "Dostęp niedostępny" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Nie masz dostępu do tego miejsca" })).toBeVisible();
     expect(document.querySelector("[data-admin-shell]")).not.toBeInTheDocument();
     expect(screen.queryByText("Anna Kowalska")).not.toBeInTheDocument();
     expect(screen.queryByText("tajna metryka")).not.toBeInTheDocument();

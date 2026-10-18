@@ -25,7 +25,8 @@ export async function loadQueueOutbox(scope:string):Promise<OutboxEntry[]> {
         if(!op||typeof entry.changedAt!=='string'||!Number.isFinite(Date.parse(entry.changedAt))||!['queued','sending','uncertain','conflict'].includes(entry.phase)){
           reject(new Error('Invalid stored queue intent'));return;
         }
-        entries.push({operation:op,changedAt:entry.changedAt,phase:entry.phase,attempts:0,error:typeof entry.error==='string'?entry.error:undefined});
+        entries.push({operation:op,changedAt:entry.changedAt,phase:entry.phase,attempts:0,error:typeof entry.error==='string'?entry.error:undefined,
+          errorStatus:Number.isInteger(entry.errorStatus)&&entry.errorStatus>=400&&entry.errorStatus<=599?entry.errorStatus:undefined});
       }
       resolve(entries);
     };

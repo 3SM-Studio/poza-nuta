@@ -45,7 +45,7 @@ export default async function DashboardPage() {
     );
   } catch (error) {
     if (isTransientInfrastructureError(error)) {
-      return <DashboardRuntimeError />;
+      return <DashboardRuntimeError embedded />;
     }
 
     throw error;

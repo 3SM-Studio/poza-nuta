@@ -3,10 +3,10 @@
 import { AdminErrorState } from "@/components/platform-admin/admin-error-state";
 
 export default function PlatformAdminError({
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
-  return <AdminErrorState reset={reset} />;
+  return <AdminErrorState reset={retry} />;
 }

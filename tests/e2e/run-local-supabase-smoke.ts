@@ -25,7 +25,7 @@ const PLAYWRIGHT_FAILURES_DIRECTORY = join(
 );
 const LOCAL_ORIGIN = `http://localhost:${APP_PORT}`;
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
-const optimizedBuild = process.env.LOCAL_E2E_OPTIMIZED === "1" || process.env.LOCAL_E2E_PERFORMANCE === "1";
+const optimizedBuild = process.env.LOCAL_E2E_OPTIMIZED === "1" || process.env.LOCAL_E2E_PERFORMANCE === "1" || process.env.LOCAL_E2E_BUILD_ONLY === "1";
 const searchEngine = process.env.LOCAL_E2E_SEARCH_ENGINE ?? "legacy";
 if (searchEngine !== "legacy" && searchEngine !== "unicode-v2") throw new Error("Unknown isolated search engine.");
 
@@ -89,7 +89,7 @@ try {
     LOCAL_E2E_DATABASE_URL: databaseUrl,
     LOCAL_E2E_SUPABASE_SECRET_KEY: secretKey,
     NEXT_DIST_DIR: NEXT_DIST_DIRECTORY,
-    KUNESTU_FAIR_QUEUE_ENGINE:process.env.LOCAL_E2E_FAIR_ENGINE==='rotation-v2'?'rotation-v2':'legacy',
+    KUNESTU_FAIR_QUEUE_ENGINE:process.env.LOCAL_E2E_FAIR_ENGINE==='event-default'?undefined:process.env.LOCAL_E2E_FAIR_ENGINE==='rotation-v2'?'rotation-v2':'legacy',
     SONG_SEARCH_ENGINE: searchEngine,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
     NEXT_PUBLIC_SUPABASE_URL: API_ORIGIN,
@@ -98,6 +98,7 @@ try {
     LOCAL_E2E_PERFORMANCE: process.env.LOCAL_E2E_PERFORMANCE === "1" ? "1" : "0",
     LOCAL_E2E_OPTIMIZED: optimizedBuild ? "1" : "0",
     LOCAL_E2E_SHORT_JWT: process.env.LOCAL_E2E_SHORT_JWT === "1" ? "1" : "0",
+    LOCAL_E2E_RECOVERY_FIXTURES: process.env.LOCAL_E2E_RECOVERY_FIXTURES === "1" ? "1" : "0",
   };
   assertLocalE2ETarget(localEnvironment);
 
@@ -109,8 +110,10 @@ try {
     await runVisible("pnpm.cmd", ["build"], localEnvironment);
   }
 
-  console.log("[local-e2e] Running authenticated and public Playwright smoke.");
-  await runPlaywright(localEnvironment);
+  if(process.env.LOCAL_E2E_BUILD_ONLY!=="1"){
+    console.log("[local-e2e] Running authenticated and public Playwright smoke.");
+    await runPlaywright(localEnvironment);
+  }
 } finally {
   console.log("[local-e2e] Removing isolated Supabase containers and data.");
   await runSupabaseHidden(

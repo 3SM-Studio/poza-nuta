@@ -30,7 +30,7 @@ import { startForUpdateSelect, traceDbOperation, traceDbTransaction, traceForUpd
 import { setLocalDatabaseTimeouts } from "../database-transaction-timeouts";
 import { requireParticipantRequestCapacity } from "../participant-request-limit";
 import {admissionBudget} from "../fair-queue-v2";
-import { insertQueue, fairEngine } from "../fair-queue-engine";
+import { insertQueue, type FairQueueEngine } from "../fair-queue-engine";
 import { anchorLegacyApprovedRequests, loadFairQueueSnapshot, writeApprovedOrder } from "./fair-queue-store";
 import {
   ACTIVE_PUBLIC_REQUEST_STATUSES,
@@ -294,10 +294,12 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
     }
 
     let insertion:ReturnType<typeof insertQueue>|undefined;
+    let selectedEngine:FairQueueEngine='legacy';
     if (targetStatus === "approved") {
       const snapshot = await loadFairQueueSnapshot(transaction, context.event.id,
         queueRequest.status === "approved" ? undefined : { id: queueRequest.id, at: changedAt });
-      if(!input.placement)insertion=insertQueue(snapshot.requests,queueRequest.id);
+      selectedEngine=snapshot.engine;
+      if(!input.placement)insertion=insertQueue(snapshot.requests,queueRequest.id,snapshot.engine);
       const order = input.placement
         ? snapshot.requests.filter(row => row.status === "approved" && row.id !== queueRequest.id)
           .sort((a, b) => a.position - b.position || a.id - b.id).map(row => row.id)
@@ -314,7 +316,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       if(queueRequest.status!=='approved')await transaction.insert(operatorAuditLog).values({
         actorKind:'operator',operatorId:context.organization.operatorId,eventId:context.event.id,
         action:'event_queue_fair_admission',entityId:String(queueRequest.id),createdAt:changedAt,
-        payload:{engine:fairEngine(),protectionTurns:admissionBudget(snapshot.requests,queueRequest.id)},
+        payload:{engine:selectedEngine,protectionTurns:admissionBudget(snapshot.requests,queueRequest.id)},
       });
     } else if (queueRequest.status === "approved") {
       await traceDbOperation("operator.queue.action", "operator.queue.renumber", () => renumberApprovedQueue(
@@ -348,7 +350,7 @@ export async function applyDashboardOrganizationEventQueueActionForAuthUser(inpu
       createdAt: changedAt,
       payload: {
         ...(input.placement ? { manualDrop: true, targetLane: input.placement.lane, targetPosition: input.placement.position } : {}),
-        ...(insertion?.decision?{engine:fairEngine(),fairDecision:insertion.decision,constrained:insertion.constrained}:{}),
+        ...(insertion?.decision?{engine:selectedEngine,fairDecision:insertion.decision,constrained:insertion.constrained}:{}),
         previousStatus: queueRequest.status,
         nextStatus: targetStatus,
         previousPosition: queueRequest.position,

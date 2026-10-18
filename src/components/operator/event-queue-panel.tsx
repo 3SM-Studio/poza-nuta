@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import {useLocale} from 'next-intl';
+import {isLocale} from '@/i18n/locale';
+import {recoveryCopy} from '@/i18n/recovery-copy';
 import { useUiText } from "@/i18n/use-ui-text";
 import { localizeUiRecord } from "@/i18n/text";
 
@@ -239,6 +242,7 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
       {state.entries.filter(x=>x.phase==='conflict').map(entry=><Alert variant="destructive" key={entry.operation.operationId} data-queue-conflict>
         <AlertTitle>{tx("Zmiana zgłoszenia #{v0} nie została zapisana",{v0:entry.operation.requestId})}</AlertTitle>
         <AlertDescription>{tx(entry.error)} {tx("Sprawdź aktualną kolejkę. Odrzucenie dotyczy wyłącznie tej zachowanej lokalnej intencji.")}</AlertDescription>
+        {entry.errorStatus===401?<QueueSignInRecovery onRetry={()=>void client?.retryAuthorization(entry.operation.operationId)}/>:null}
         <Button variant="outline" onClick={()=>client?.discard(entry.operation.operationId)}>{tx("Odrzuć lokalną intencję")}</Button>
       </Alert>)}
       {!canManage || lifecycle !== "active" || queueClosedDetected ? (
@@ -662,3 +666,8 @@ function formatLiveStatus(status: QueueRealtimeConnectionStatus) {
 function getI18nRecord_actionLabels() { return actionLabels; }
 
 function queueGestureRevision(items:DashboardEventQueueItemDto[]){return items.map(x=>`${x.id}:${x.status}:${x.position}:${x.intentVersion??0}`).join("|");}
+
+function QueueSignInRecovery({onRetry}:{onRetry:()=>void}){
+ const locale=useLocale(),copy=recoveryCopy[isLocale(locale)?locale:'en'];
+ return <div className="my-3 flex flex-wrap gap-3"><Button asChild variant="outline"><a href="/sign-in" target="_blank" rel="noopener noreferrer">{copy.signIn}</a></Button><Button onClick={onRetry} variant="outline">{copy.retry}</Button></div>;
+}

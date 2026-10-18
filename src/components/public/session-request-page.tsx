@@ -389,7 +389,9 @@ export function SessionRequestPage({
       lastDispatchedSearchQueryRef.current = null;
       setSearchResults([]);
       setSearchNextCursor(null);
-      setSearchMessage("Nie udało się wyszukać piosenek. Spróbuj ponownie.");
+      setSearchMessage(caughtError instanceof SessionClientError&&caughtError.status===429
+        ? "Zbyt wiele prób. Spróbuj ponownie za chwilę."
+        : "Nie udało się wyszukać piosenek. Spróbuj ponownie.");
     } finally {
       if (!controller.signal.aborted && requestVersion === searchVersionRef.current) setIsSearching(false);
     }
@@ -405,6 +407,7 @@ export function SessionRequestPage({
     searchControllerRef.current = controller;
     const requestVersion = searchVersionRef.current;
     setIsLoadingMore(true);
+    setSearchMessage(null);
 
     try {
       const page = await searchSessionSongs(
@@ -791,6 +794,7 @@ export function SessionRequestPage({
               message={searchMessage}
               onBack={() => clearSearchResults()}
               onLoadMore={() => void loadMoreSearchResults()}
+              onRetry={() => {if(searchResults.length&&searchNextCursor)void loadMoreSearchResults();else navigateToSearch(normalizedSearchTerm);}}
               onSongSelect={selectSong}
                query={normalizedSearchTerm}
               songs={searchResults}

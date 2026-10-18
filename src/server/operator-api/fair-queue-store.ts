@@ -3,7 +3,7 @@ import {performanceHistory} from "../performance-history";
 
 import { createHash } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { eventParticipants, operatorAuditLog, songRequests } from "../../db/schema";
+import { events, eventParticipants, operatorAuditLog, songRequests } from "../../db/schema";
 import type { getDb } from "../db";
 import type { FairQueueRequest } from "../fair-queue";
 import {admissionBudget} from "../fair-queue-v2";
@@ -13,6 +13,9 @@ import { OperatorApiError } from "./errors";
 type Transaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 
 export async function loadFairQueueSnapshot(transaction: Transaction, eventId: number, newlyApproved?: { id: number; at: Date }) {
+  const [event] = await transaction.select({engine:events.fairQueueEngine}).from(events).where(eq(events.id,eventId));
+  if(!event)throw new OperatorApiError(404,'EVENT_NOT_FOUND','Event was not found.');
+  const engine = fairEngine(event.engine);
   const rows = await transaction.select({
     id: songRequests.id, participantId: songRequests.eventParticipantId,
     status: songRequests.status, position: songRequests.position, version: songRequests.version,
@@ -48,10 +51,10 @@ export async function loadFairQueueSnapshot(transaction: Transaction, eventId: n
       approvals.get(String(row.id)) ?? anchors.get(String(row.id)) ?? null,
   }));
   if(newlyApproved){const target=requests.find(r=>r.id===newlyApproved.id);if(target){const index=requests.indexOf(target);requests[index]={...target,protectionTurns:admissionBudget(requests,target.id)};}}
-  const revision = createHash("sha256").update(JSON.stringify({ engine: fairEngine(), eventId, sortRevision,
+  const revision = createHash("sha256").update(JSON.stringify({ engine, eventId, sortRevision,
     requests: requests.map((row, index) => ({ ...row, version: rows[index].version })),
   })).digest("hex");
-  return { requests, revision };
+  return { requests, revision, engine };
 }
 
 export async function writeApprovedOrder(transaction: Transaction, eventId: number, snapshot: readonly FairQueueRequest[], order: number[], changedAt: Date, newlyApprovedId?: number) {
