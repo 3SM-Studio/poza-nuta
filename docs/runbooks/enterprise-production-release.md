@@ -2,10 +2,109 @@
 
 Prepared 2026-10-18. **Not executed; not authorization.** Current decision and
 evidence: [security gate](../features/enterprise-production-release-security-gate.md).
+The later [final pre-deployment preparation](../features/final-go-predeployment.md)
+supersedes the earlier backup/resource/cache-drain blockers. Its explicit ordered
+PASS/STOP gates below govern execution. No production operation is authorized by
+this document.
 No Preview. Existing project `pozanuta`, canonical URL
 `https://pozanuta.vercel.app`, sole database `qwmimnhdnzqfckswxjww`.
 No DNS/domain/alias/project operation is part of this procedure. Standard Production
 deployment/rollback updates the application behind the existing domain only.
+
+## Final execution gates — in this order
+
+All execution steps remain pending separate owner approval. Keep Fair Queue
+`legacy`, the existing `unicode-v2` search flag, project, region and URL unchanged.
+Do not push before a verified schema window: existing Git automation may deploy.
+
+| Step | Action | PASS | STOP |
+|---|---|---|---|
+| 1 | Confirm an owner-approved window with no effective active karaoke, no operator outbox writes or catalog imports. Drain old requests; prepare approved synthetic A/B canaries and the old-policy connection before0035. | Operators acknowledge saved writes; lifecycle checked read-only; old A→B canary visibly joined before the fix. | Active real event, writer/import, uncertain outbox or missing canary. Never close an event to force PASS. |
+| 2 | Reverify scoped ref/TLS, source journal, backup/key, free quota, connections and locks. | `qwmimnhdnzqfckswxjww`, PG17, exact entries through0031; fresh authenticated backup and tested restore; resource budgets below hold. | Drift, stale backup after intervening writes, unavailable key, failed restore or insufficient/unknown space. |
+| 3 | Save current READY Production deployment/configuration and rollback command. | Existing `dpl_2HM5HjWHffVM7zH76BUMngXbx85V` / `703c145` still serving canonical domain and will be immediately previous after this single release. | Different serving deployment, unavailable artifact or concurrent release; re-evaluate rollback. |
+| 4 | Run installed official Drizzle migrator with byte-identical journal prefix through0033. | Transaction commits within reviewed lock/statement budgets. | Timeout, error or uncertain commit; inspect journal before retry. |
+| 5 | Verify first batch before continuing. | 34 exact journal hashes/timestamps, expected receipt/stream/intent objects and unchanged source data. | Any mismatch or unexpected browser grants. No new app code yet. |
+| 6 | Run official migrator with full approved folder, applying0034–0035. | 36 exact entries; GiST valid/ready; scoped policy installed. | Error or uncertain commit; phase1 remains, old app stays; do not drop data/schema. |
+| 7 | Verify fresh authorization using approved synthetic A/B canaries. | A→B denied, B→B and own participants/public session work; browser writes denied. | Any unauthorized signal or business read, broken valid subscription or widened RLS. |
+| 8 | Expire all cached authorizations using the controlled Realtime suspension procedure below. | Actual old-channel disconnect observed, suspended joins denied, service resumed, fresh A→B denied and valid/public delivery restored. | Missing approval, non204/uncertain API outcome, old canary alive, `suspend` not restored or failed postflight. |
+| 9 | Deploy exact approved code to existing Production; no settings/domain/region change. | READY, approved SHA, canonical URL unchanged; `legacy` Fair Queue and `unicode-v2` search retained; old operators refresh. | Build/runtime failure, mixed old writers, wrong SHA/ref/domain or unintended flag change. |
+| 10 | Synthetic-event smoke and observation. | PL/EN/UK public session, operator queue/DnD, Collaboration/Presence/search, consistent queue, no cross-tenant reads or lost ACKs; inspect errors 30–60min. | Security/data-integrity failure: stop writes and roll application back; persistent errors/failed smoke also stop release. |
+
+Resource budgets chosen for this release: require available `/data` bytes above
+`max(512 MiB, 4×restored index bytes + 2×measured index WAL +128 MiB)`; require
+database bytes + index bytes +64 MiB below the conservative 500,000,000-byte Free
+quota; require at least 10 unreserved client slots, no blocked writers and no other
+transaction older than60s. These are conservative administrative gates, not a
+capacity SLA. Refresh immediately before DDL. The measured index is20,709,376 bytes,
+WAL17,366,536 bytes; hosted execution can vary. Do not increase timeouts blindly.
+
+## Executable Realtime authorization containment
+
+**Preferred: controlled service suspension, then resumption.** It does not rotate
+JWT keys or change RLS. It briefly interrupts all project Realtime clients. It
+requires explicit owner approval for this production configuration operation;
+preparation/backup approval is not sufficient. No such production call was made.
+
+Official [Management API](https://supabase.com/docs/reference/api/v1-update-realtime-config)
+accepts `suspend`; [Realtime settings](https://supabase.com/docs/guides/realtime/settings)
+describe disconnection and rejection of new joins while disabled. Use the existing
+owner Management API credential privately, with `realtime_config_write`, not an
+application publishable key. Do not print headers, tokens or complete config.
+
+1. Record `GET /v1/projects/qwmimnhdnzqfckswxjww/config/realtime`; require
+   `suspend=false`, and save other fields privately. Prepare/reserve the resume
+   operation before pausing. Keep the quiet window throughout.
+2. Before migration0035 (prepare during step1, not after installing the policy), keep
+   a synthetic canary that joined B under the old policy open without automatic
+   token refresh; a second authorized observer and public-session observer provide
+   positive delivery checks. Never use a real participant's event for test writes.
+3. After0035 commits and fresh joins are checked, send exactly
+   `PATCH /v1/projects/qwmimnhdnzqfckswxjww/config/realtime` with
+   JSON `{"suspend":true}`. Require204, then read `suspend=true`. Observe the old
+   canary's server disconnect/CLOSED and rejection of a new join while suspended.
+   An HTTP204 alone is insufficient proof. Deadline30s, otherwise STOP.
+4. In a controlled `finally`/operator recovery path send the same PATCH with only
+   `{"suspend":false}`. Require204 and verifyfalse plus unchanged other fields.
+   On any uncertain resume, read configuration, do not toggle repeatedly or deploy.
+   Do not leave the service suspended; use the owner Dashboard's Enable Realtime
+   control as the recovery path, with the same authorization.
+5. Rejoin with the still-valid A token: B must deny. Rejoin legitimate B and public
+   session; emit one approved synthetic-event invalidation and require delivery to
+   both, no delivery to A. Check Collaboration/Presence canonical APIs and snapshot
+   recovery. No business table browser grants are added. Only then leave step8.
+
+Local executable drill (guarded runner creates/removes its own PG17/Auth/Realtime):
+
+```powershell
+$env:LOCAL_E2E_SHORT_JWT='1'
+$env:LOCAL_E2E_OPTIMIZED='1'
+$env:LOCAL_E2E_SEARCH_ENGINE='unicode-v2'
+$env:LOCAL_E2E_PLAYWRIGHT_GREP='Realtime (expiry|suspend) drain'
+node --experimental-strip-types tests/e2e/run-local-supabase-smoke.ts
+```
+
+The suspension drill invokes the local Realtime tenant API implementation through
+the release RPC inside the exact owned E2E container. This tests the server-side
+cache drain/reconnect behavior; it does not pretend to test the hosted Management
+API transport or account write permission. Hosted calls and positive canaries must
+still pass in the approved window. There is no shell command targeting a cloud
+database and no generic container/target argument in this drill.
+
+**Alternative: natural JWT expiry.** Current hosted Auth configuration has
+`jwt_exp=3600`. The isolated120s drill proves the server expires an uncooperative
+old authorization, then rejects A with a renewed token while valid/public channels
+continue. If relying on waiting alone, establish the maximum lifetime of *all
+previously issued* accepted operator tokens, including previous configuration and
+custom issuers; current `jwt_exp` alone does not prove that historical bound.
+Record server-clock policy commitT0, wait untilT0+verified bound+60s, require an
+old-token canary's actual expiry/CLOSED and positive authorized delivery. STOP if
+the historical bound is unknown or the canary remains live. The suspension
+procedure avoids that historical-token uncertainty and a one-hour drain window.
+`removeAllChannels`, asking users to reload, sign-out, policy DDL and app rollback
+are not reliable forced revocation of an uncooperative socket. Do not substitute
+the Management API `shutdown` call without testing its socket behavior: the local
+Realtime tenant shutdown controller stops a DB connection and is not equivalent
+to the explicit tenant suspend/disconnect path.
 
 ## A. Approval and preflight
 
@@ -49,7 +148,9 @@ deployment/rollback updates the application behind the existing domain only.
 
 ## B. New backup and isolated restore — hard gate before DDL
 
-Existing encrypted backup is historical and immutable. Create a new uniquely named
+The October16 encrypted backup is historical and immutable. The new October18
+snapshot and tested standalone restore are recorded in the final preparation report.
+If it is stale at execution time, create a new uniquely named
 folder outside all repositories with current-user/SYSTEM ACL and fresh random key.
 Do not point the older recovery scripts at their old output paths: they write private
 diagnostics/manifests there. Adapt reviewed copies to the new folder, inspect them,
@@ -107,10 +208,11 @@ current users as rollback.
 
 ## C. Freeze the exact integrated release
 
-After local approval, create one reviewed local security/integration commit on top
-of 372a9b9. Existing ancestor chain remains intact. Stage only allowlisted new paths;
-inspect full staged diff and `git diff --cached --check`. This audit creates no
-commit itself. Preserve private/unrelated files in the original checkout.
+The approved13-file Security Gate checkpoint is now local commit293193d on top of
+372a9b9; existing ancestors remain intact. Additional preparation tests/docs remain
+uncommitted. Obtain approval for the final release tree and any additional commit;
+stage only allowlisted paths, inspect full staged diff and cached check. Preserve
+private/unrelated files in the original checkout. No push/deploy was performed.
 
 Use a clean release directory from the exact approved Git tree. Explicitly exclude
 `.env*` except placeholder example, `.codex`, `.auth`, `.artifacts`, test-results,

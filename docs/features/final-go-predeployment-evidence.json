@@ -1,0 +1,344 @@
+{
+  "receiptCreatedUtc": "2026-10-17T23:57:42.970260+00:00",
+  "decision": "GO",
+  "releaseReadiness": "READY FOR AUTHORIZED RELEASE",
+  "executionAuthorized": false,
+  "checkpoint": {
+    "verifiedUtc": "2026-10-17T23:55:57.466685+00:00",
+    "commit": "293193db1421324cbab3f837eac85c941d33d90f",
+    "parent": "372a9b9869a0f9df905142862352968c66160ef1",
+    "committedFileCount": 13,
+    "committedManifestHashesMatch": true,
+    "originalProtectedFilesUnchanged": 2,
+    "olderBackupFilesUnchanged": 40,
+    "stagingEmpty": true,
+    "push": false,
+    "deployment": false,
+    "productionMutations": false
+  },
+  "securityGate": "PASS locally; hosted0035 not yet applied",
+  "freshBackup": {
+    "verifiedUtc": "2026-10-17T23:50:53.431Z",
+    "projectRef": "qwmimnhdnzqfckswxjww",
+    "snapshotUtc": "2026-10-17T23:33:13.542Z",
+    "dumpFinishedUtc": "2026-10-17T23:33:42.991Z",
+    "createdUtc": "2026-10-17T23:33:43.035Z",
+    "encryptedRoot": "C:/Users/michas/.codex/backups/kunestu-prod-20261018-predeploy-kRnpxO",
+    "authenticatedArtifacts": 6,
+    "databaseDumpBytes": 14641548,
+    "encryption": "AES-256-GCM, random per-file nonce; key Windows DPAPI CurrentUser protected; directory ACL current user and SYSTEM",
+    "keyUnwrapTested": true,
+    "restore": {
+      "verifiedUtc": "2026-10-17T23:47:12.779Z",
+      "projectRef": "qwmimnhdnzqfckswxjww",
+      "backupLocation": "C:\\Users\\michas\\.codex\\backups\\kunestu-prod-20261018-predeploy-kRnpxO",
+      "databaseRestoreVerified": true,
+      "network": "none",
+      "publishedPorts": 0,
+      "tableCount": 73,
+      "tableCountAndDigestMismatches": 0,
+      "constraintsMatched": 275,
+      "checksCanonicalizedAndVerifiedByServer": 5,
+      "requiredRolesPresent": 33,
+      "roleAttributesMatched": true,
+      "roleMembershipsMatched": 25,
+      "aclComparison": "ACL order normalized; explicit owner-only defaults equal implicit defaults; two pg_stat_statements extension view owners and ACLs replayed exactly; identical grantees, grantors, privileges and grant options",
+      "compared": {
+        "relationMetadata": 98,
+        "indexes": 268,
+        "policies": 10,
+        "sequences": 22
+      },
+      "providerSettingsReplayed": 9,
+      "privileges": {
+        "authenticatedHasSchema": true,
+        "authUsers": 2,
+        "journalEntries": 32,
+        "sourceReads": 92014,
+        "pgVersion": "170006"
+      },
+      "container": "kunestu-restore-2253c1d7de",
+      "sourceWrites": 0,
+      "limitations": [
+        "Windows DPAPI recovery requires this Windows account/machine or separate owner-controlled key escrow. Do not delete key.dpapi.",
+        "Provider-managed role passwords excluded; retain/reset credentials only through authorized recovery.",
+        "Cloud project Auth settings, OAuth providers, signing/encryption keys and custom SMTP are not part of pg_dump; same-project recovery retains provider configuration.",
+        "No Storage objects exist in this snapshot. This is not an object-file backup."
+      ]
+    },
+    "providerConfiguration": {
+      "separatelyEncrypted": "provider-management-config.json.aesgcm",
+      "capturedAuthRealtimeStorageEffectiveConfig": true,
+      "sameProjectSigningEncryptionRootsRetained": true,
+      "newHostedProjectReconstructionVerified": false
+    },
+    "storage": {
+      "bucketCount": 0,
+      "objectCount": 0,
+      "filesRequired": false
+    },
+    "vaultSecrets": 0,
+    "auth": {
+      "users": "2",
+      "mfaFactors": "0"
+    },
+    "recoveryHelperSha256": "157499f7a98951130b6ed20571ba818a32efd8933a479fb55ee412f4ed363098",
+    "manifestSha256": "0ff23928fcbd849dad8ca066c6c3bbb2b90e96144a82737d78d225d63299fafd",
+    "sourceWrites": 0
+  },
+  "standaloneRestore": {
+    "verifiedUtc": "2026-10-17T23:47:12.779Z",
+    "projectRef": "qwmimnhdnzqfckswxjww",
+    "backupLocation": "C:\\Users\\michas\\.codex\\backups\\kunestu-prod-20261018-predeploy-kRnpxO",
+    "databaseRestoreVerified": true,
+    "network": "none",
+    "publishedPorts": 0,
+    "tableCount": 73,
+    "tableCountAndDigestMismatches": 0,
+    "constraintsMatched": 275,
+    "checksCanonicalizedAndVerifiedByServer": 5,
+    "requiredRolesPresent": 33,
+    "roleAttributesMatched": true,
+    "roleMembershipsMatched": 25,
+    "aclComparison": "ACL order normalized; explicit owner-only defaults equal implicit defaults; two pg_stat_statements extension view owners and ACLs replayed exactly; identical grantees, grantors, privileges and grant options",
+    "compared": {
+      "relationMetadata": 98,
+      "indexes": 268,
+      "policies": 10,
+      "sequences": 22
+    },
+    "providerSettingsReplayed": 9,
+    "privileges": {
+      "authenticatedHasSchema": true,
+      "authUsers": 2,
+      "journalEntries": 32,
+      "sourceReads": 92014,
+      "pgVersion": "170006"
+    },
+    "container": "kunestu-restore-2253c1d7de",
+    "sourceWrites": 0,
+    "limitations": [
+      "Windows DPAPI recovery requires this Windows account/machine or separate owner-controlled key escrow. Do not delete key.dpapi.",
+      "Provider-managed role passwords excluded; retain/reset credentials only through authorized recovery.",
+      "Cloud project Auth settings, OAuth providers, signing/encryption keys and custom SMTP are not part of pg_dump; same-project recovery retains provider configuration.",
+      "No Storage objects exist in this snapshot. This is not an object-file backup."
+    ]
+  },
+  "ownedTemporaryClonesRemoved": 3,
+  "olderBackupUnchanged": true,
+  "capacity": {
+    "capturedUtc": "2026-10-17T23:50:01.773Z",
+    "projectRef": "qwmimnhdnzqfckswxjww",
+    "settings": {
+      "max_connections": 60,
+      "superuser_reserved_connections": 3,
+      "reserved_connections": 0,
+      "maintenance_work_mem": "32MB",
+      "max_wal_size": "1GB"
+    },
+    "activity": {
+      "all_database_backends": 9,
+      "client_backends": 7,
+      "other_active": 0,
+      "long_transactions": 0,
+      "blocked": 0
+    },
+    "events": {
+      "effective_active_events": 0
+    },
+    "slots": [],
+    "remoteWrites": 0
+  },
+  "databaseSizeBytes": 204573843,
+  "availableDataDiskBytes": 1546387456,
+  "diskReserveMinimumBytes": 536870912,
+  "freePlanVerified": true,
+  "indexRehearsal": {
+    "capturedUtc": "2026-10-17T23:44:48.830137+00:00",
+    "source": "fresh isolated restore of approved production snapshot",
+    "remoteWrites": 0,
+    "migration0034Only": true,
+    "officialDrizzleRehearsal": "separate preserved releaseMigrationWindow integration test",
+    "wallIncludingDockerMs": 2390.00000001397,
+    "exitCode": 0,
+    "status": "PASS",
+    "measurements": {
+      "indexBytes": 20709376,
+      "walBytesGenerated": 17366536,
+      "indexValid": true,
+      "songs": 92014,
+      "documents": 92014,
+      "journalEntries": 32
+    },
+    "psqlTimings": [
+      "Time: 0.245 ms",
+      "Time: 0.151 ms",
+      "Time: 0.497 ms",
+      "Time: 0.107 ms",
+      "Time: 2142.724 ms (00:02.143)",
+      "Time: 1.037 ms",
+      "Time: 23.800 ms"
+    ]
+  },
+  "realtime": {
+    "expiry": {
+      "startedUtc": "2026-10-17T23:49:34.764Z",
+      "localOnly": true,
+      "sourceWrites": 0,
+      "status": "PASS",
+      "mechanism": "expiry",
+      "jwtLifetimeSeconds": 120,
+      "policyCommitUtc": "2026-10-17T23:49:35.662Z",
+      "serverTerminatedOldAuthorization": true,
+      "expiryDetectionLagMs": 724,
+      "drainAfterPolicyMs": 120062,
+      "cooperativeDisconnectRequired": false,
+      "postDrainDeliveryToA": 0,
+      "authorizedObserverDelivery": true,
+      "publicQueueDelivery": true,
+      "renewedTokenCrossOrganizationJoin": "CHANNEL_ERROR",
+      "actorStatuses": [
+        {
+          "status": "SUBSCRIBED",
+          "expired": false,
+          "at": 1792280975521
+        },
+        {
+          "status": "SYSTEM_ERROR",
+          "expired": true,
+          "at": 1792281095487
+        },
+        {
+          "status": "CLOSED",
+          "expired": false,
+          "at": 1792281095487
+        },
+        {
+          "status": "CHANNEL_ERROR",
+          "expired": false,
+          "at": 1792281101446
+        }
+      ]
+    },
+    "suspend": {
+      "startedUtc": "2026-10-17T23:55:31.352Z",
+      "localOnly": true,
+      "sourceWrites": 0,
+      "status": "PASS",
+      "mechanism": "suspend",
+      "jwtLifetimeSeconds": 3600,
+      "policyCommitUtc": "2026-10-17T23:55:32.149Z",
+      "serverTerminatedOldAuthorization": true,
+      "expiryDetectionLagMs": null,
+      "drainAfterPolicyMs": 561,
+      "cooperativeDisconnectRequired": false,
+      "postDrainDeliveryToA": 0,
+      "authorizedObserverDelivery": true,
+      "publicQueueDelivery": true,
+      "crossOrganizationRejoin": "CHANNEL_ERROR",
+      "actorTokenRenewed": false,
+      "actorStatuses": [
+        {
+          "status": "SUBSCRIBED",
+          "expired": false,
+          "at": 1792281332002
+        },
+        {
+          "status": "SYSTEM_DRAIN",
+          "expired": false,
+          "at": 1792281332583
+        },
+        {
+          "status": "CHANNEL_ERROR",
+          "expired": false,
+          "at": 1792281332584
+        },
+        {
+          "status": "CLOSED",
+          "expired": false,
+          "at": 1792281333570
+        },
+        {
+          "status": "CHANNEL_ERROR",
+          "expired": false,
+          "at": 1792281338589
+        }
+      ]
+    },
+    "preferredProcedure": "controlled suspend=true then false, after separate owner approval",
+    "productionExecuted": false,
+    "historicalMaximumTokenLifetimeProven": false,
+    "hostedManagementWritePermissionNotExercised": true
+  },
+  "checks": {
+    "node": 430,
+    "vitest": 721,
+    "typecheck": "PASS",
+    "lint": "PASS, 0 warnings and errors after cleanup",
+    "optimizedPnpmBuild": "PASS in final guarded launcher",
+    "gitDiffCheck": "PASS",
+    "cachedDiffCheck": "PASS",
+    "combinedBrowserDrains": 2,
+    "additionalUnrenewedTokenDrill": 1,
+    "additionalDefault3600JwtDrill": 1,
+    "preservedGatePostgres17": 24,
+    "preservedGateBrowser": 33,
+    "newProductionTests": 0
+  },
+  "preparationFilesUncommitted": [
+    "docs/features/final-go-predeployment.md",
+    "docs/features/final-go-predeployment-evidence.json",
+    "docs/runbooks/enterprise-production-release.md",
+    "playwright.local-supabase.config.ts",
+    "tests/e2e/realtime-authorization-expiry.local.spec.ts"
+  ],
+  "contentSha256": {
+    "docs/features/final-go-predeployment.md": "8a182db22e93c04e84d12f1c456b40a6241bc34e1a34d70e4367b2d6133900f6",
+    "docs/runbooks/enterprise-production-release.md": "84e8d6a1c98a7766f3b6535c101fefe87f8a2f48453943ff42cffaf5af2c0283",
+    "playwright.local-supabase.config.ts": "2005cec37ea239e0854929c3a0f7047fe9db7ef4a0e2850cb1c7f3e40036fe90",
+    "tests/e2e/realtime-authorization-expiry.local.spec.ts": "aa6b69154843b027baeadf1b3a34b9223cc706976a18ade4e58116321fb98b1d"
+  },
+  "localEvidenceSha256": {
+    ".artifacts/predeploy-checkpoint-integrity.json": "5a5e3843826a34b8e2c9c60ec9ea591ea8b8ae2aaef3f6f55f9602412d58fcc0",
+    ".artifacts/predeploy-production-readonly.json": "208d947dedc88a6f81e197c18b61121a5670771f895f1037821980d08e3c15d1",
+    ".artifacts/predeploy-production-capacity.json": "8049902dcd83846e67475830c7e0865f02c4f9e64340d7b7c8822f71cf0d70fe",
+    ".artifacts/predeploy-resource-metrics.txt": "d83bdff9ede8f3e4c78aef659e0260e5d3dfed9570c2f5bc08356012701e7980",
+    ".artifacts/predeploy-management-readonly.json": "871b0dfbca91c63f77f569eb746c85c671ded1ef98d712ff92a424496dcdbb39",
+    ".artifacts/predeploy-vercel-readonly.json": "9ce86862b999ccc6e70d67e4dc2c977875aef0253dabfa93ae74baf5880134a7",
+    ".artifacts/predeploy-backup-final-integrity.json": "9c8720673d3a5bfe96300ef63b15a165b7b62da7b633b41f05f0b7e25bf0878a",
+    ".artifacts/predeploy-restored-index.json": "70a48181f4133c0c4a8a5d25309d482cefd8e557f93bd922b1292f5353c9fc42",
+    ".artifacts/predeploy-realtime-expiry.json": "d03575b02f12d5345c900103d9e230e9fd2d052cd9d4efea920e1ef9f68e0ebb",
+    ".artifacts/predeploy-realtime-suspend.json": "b6139384096ad6dafa56115a57579bba5ee8998741efd4bff8e6d3e5223c4415",
+    ".artifacts/predeploy-test-final.log": "29d781e58775ecc69728f2eb4a122eb847c3d2714d89ca55b958e67119188080",
+    ".artifacts/predeploy-typecheck-verified.log": "d66548006c5c7c54f315f252a8864713f539323f6c6187c23bb7db83274361fa",
+    ".artifacts/predeploy-lint-verified.log": "cc5a0b39c7052d24c24888403c48018b4fcccc9d799f81be6c9c30c9e19c85fc",
+    ".artifacts/predeploy-realtime-drains-final.log": "97a2caf0211ab15faca51910f95937fb1fe4553c03cd4b0dd8e8713f5161a24a",
+    ".artifacts/predeploy-realtime-suspend-valid-token.log": "6b3314728f245831001600f3729f621360d3c5f8ee432e745f78588b40603898",
+    ".artifacts/predeploy-realtime-suspend-default-jwt.log": "2791edd22305b432e420d43b489a617991ecd128efee855b826df51872c4b107"
+  },
+  "requiredSeparateApprovals": [
+    "final release tree and any additional commit/integration/push",
+    "production0032â€“0035 official batches",
+    "controlled hosted Realtime suspend/resume",
+    "synthetic online test fixtures and Production deployment/application rollback"
+  ],
+  "productionMutations": 0,
+  "push": false,
+  "deployment": false,
+  "secretScan": {
+    "scope": "five final preparation files",
+    "highConfidenceFindings": 0
+  },
+  "gitStatus": {
+    "modified": [
+      "docs/runbooks/enterprise-production-release.md",
+      "playwright.local-supabase.config.ts"
+    ],
+    "untracked": [
+      "docs/features/final-go-predeployment.md",
+      "docs/features/final-go-predeployment-evidence.json",
+      "tests/e2e/realtime-authorization-expiry.local.spec.ts"
+    ],
+    "stagingEmpty": true
+  }
+}
