@@ -4,6 +4,7 @@ import { getQueueDevice } from './queue-device';
 import { QueueCollaboration, type QueueCollaborationState } from '@/lib/queue-collaboration';
 import { getQueueSync, sendQueueOperation, type DashboardEventQueueItemDto } from './event-queue-api';
 import { loadQueueOutbox, persistQueueOutbox } from './queue-outbox';
+import {installQueueOperationDiagnostics} from '@/lib/queue-operation-diagnostics';
 import { realtimeDiagnostic } from '@/lib/realtime-diagnostics';
 
 // Responsive layouts may mount the same route more than once. They must share
@@ -16,6 +17,7 @@ export function useQueueCollaboration(organizationId:string,eventId:string,initi
   const sourceItems=useRef(initialItems);
   const [state,setState]=useState<QueueCollaborationState>({items:initialItems,entries:[],unconfirmedIds:[],revision:'0',sortRevision:'0',ready:false,online:true,error:null,closed:false});
   useEffect(()=>{
+    installQueueOperationDiagnostics();
     let mounted=true,release:(()=>void)|undefined;
     void getQueueDevice().then(deviceId=>{
     if(!mounted)return;
@@ -45,5 +47,10 @@ export function useQueueCollaboration(organizationId:string,eventId:string,initi
     return()=>{mounted=false;release?.();};
     // Server revalidation must not discard an active device's pending intent log.
   },[organizationId,eventId]);
+  useEffect(()=>{
+    if(!client||!state.ready)return;
+    const frame=requestAnimationFrame(()=>client.markRendered(state.revision,state.entries.length>0));
+    return()=>cancelAnimationFrame(frame);
+  },[client,state.revision,state.ready,state.entries.length]);
   return {client,state,deviceId};
 }

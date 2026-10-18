@@ -1,5 +1,6 @@
+import {queueOperationDiagnosticReport} from '../../src/lib/queue-operation-diagnostics';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { QueueCollaboration, createQueueOperation, type OutboxEntry } from '../../src/lib/queue-collaboration';
+import { QueueCollaboration, replayQueueIntent, createQueueOperation, type OutboxEntry } from '../../src/lib/queue-collaboration';
 import { parseQueueOperation, resolveQueueOperationPosition } from '../../src/lib/queue-operation';
 import type { DashboardEventQueueItemDto, QueueSyncSnapshot } from '../../src/components/operator/event-queue-api';
 
@@ -155,4 +156,39 @@ describe('local queue outbox',()=>{
     t.setServer({lifecycle:'active',revision:'3'});await t.c.refresh();expect(t.c.getSnapshot().closed).toBe(false);
     t.setServer({actorId:2,revision:'4'});await t.c.refresh();expect(t.c.getSnapshot().closed).toBe(true);
   });
+});
+
+it('preserves untouched row identity during replay, but updates target and old performance versions',async()=>{
+  const rows=[item(1),item(2),item(3),item(4)];
+  const operation=createQueueOperation(rows,device,1,'0',1,{kind:'placement',lane:'approved',position:2})!;
+  const next=replayQueueIntent(rows,{operation,changedAt:rows[0].updatedAt,phase:'queued',attempts:0});
+  expect(next.find(x=>x.id===3)).toBe(rows[2]);expect(next.find(x=>x.id===4)).toBe(rows[3]);
+  expect(next.find(x=>x.id===1)?.intentVersion).toBe(1);expect(next.find(x=>x.id===2)?.intentVersion).toBe(0);
+  const stage=[item(1,'now'),item(2)];
+  const start=createQueueOperation(stage,device,1,'0',2,{kind:'action',action:'start'})!;
+  expect(replayQueueIntent(stage,{operation:start,phase:'queued',attempts:0,changedAt:rows[0].updatedAt}).map(x=>x.intentVersion)).toEqual([1,1]);
+});
+it('shares identical snapshot DTOs and still observes nested metadata additions/changes',async()=>{
+  const t=await setup();const before=t.c.getSnapshot().items;
+  t.setServer({items:structuredClone(before),revision:'2'});await t.c.refresh();
+  expect(t.c.getSnapshot().items[0]).toBe(before[0]);
+  const changed=structuredClone(before);changed[0].song.title='Changed';
+  changed[1].nicknameChanges=[{before:'Old',after:'New',at:'2026-10-18T00:00:00Z'}];
+  t.setServer({items:changed,revision:'3'});await t.c.refresh();
+  expect(t.c.getSnapshot().items[0].song.title).toBe('Changed');expect(t.c.getSnapshot().items[1].nicknameChanges).toEqual(changed[1].nicknameChanges);
+  expect(t.c.getSnapshot().items[2]).toBe(before[2]);
+});
+
+it('does not mislabel stale snapshots or a pending overlay as confirmed peer convergence',async()=>{
+  const t=await setup();const operation=t.operation(1,3);
+  const trace={operationId:operation.operationId,requestId:device,revision:'2'};
+  t.setServer({revision:'2',trace});await t.c.refresh();t.c.enqueue(operation);
+  t.c.markRendered('2',false);expect(queueOperationDiagnosticReport().filter(x=>x.operationId===operation.operationId&&x.stage==='rendered')).toHaveLength(0);
+  t.c.markRendered('2',true);let records=queueOperationDiagnosticReport().filter(x=>x.operationId===operation.operationId&&x.stage==='rendered');
+  expect(records.at(-1)?.pending).toBe(true);
+  t.setServer({revision:'2',trace,acknowledged:[operation.operationId]});await t.c.refresh();t.c.markRendered('2');
+  records=queueOperationDiagnosticReport().filter(x=>x.operationId===operation.operationId&&x.stage==='rendered');expect(records.at(-1)?.pending).toBe(false);
+  t.setServer({revision:'1',trace:null});await t.c.refresh();t.c.markRendered('1');
+  expect(t.c.getRevision()).toBe('2');expect(queueOperationDiagnosticReport().some(x=>x.stage==='stale_snapshot'&&x.revision==='1')).toBe(true);
+  expect(queueOperationDiagnosticReport().filter(x=>x.operationId===operation.operationId&&x.stage==='rendered')).toHaveLength(2);
 });

@@ -186,14 +186,28 @@ test.describe('Collaborative queue integration',()=>{
   });
   for(const count of [20,50,100])test(`performance ${count}: native local render frame and committed cross-browser convergence`,async({browser})=>{
     await fixture.seedDragQueue(count);const t=await pair(browser);const local:number[]=[],sync:number[]=[],acknowledgements:number[]=[];
-    try{for(let i=0;i<10;i++){
+    const samples=Number(process.env.LOCAL_E2E_PERFORMANCE_SAMPLES??10);expect([10,30,100]).toContain(samples);
+    const profiling=process.env.LOCAL_E2E_P0_PROFILE==='1',label=process.env.LOCAL_E2E_PROFILE_LABEL??'candidate';expect(['fa9-baseline','candidate']).toContain(label);
+    const cdp=profiling?await t.a.newCDPSession(t.pa):null;
+    const work:unknown[]=[];
+    if(cdp){await cdp.send('Profiler.enable');await cdp.send('Performance.enable');await cdp.send('Profiler.start');}
+    try{for(let i=0;i<samples;i++){
+      const before=cdp?await cdp.send('Performance.getMetrics'):null;
+      if(cdp)await t.pa.evaluate(()=>performance.clearMarks());
       const start=performance.now();
-      const committed=t.pa.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/queue/sync')&&r.status()===200).then(()=>performance.now()-start);
-      const [frame,ack]=await Promise.all([measureClick(t.pa,'Drag 1',i%2?'górę':'dół'),committed]);local.push(frame);acknowledgements.push(ack);
+      const committed=t.pa.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/queue/sync')&&r.status()===200).then(async response=>({ms:performance.now()-start,trace:(await response.json()).trace as {operationId:string;requestId:string;revision:string}|null}));
+      const [frame,ack]=await Promise.all([measureClick(t.pa,'Drag 1',i%2?'górę':'dół'),committed]);local.push(frame);acknowledgements.push(ack.ms);
       await expect.poll(()=>names(t.pb),{intervals:[10,25,50,100]}).toEqual(await names(t.pa));sync.push(performance.now()-start);
       await expect(t.pa.locator('[data-queue-sync-state]:visible')).toHaveAttribute('data-queue-sync-state','synced');
+      if(!profiling){
+        expect(ack.trace).toBeTruthy();
+        await expect.poll(()=>t.pb.evaluate(trace=>window.kunestuQueueDiagnostics?.report().some(record=>record.stage==='rendered'&&record.operationId===trace?.operationId&&record.requestId===trace?.requestId&&record.revision===trace?.revision&&!record.pending)??false,ack.trace),{intervals:[10,25,50]}).toBe(true);
+      }
+      if(cdp&&before){const after=await cdp.send('Performance.getMetrics');const marks=await t.pa.evaluate(()=>performance.getEntriesByType('mark').filter(x=>x.name.startsWith('p0:')).map(x=>x.name));
+        work.push({marks:marks.reduce<Record<string,number>>((out,name)=>{out[name]=(out[name]??0)+1;return out;},{}),durationsMs:Object.fromEntries(['ScriptDuration','LayoutDuration','RecalcStyleDuration','TaskDuration'].map(name=>[name,1000*((after.metrics.find(x=>x.name===name)?.value??0)-(before.metrics.find(x=>x.name===name)?.value??0))]))});}
     }
-    const percentile=(values:number[])=>[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1];const m={count,localMs:local,syncMs:sync,acknowledgementMs:acknowledgements,acknowledgementP95Ms:percentile(acknowledgements),localP95Ms:percentile(local),syncP95Ms:percentile(sync),syncMaxMs:Math.max(...sync)};metrics.push(m);
+    const percentile=(values:number[],p=.95)=>[...values].sort((a,b)=>a-b)[Math.ceil(values.length*p)-1];const m={count,samples,profiling,localMs:local,syncMs:sync,acknowledgementMs:acknowledgements,acknowledgementP95Ms:percentile(acknowledgements),localP95Ms:percentile(local),syncP95Ms:percentile(sync),syncMaxMs:Math.max(...sync),diagnosticPeerReceiptsVerified:!profiling,percentiles:{local:[.5,.95,.99].map(p=>percentile(local,p)),http:[.5,.95,.99].map(p=>percentile(acknowledgements,p)),peer:[.5,.95,.99].map(p=>percentile(sync,p))}};metrics.push(m);
+    if(cdp){const {profile}=await cdp.send('Profiler.stop');writeFileSync(`.artifacts/p0-final-mile-profile-${label}-${count}.json`,JSON.stringify({utc:new Date().toISOString(),count,samples,work,profile,metrics:m}));}
     expect(m.acknowledgementP95Ms).toBeLessThan(2000);expect(m.localP95Ms).toBeLessThanOrEqual(100);expect(m.syncP95Ms).toBeLessThan(2000);expect(m.syncMaxMs).toBeLessThanOrEqual(5000);
     }finally{await t.close();}
   });

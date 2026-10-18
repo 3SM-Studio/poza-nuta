@@ -194,6 +194,7 @@ export type QueueSyncSnapshot = {
   actorId: number; eventId: number; revision: string; sortRevision: string;
   items: DashboardEventQueueItemDto[]; acknowledged: string[];
   canManage?: boolean; lifecycle?: string;
+  trace?: {requestId:string;operationId:string;revision:string}|null;
 };
 export function getQueueSync(organizationId: string,eventId: string,deviceId: string,operationIds: string[],signal?: AbortSignal) {
   const query=new URLSearchParams({deviceId});

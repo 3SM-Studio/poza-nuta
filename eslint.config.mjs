@@ -7,6 +7,11 @@ export default defineConfig([
   ...nextTypeScript,
   globalIgnores([
     ".next/**",
+    // Generated local builds and retained diagnostics are not application source.
+    ".next-*/**",
+    ".artifacts/**",
+    ".playwright*/**",
+    "test-results/**",
     "dist/**",
     "data/**",
     "apps/**",

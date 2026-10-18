@@ -1,0 +1,103 @@
+{
+  "generatedUtc": "2026-10-18T14:17:03.168879+00:00",
+  "parent": "fa9b9b0f9c9219005996c1980ab8386ec7d04d5c",
+  "excludesSelf": true,
+  "files": [
+    {
+      "path": "eslint.config.mjs",
+      "sha256": "def6ab22bcc0dbccf29922567e142edee1d8d4a138757f6d54c15d370f50ba44"
+    },
+    {
+      "path": "src/app/api/dashboard/organizations/[organizationId]/events/[eventId]/queue/sync/route.ts",
+      "sha256": "05800da627cc81e79cce7a5e709620bd6a9ab529d49d3fbb6cf08ea8caedca5d"
+    },
+    {
+      "path": "src/components/operator/event-queue-api.ts",
+      "sha256": "7bec976d5c0dea5c8266db277e585f58b3651ef574ee85f775d77e498aab1e5c"
+    },
+    {
+      "path": "src/components/operator/event-queue-panel.tsx",
+      "sha256": "0933dca6272a78eb7804cffbcf0e3507517f8822722e53c40c6189a56cf40369"
+    },
+    {
+      "path": "src/components/operator/use-dashboard-queue-realtime.ts",
+      "sha256": "8b83afe5e4ba73d3e21c5f8c4b092de9fcb0cb6b3cd81f6bd04dd11c14b64a7e"
+    },
+    {
+      "path": "src/components/operator/use-queue-collaboration.ts",
+      "sha256": "03dc29b336ce1bc4df5683ff4234a1552efe4cfaa997cea479d375c5e6bb3b97"
+    },
+    {
+      "path": "src/components/realtime/use-queue-realtime.ts",
+      "sha256": "1c92a6048abc79e44dcf4b46624c4f39389456d9487d6163db6fe7ee5f5d2738"
+    },
+    {
+      "path": "src/lib/queue-collaboration.ts",
+      "sha256": "1554251e40e2ae96f55b1c809017d38b2f4d835002f87f6a7ab6f9357d64a90f"
+    },
+    {
+      "path": "src/server/db-telemetry.ts",
+      "sha256": "aec71e98af97a4ef148be0e7298dd492ea0b621fb0ff2712407a85b99021eff0"
+    },
+    {
+      "path": "src/server/operator-api/queue-sync.ts",
+      "sha256": "c5ac906ec16ce15ec2c79341fee9518165bb65751f6edf5a383e24894623b9d0"
+    },
+    {
+      "path": "src/server/song-search-unicode.ts",
+      "sha256": "af0eaaea4e4560cf9e9dee6d3d9431daa998dbc832f74bb2963de25e4e22b873"
+    },
+    {
+      "path": "src/server/song-search.ts",
+      "sha256": "c684780b5421c424217dc00eeaa2279235b96f60f4f3baeed507dc785b0dd54a"
+    },
+    {
+      "path": "tests/e2e/queue-collaboration.local.spec.ts",
+      "sha256": "ab6c62ef351d32376c9e980b95eee199c2261e837b4e7b329b49ab9115d9ec44"
+    },
+    {
+      "path": "tests/e2e/run-local-supabase-smoke.ts",
+      "sha256": "c784d7f827b20f50aef367b7959e6ff025dd4b72d7ec49cd1c5d2e61e3bb6ab1"
+    },
+    {
+      "path": "tests/postgres/queueCollaboration.integration.test.ts",
+      "sha256": "30691a2765d2c5b1270cf2d55ad1d8d927cd977067c9681cb6c9b4b1d11ad27d"
+    },
+    {
+      "path": "tests/vitest/queue-collaboration.test.ts",
+      "sha256": "7602008ff46fb59885886be3d8e254f8540ee0e52e2b3b5dbe060c5b034451f1"
+    },
+    {
+      "path": "src/lib/queue-operation-diagnostics.ts",
+      "sha256": "021963f891ca07d78c89536e30d1b461017788fe028218c375dfe9e71f7f5aa1"
+    },
+    {
+      "path": "tests/vitest/queue-operation-diagnostics.test.ts",
+      "sha256": "79195b201d0bee7bab4010fda72160c7b2ae45d5cf30fbbb5b54dcd2435879d4"
+    },
+    {
+      "path": "tests/e2e/with-queue-performance-probes.ts",
+      "sha256": "64926626ebaa0fc12cd10cc83f1abaf24a2343b11a63304c2fb68c00d8c41177"
+    },
+    {
+      "path": "docs/features/production-p0-performance-final-mile.md",
+      "sha256": "3bbfeb69a741a01b75bcc0cbbb94d66e2d99a5fd05e92a0f22cbd2915fe30b13"
+    },
+    {
+      "path": "docs/runbooks/p0-regional-comparison.md",
+      "sha256": "5713808b4e4297f82d6f70347c5934701e8d16da61932ee4f248f97f2287d72b"
+    },
+    {
+      "path": "docs/runbooks/p0-frankfurt-production-verification.md",
+      "sha256": "f580674efe0b0c1638dd7e824b064d3a2a797fd8e570f68d49e1acded606de5f"
+    },
+    {
+      "path": "docs/verification/p0-final-mile-performance-2026-10-18.json",
+      "sha256": "e847f9921e775ad1087e91e12e4ca82b401978e0e111a455a5ceb7bbd8eb1a03"
+    },
+    {
+      "path": "docs/verification/p0-final-mile-checks-2026-10-18.json",
+      "sha256": "f6ae3e40bca598c0f1b6c18f44493184026b725a0dd9ebbe3dd8bad8875e3645"
+    }
+  ]
+}

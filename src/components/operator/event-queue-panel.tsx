@@ -8,6 +8,8 @@ import { useUiText } from "@/i18n/use-ui-text";
 import { localizeUiRecord } from "@/i18n/text";
 
 import {
+  memo,
+  useMemo,
   type ReactNode,
   useCallback,
   useEffect,
@@ -109,14 +111,16 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
   const isRefreshing=false,isSyncing=false,placementBusy=false;
   const error=state.error,errorSource=error?'refresh':null;
   const currentItem=items.find(x=>x.status==='now')??null;
-  const approvedItems=items.filter(x=>x.status==='approved').sort((a,b)=>a.position-b.position||a.id-b.id);
+  const approvedItems=useMemo(()=>items.filter(x=>x.status==='approved').sort((a,b)=>a.position-b.position||a.id-b.id),[items]);
+  const approvedIndices=useMemo(()=>new Map(approvedItems.map((item,index)=>[item.id,index])),[approvedItems]);
+  const unconfirmedIds=useMemo(()=>new Set(state.unconfirmedIds),[state.unconfirmedIds]);
   const closedItems=items.filter(x=>x.status==='done'||x.status==='skipped');
   const refreshFromRealtime=useCallback(async()=>{
     if (!client) return;
     if (!client.getSnapshot().ready) await client.start(); else await client.refresh();
     if (client.getSnapshot().error) throw new Error('Queue snapshot unavailable');
   },[client]);
-  const liveStatus=useDashboardQueueRealtime(client ? realtimeEventId : null,refreshFromRealtime,client?.getRevision);
+  const liveStatus=useDashboardQueueRealtime(client ? realtimeEventId : null,refreshFromRealtime,client?.getRevision,client?.markRealtime);
   const scheduleQueueRequestFocus=useCallback((id:number)=>requestAnimationFrame(()=>{
     queuePanelRef.current?.querySelector<HTMLElement>(`[data-queue-request-id="${id}"]`)?.focus({preventScroll:true});
   }),[]);
@@ -126,20 +130,21 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
       setDragNotice('Kolejka została zaktualizowana. Przeciągnij zgłoszenie ponownie.');
     }
   }),[client]);
-  function enqueue(requestId:number,intent:Parameters<typeof createQueueOperation>[5]){
+  const enqueue=useCallback((requestId:number,intent:Parameters<typeof createQueueOperation>[5])=>{
     const actor=client?.getActorId();if(!client||!actor||!canMutate)return;
     const snapshot=client.getSnapshot();const op=createQueueOperation(snapshot.items,deviceId,actor,snapshot.sortRevision,requestId,intent);
     if(op)client.enqueue(op);
-  }
-  function handleAction(requestId:number,action:DashboardEventQueueAction,restoreFocus=false){
+  },[client,deviceId,canMutate]);
+  const handleAction=useCallback((requestId:number,action:DashboardEventQueueAction,restoreFocus=false)=>{
     if(dragActiveRef.current)return;
     enqueue(requestId,{kind:'action',action});if(restoreFocus)scheduleQueueRequestFocus(requestId);
-  }
-  function handleMove(requestId:number,direction:DashboardEventQueueMoveDirection){
+  },[enqueue,scheduleQueueRequestFocus]);
+  const handleMove=useCallback((requestId:number,direction:DashboardEventQueueMoveDirection)=>{
     if(dragActiveRef.current)return;
-    const index=approvedItems.findIndex(x=>x.id===requestId);if(index<0)return;
+    const rows=client?.getSnapshot().items.filter(x=>x.status==='approved').sort((a,b)=>a.position-b.position||a.id-b.id)??[];
+    const index=rows.findIndex(x=>x.id===requestId);if(index<0)return;
     enqueue(requestId,{kind:'placement',lane:'approved',position:index+1+(direction==='up'?-1:1)});
-  }
+  },[client,enqueue]);
   function handlePlacement(requestId:number,placement:QueueDropInput){
     if(!canMutate)return;
     const actor=client?.getActorId();if(!client||!actor)return;
@@ -306,7 +311,7 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
           <EventQueueRequestRow
             item={currentItem}
             participantPath={`/dashboard/org/${organizationId}/events/${eventId}/participants`}
-            unconfirmed={state.unconfirmedIds.includes(currentItem.id)}
+            unconfirmed={unconfirmedIds.has(currentItem.id)}
             canManage={canMutate}
             canMoveUp={false}
             canMoveDown={false}
@@ -335,10 +340,10 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
           if (dragEpoch === dragEpochRef.current) handlePlacement(requestId, placement);
         }}
         renderRow={(item, dragHandle, overlay) => <EventQueueRequestRow
-          item={item} participantPath={`/dashboard/org/${organizationId}/events/${eventId}/participants`} isDragOverlay={overlay} dragHandle={dragHandle} unconfirmed={state.unconfirmedIds.includes(item.id)}
+          item={item} participantPath={`/dashboard/org/${organizationId}/events/${eventId}/participants`} isDragOverlay={overlay} dragHandle={dragHandle} unconfirmed={unconfirmedIds.has(item.id)}
           canManage={canMutate && !overlay}
-          canMoveUp={approvedItems.findIndex(row => row.id === item.id) > 0}
-          canMoveDown={item.status === "approved" && approvedItems.findIndex(row => row.id === item.id) < approvedItems.length - 1}
+          canMoveUp={(approvedIndices.get(item.id) ?? -1) > 0}
+          canMoveDown={item.status === "approved" && (approvedIndices.get(item.id) ?? -1) < approvedItems.length - 1}
           onAction={handleAction} onMove={handleMove}
         />}
       />
@@ -383,7 +388,7 @@ export function EventQueuePanel({ organizationId,eventId,realtimeEventId,canMana
                 key={item.id}
                 item={item}
                 participantPath={`/dashboard/org/${organizationId}/events/${eventId}/participants`}
-                unconfirmed={state.unconfirmedIds.includes(item.id)}
+                unconfirmed={unconfirmedIds.has(item.id)}
                 canManage={canMutate}
                 canMoveUp={false}
                 canMoveDown={false}
@@ -421,25 +426,11 @@ type EventQueueRequestRowProps = {
   ) => void;
 };
 
-function EventQueueRequestRow({
-  item,
-  canManage,
-  canMoveUp,
-  canMoveDown,
-  dragHandle,
-  isDragOverlay = false,
-  unconfirmed = false,
-  participantPath,
-  onAction,
-  onMove,
-}: EventQueueRequestRowProps) {
-  const tx = useUiText();
-  const actionLabels = localizeUiRecord(getI18nRecord_actionLabels(), tx);
-
-  const actions = getAvailableActions(item.status);
-  const duration = formatDuration(item.song.durationSeconds);
-  const requestLabel = getQueueRequestLabel(item);
-
+// DnD changes its handle element/context on every gesture. Keep that live while
+// memoizing the expensive card, whose business/display props rarely change.
+function EventQueueRequestRow({dragHandle,...props}:EventQueueRequestRowProps){
+  const tx=useUiText(),item=props.item,isDragOverlay=props.isDragOverlay??false,unconfirmed=props.unconfirmed??false;
+  const requestLabel=getQueueRequestLabel(item);
   return (
     <article
       aria-label={tx("Zgłoszenie: {v0}", {v0: requestLabel})}
@@ -454,9 +445,30 @@ function EventQueueRequestRow({
           : "border-border bg-card",
       ].join(" ")}
     >
-      {dragHandle ? (
-        <div className={"absolute right-2 top-2 z-10"}>{dragHandle}</div>
-      ) : null}
+    {dragHandle?<div className="absolute right-2 top-2 z-10">{dragHandle}</div>:null}
+    <MemoEventQueueRequestRow {...props}/>
+    </article>
+  );
+}
+const MemoEventQueueRequestRow = memo(function EventQueueRequestRow({
+  item,
+  canManage,
+  canMoveUp,
+  canMoveDown,
+  unconfirmed = false,
+  participantPath,
+  onAction,
+  onMove,
+}: EventQueueRequestRowProps) {
+  const tx = useUiText();
+  const actionLabels = localizeUiRecord(getI18nRecord_actionLabels(), tx);
+
+  const actions = getAvailableActions(item.status);
+  const duration = formatDuration(item.song.durationSeconds);
+  const requestLabel = getQueueRequestLabel(item);
+
+  return (
+    <>
       <div className={"min-w-0"}>
         <div className="flex flex-wrap items-center gap-1.5 pr-10 [&_strong]:text-sm">
           <strong>{item.displayName || item.singerName}</strong>
@@ -589,9 +601,9 @@ function EventQueueRequestRow({
           })}
         </div>
       ) : null}
-    </article>
+    </>
   );
-}
+});
 
 function getAvailableActions(status: DashboardEventQueueRequestStatus) {
   return (["approve", "start", "reject", "done", "restore"] as const).filter((action) =>

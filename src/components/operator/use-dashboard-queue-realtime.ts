@@ -12,11 +12,13 @@ export function useDashboardQueueRealtime(
     signal: AbortSignal,
   ) => void | Promise<void>,
   getRevision?: () => string,
+  onRevision?: (revision:string)=>void,
 ) {
   return useQueueRealtime({
     audience: "dashboard",
     identity: eventId,
     onInvalidate,
     getRevision,
+    onRevision,
   });
 }

@@ -10,7 +10,7 @@ import { tokenizeLegacySongSearchQuery } from "../lib/song-search";
 import { isUnicodeSongSearchEnabled } from "../lib/song-search-engine";
 import { searchUnicodeCatalogSongs } from "./song-search-unicode";
 import { getDb } from "./db";
-import { traceDbOperation } from "./db-telemetry";
+import { recordSongSearchShape, traceDbOperation } from "./db-telemetry";
 import { createSongSearchSingleFlight } from "./song-search-single-flight";
 import { withSongSearchAdmission } from "./song-search-admission";
 
@@ -67,6 +67,7 @@ async function loadCatalogSongs(query: string, cursor: SongSearchCursor | null, 
   if (unicode) return searchUnicodeCatalogSongs(query, cursor);
 
   const tokens = tokenizeLegacySongSearchQuery(query);
+  recordSongSearchShape(Array.from(query).length,tokens.length,cursor!==null,true,'legacy');
   const phrasePattern = containsPattern(query);
   const tokenPredicate = allTokensMatch(tokens);
   const cursorPredicate = afterSongSearchCursor(cursor);

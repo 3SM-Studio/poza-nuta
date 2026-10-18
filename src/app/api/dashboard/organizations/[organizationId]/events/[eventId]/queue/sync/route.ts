@@ -4,7 +4,7 @@ import { runEventParticipantRoute } from '@/server/operator-api/event-participan
 import { OperatorApiError } from '@/server/operator-api/errors';
 import { applyQueueOperation, getQueueSyncSnapshot } from '@/server/operator-api/queue-sync';
 import { readIdentityBody } from '@/server/session-api/identity-http';
-import { runWithDbTelemetry, traceDbOperation } from '@/server/db-telemetry';
+import { bindDbOperationId, runWithDbTelemetry, traceDbOperation } from '@/server/db-telemetry';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -21,6 +21,7 @@ export async function POST(request: NextRequest,context: Context) {
   return runWithDbTelemetry('operator.queue.sync.post',()=>traceDbOperation('operator.queue.sync.post','queue.sync.http',()=>runEventParticipantRoute(request,context,async scope=>{
     const operation=parseQueueOperation(await readIdentityBody(request,4096));
     if (!operation) throw new OperatorApiError(400,'VALIDATION_ERROR','Invalid queue operation.');
+    bindDbOperationId(operation.operationId);
     return applyQueueOperation(scope,operation);
   })));
 }

@@ -11,19 +11,23 @@ import { getEffectiveEventLifecycleStatus } from '../../lib/effective-event-life
 import { getDb } from '../db';
 import { setLocalDatabaseTimeouts } from '../database-transaction-timeouts';
 import { OperatorApiError } from './errors';
-import {traceDbOperation,traceDbTransaction} from '../db-telemetry';
+import {getDbTelemetryCorrelation,traceDbOperation,traceDbTransaction} from '../db-telemetry';
 import { applyDashboardOrganizationEventQueueActionForAuthUser, loadDashboardEventQueueItems, requireEventQueueManagerContext } from './event-queue';
 
 type Scope = { authUserId: string; organizationId: string; eventId: string };
 type Transaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 
 async function snapshot(transaction: Transaction, eventId: number, actorId: number, deviceId: string, operationIds: string[], canonicalItems?:Awaited<ReturnType<typeof loadDashboardEventQueueItems>>) {
-  const [metadata] = await transaction.execute<{revision:string;sortRevision:string;acknowledged:string[]}>(sql`select
+  const [metadata] = await transaction.execute<{revision:string;sortRevision:string;acknowledged:string[];trace:{requestId:string;operationId:string;revision:string}|null}>(sql`select
     coalesce((select ${queueStreams.revision}::text from ${queueStreams} where ${queueStreams.eventId}=${eventId}),'0') as revision,
     ${sortRevisionSql(eventId)} as "sortRevision",
     ${operationIds.length ? sql`coalesce((select array_agg(${queueOperationReceipts.operationId}::text) from ${queueOperationReceipts}
       where ${queueOperationReceipts.eventId}=${eventId} and ${queueOperationReceipts.operatorId}=${actorId}
-      and ${queueOperationReceipts.deviceId}=${deviceId} and ${inArray(queueOperationReceipts.operationId,operationIds)}),array[]::text[])` : sql`array[]::text[]`} as acknowledged`);
+      and ${queueOperationReceipts.deviceId}=${deviceId} and ${inArray(queueOperationReceipts.operationId,operationIds)}),array[]::text[])` : sql`array[]::text[]`} as acknowledged,
+    (select case when a.payload->>'queueRevision'=(select revision::text from queue_streams where event_id=${eventId})
+      then jsonb_build_object('requestId',a.payload->>'originRequestId','operationId',a.payload->>'operationId','revision',a.payload->>'queueRevision') else null end
+      from operator_audit_log a where a.event_id=${eventId} and a.action='event_queue_operation_confirmed'
+      order by a.created_at desc,a.id desc limit 1) as trace`);
   return {eventId,actorId,...metadata,items:canonicalItems??await loadDashboardEventQueueItems(transaction,eventId)};
 }
 
@@ -100,9 +104,9 @@ export async function applyQueueOperation(scope: Scope, rawOperation: QueueOpera
     await traceDbOperation('operator.queue.sync','queue.sync.receipt_and_audit',()=>Promise.all([transaction.insert(queueOperationReceipts).values({eventId,operatorId:actorId,deviceId:operation.deviceId,
       operationId:operation.operationId,requestId:operation.requestId,fingerprint}),
     transaction.insert(operatorAuditLog).values({eventId,operatorId:actorId,actorKind:'operator',
-      action:'event_queue_operation_confirmed',entityId:String(operation.requestId),payload:{operationId:operation.operationId,
+      action:'event_queue_operation_confirmed',createdAt:sql`clock_timestamp()`,entityId:String(operation.requestId),payload:sql`${JSON.stringify({operationId:operation.operationId,originRequestId:getDbTelemetryCorrelation('operator.queue.sync').request_id,
         deviceId:operation.deviceId,kind:operation.kind,expectedIntentVersion:operation.expectedIntentVersion,
-        ...(operation.kind==='action'?{action:operation.action}:{lane:operation.lane,beforeId:operation.before?.id??null,afterId:operation.after?.id??null})}})]));
+        ...(operation.kind==='action'?{action:operation.action}:{lane:operation.lane,beforeId:operation.before?.id??null,afterId:operation.after?.id??null})})}::jsonb || jsonb_build_object('queueRevision',(select revision::text from queue_streams where event_id=${eventId}))`})]));
     return { ...await traceDbOperation('operator.queue.sync','queue.sync.final_snapshot',()=>snapshot(transaction,eventId,actorId,operation.deviceId,[operation.operationId],mutation.items)),operationId:operation.operationId,replayed:false };
   }));
 }

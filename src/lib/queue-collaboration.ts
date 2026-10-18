@@ -1,3 +1,4 @@
+import {queueOperationDiagnostic} from './queue-operation-diagnostics.ts';
 import { applyOptimisticDashboardEventQueueAction, applyOptimisticDashboardEventQueueMoveToPosition } from './dashboard-event-queue-optimistic.ts';
 import { queueAnchor, resolveQueueOperationPosition, type QueueOperation } from './queue-operation.ts';
 import type { DashboardEventQueueItemDto, QueueSyncSnapshot } from '../components/operator/event-queue-api';
@@ -43,12 +44,26 @@ export function replayQueueIntent(items: DashboardEventQueueItemDto[], entry: Ou
     if(source.status!==op.lane)next=applyOptimisticDashboardEventQueueAction(items,op.requestId,op.lane==='approved'?'approve':op.lane==='pending'?'restore':'reject',entry.changedAt);
     if(op.lane==='approved')next=applyOptimisticDashboardEventQueueMoveToPosition(next,op.requestId,position,entry.changedAt);
   }
-  return next.map(x=>({ ...x,intentVersion:(items.find(y=>y.id===x.id)?.intentVersion??0)+
-    (x.id===op.requestId || items.find(y=>y.id===x.id)?.status!==x.status ? 1:0) }));
+  const previous = new Map(items.map(item=>[item.id,item]));
+  return next.map(item=>{
+    const original=previous.get(item.id);
+    const intentVersion=(original?.intentVersion??0)+(item.id===op.requestId||original?.status!==item.status?1:0);
+    return item.intentVersion===intentVersion?item:{...item,intentVersion};
+  });
 }
 
 /** Local intent log over a monotonic, server-authoritative base. No network await in enqueue. */
 export class QueueCollaboration {
+  private diagnosticScope=crypto.randomUUID();
+  private trace:QueueSyncSnapshot['trace'];
+  private renderedState:string|undefined;
+  markRealtime=(revision:string)=>queueOperationDiagnostic('realtime',{scope:this.diagnosticScope,revision});
+  markRendered=(revision:string,pending=this.entries.length>0)=>{
+    const renderedState=`${revision}:${this.entries.length>0}`;
+    if(revision!==this.revision||pending!==(this.entries.length>0)||renderedState===this.renderedState)return;
+    this.renderedState=renderedState;
+    queueOperationDiagnostic('rendered',{scope:this.diagnosticScope,revision,...this.trace,pending:this.entries.length>0});
+  };
   private base: DashboardEventQueueItemDto[];
   private entries: OutboxEntry[]=[];
   private listeners=new Set<()=>void>();
@@ -71,7 +86,8 @@ export class QueueCollaboration {
   private makeState():QueueCollaborationState {
     const items=this.entries.reduce((rows,entry)=>entry.operation.kind==='placement'&&entry.operation.sortRevision!==this.sortRevision?rows:replayQueueIntent(rows,entry),this.base);
     const ids=new Set(this.entries.filter(x=>x.phase!=='conflict').map(x=>x.operation.requestId));
-    for(const item of items)if(this.base.find(x=>x.id===item.id)?.status!==item.status)ids.add(item.id);
+    const baseById=new Map(this.base.map(item=>[item.id,item]));
+    for(const item of items)if(baseById.get(item.id)?.status!==item.status)ids.add(item.id);
     return {items,entries:[...this.entries],unconfirmedIds:[...ids],
       revision:this.revision,sortRevision:this.sortRevision,ready:this.ready,online:this.deps.online(),error:this.error,closed:this.closed};
   }
@@ -97,9 +113,14 @@ export class QueueCollaboration {
   }
   private accept(s:QueueSyncSnapshot){
     if(this.actorId!==s.actorId){this.closed=true;this.error='Zmieniono konto operatora. Lokalne operacje zachowano dla pierwotnego konta.';this.publish();throw new Error('Queue actor changed');}
+    queueOperationDiagnostic(BigInt(s.revision)<BigInt(this.revision)?'stale_snapshot':'snapshot',
+      {scope:this.diagnosticScope,revision:s.revision,...s.trace});
     const ack=new Set(s.acknowledged);
     this.entries=this.entries.filter(x=>!ack.has(x.operation.operationId));
-    if(BigInt(s.revision)>=BigInt(this.revision)){this.base=s.items;this.revision=s.revision;this.sortRevision=s.sortRevision;
+    if(BigInt(s.revision)>=BigInt(this.revision)){// DTOs are JSON values from the API. Preserve unchanged rows across snapshots,
+      // including nested history, without ignoring future/additive display fields.
+      const previous=new Map(this.base.map(item=>[item.id,item]));
+      this.base=s.items.map(item=>{const old=previous.get(item.id);return old&&JSON.stringify(old)===JSON.stringify(item)?old:item;});this.revision=s.revision;this.sortRevision=s.sortRevision;this.trace=s.trace?.revision===s.revision?s.trace:null;
       if(s.canManage!==undefined&&s.lifecycle!==undefined)this.closed=!s.canManage||s.lifecycle!=='active';}
     this.save();this.publish();
   }
@@ -113,6 +134,7 @@ export class QueueCollaboration {
   enqueue(op:QueueOperation){
     if(!this.ready||this.closed||this.entries.length>=64){this.error='Nie można dodać operacji. Sprawdź synchronizację i zachowane zmiany.';this.publish();return false;}
     this.entries.push({operation:op,phase:'queued',attempts:0,changedAt:new Date().toISOString()});
+    queueOperationDiagnostic('local',{scope:this.diagnosticScope,operationId:op.operationId,revision:this.revision});
     this.error=null;this.publish();this.save();return true;
   }
   private blocked(op:QueueOperation,index:number){

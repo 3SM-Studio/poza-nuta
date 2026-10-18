@@ -26,10 +26,12 @@ export function useQueueRealtime({
   identity,
   onInvalidate,
   getRevision,
+  onRevision,
 }: {
   audience: QueueRealtimeAudience;
   identity: number | string | null | undefined;
   getRevision?: () => string;
+  onRevision?: (revision:string)=>void;
   onInvalidate: (
     reason: QueueRealtimeInvalidateReason,
     signal: AbortSignal,
@@ -44,11 +46,13 @@ export function useQueueRealtime({
   });
   const onInvalidateRef = useRef(onInvalidate);
   const revisionRef = useRef(getRevision);
+  const onRevisionRef=useRef(onRevision);
 
   useEffect(() => {
     onInvalidateRef.current = onInvalidate;
     revisionRef.current = getRevision;
-  }, [onInvalidate, getRevision]);
+    onRevisionRef.current=onRevision;
+  }, [onInvalidate, getRevision,onRevision]);
 
   useEffect(() => {
     if (!identity) {
@@ -137,6 +141,7 @@ export function useQueueRealtime({
 
           if (active && reason) {
             if (audience === 'dashboard' && revisionRef.current && isDashboardQueueChangedPayload(message.payload, realtimeIdentity as number) && typeof message.payload.revision === 'string') {
+              onRevisionRef.current?.(message.payload.revision);
               const revision=BigInt(message.payload.revision), known=BigInt(revisionRef.current());
               if (revision<=known || (refreshInFlight && revision<=advertisedRevision)) return;
               advertisedRevision=revision;

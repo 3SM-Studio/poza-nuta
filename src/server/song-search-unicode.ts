@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { canFuzzySearchSongs, isMeaningfulSongSearch, normalizeSongSearchQuery, songSearchGrams, tokenizeSongSearchQuery } from "../lib/song-search";
 import type { SongSearchCursor } from "../lib/song-search-cursor";
 import { withSongSearchAdmission } from "./song-search-admission";
-import {traceDbOperation} from './db-telemetry';
+import {recordSongSearchShape,traceDbOperation} from './db-telemetry';
 import { afterSongSearchCursor, toSongSearchPage, type SongSearchRow } from "./song-search";
 
 export function searchGramArray(query: string) {
@@ -27,6 +27,7 @@ export async function searchUnicodeCatalogSongs(rawQuery: string | null, cursor:
   const allTokens = tokens.length ? sql.join(tokens.map(token => sql`d.search_text like ${contains(token)}`), sql` and `) : sql`false`;
   const identityTokens = tokens.length ? sql.join(tokens.map(token => sql`(d.normalized_title like ${contains(token)} or d.normalized_artist like ${contains(token)})`), sql` and `) : sql`false`;
   const canFuzzy = hasGrams && canFuzzySearchSongs(query);
+  recordSongSearchShape(Array.from(query).length,tokens.length,cursor!==null,canFuzzy,'unicode-v2');
   // The expression GiST index cannot divert literal/short-query plans from GIN.
   // Single-word dense ties keep the original GIN/scan strategy. For multi-word
   // fuzzy KNN, score DESC breaks rounded-distance ties before the original ID.

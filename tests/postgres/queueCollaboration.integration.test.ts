@@ -309,3 +309,14 @@ describe('PG17 transactional collaboration',()=>{
     await apply(next);
   });
 });
+
+it('correlates committed revisions for peers, preserves origin on replay, never labels a newer legacy change',async()=>{
+  const {runWithDbTelemetry,bindDbOperationId,getDbTelemetryCorrelation}=await import('../../src/server/db-telemetry');
+  const op=await operation(0,3);let requestId='';
+  const committed=await runWithDbTelemetry('test.queue',()=>{bindDbOperationId(op.operationId);requestId=getDbTelemetryCorrelation('test').request_id;return apply(op);});
+  expect(committed.trace).toEqual({requestId,operationId:op.operationId,revision:committed.revision});
+  const peer=await snapshot(auth2,device2);expect(peer.trace).toEqual(committed.trace);
+  const replay=await runWithDbTelemetry('test.queue',()=>apply(op));expect(replay.trace).toEqual(committed.trace);
+  await connection`update song_requests set position=position where id=${ids[0]}`;
+  const changed=await snapshot();expect(BigInt(changed.revision)).toBeGreaterThan(BigInt(committed.revision));expect(changed.trace).toBeNull();
+});

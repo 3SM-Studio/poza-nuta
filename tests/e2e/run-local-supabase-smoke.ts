@@ -99,6 +99,9 @@ try {
     LOCAL_E2E_OPTIMIZED: optimizedBuild ? "1" : "0",
     LOCAL_E2E_SHORT_JWT: process.env.LOCAL_E2E_SHORT_JWT === "1" ? "1" : "0",
     LOCAL_E2E_RECOVERY_FIXTURES: process.env.LOCAL_E2E_RECOVERY_FIXTURES === "1" ? "1" : "0",
+    LOCAL_E2E_P0_PROFILE: process.env.LOCAL_E2E_P0_PROFILE === "1" ? "1" : "0",
+    LOCAL_E2E_PROFILE_LABEL: process.env.LOCAL_E2E_PROFILE_LABEL,
+    LOCAL_E2E_PERFORMANCE_SAMPLES: process.env.LOCAL_E2E_PERFORMANCE_SAMPLES,
   };
   assertLocalE2ETarget(localEnvironment);
 

@@ -1,0 +1,131 @@
+{
+  "generatedUtc": "2026-10-18T14:17:03.122884+00:00",
+  "parent": "fa9b9b0f9c9219005996c1980ab8386ec7d04d5c",
+  "logs": [
+    {
+      "path": ".artifacts/p0-final-mile-test-final.log",
+      "sha256": "b0125e8b209035a28c4e79808e131f3f34acb52a6664203262f727bf26626042",
+      "resultLines": [
+        "tests 430",
+        "pass 430",
+        "fail 0",
+        "skipped 0",
+        "66 passed",
+        "Tests  757",
+        "tests 78"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-typecheck-final.log",
+      "sha256": "d66548006c5c7c54f315f252a8864713f539323f6c6187c23bb7db83274361fa",
+      "resultLines": []
+    },
+    {
+      "path": ".artifacts/p0-final-mile-lint-final.log",
+      "sha256": "cc5a0b39c7052d24c24888403c48018b4fcccc9d799f81be6c9c30c9e19c85fc",
+      "resultLines": []
+    },
+    {
+      "path": ".artifacts/p0-final-mile-full-e2e.log",
+      "sha256": "0e89c5ca2b93d223ad5830756eb9c3ec9e27ed57e4c23c27822fe7b7539ea105",
+      "resultLines": [
+        "1 skipped",
+        "40 passed"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-final-diagnostic-browser.log",
+      "sha256": "5b385cfa250fd5bf357ff5c12dfbdd75755cc4f38acef6b3686b6dda24c78220",
+      "resultLines": [
+        "3 passed"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-phases.log",
+      "sha256": "95fbca8cf8bd8faefa01b48628ab8742343f391bbab4f3e2453ed6cfc616200f",
+      "resultLines": [
+        "1 passed",
+        "Tests  1",
+        "tests 12"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-identity.log",
+      "sha256": "0e736f45999bcb7af311d2822d5e78e1811baf38596a7706a66ab3d06e2f1315",
+      "resultLines": [
+        "5 passed",
+        "Tests  54",
+        "tests 245"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-collaboration-final.log",
+      "sha256": "e54274402aaf1378a2cd40f877c432f5a6cf43bcf4ec8b1d4b56001e46d759bb",
+      "resultLines": [
+        "3 passed",
+        "Tests  27",
+        "tests 19"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-rls.log",
+      "sha256": "6df95d34a05dd110d1a5953375a7a17e69d2e78bb2a3f0c411382ef5a69730a4",
+      "resultLines": [
+        "1 passed",
+        "Tests  1",
+        "tests 4"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-search-quality.log",
+      "sha256": "56c762d02f516946fe3c38954df31b8fc18c591a485a721b73ed0e9e8004c128",
+      "resultLines": [
+        "1 passed",
+        "Tests  1",
+        "tests 15"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-search-security.log",
+      "sha256": "c08810deeb6e8954d3d51db3b39f4169736cddfd2edf51fe4c2f563d20017811",
+      "resultLines": [
+        "2 passed",
+        "Tests  2",
+        "tests 19"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-search-legacy.log",
+      "sha256": "8b07d347cdf6cde00e92eed56735a3bd7b5c72291e86fe4d671ef2db38d75cee",
+      "resultLines": [
+        "2 passed",
+        "Tests  2",
+        "tests 20"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-contention.log",
+      "sha256": "59c8cfb2df9ed14b6cdc37f6cdf65c5212e7a49fe0746f71527d664a5dc56dd9",
+      "resultLines": [
+        "1 passed",
+        "Tests  4",
+        "tests 22"
+      ]
+    },
+    {
+      "path": ".artifacts/p0-final-mile-pg-timeouts.log",
+      "sha256": "82d8dd73678d477c3523e88ac81417eebde13f437be4c44d0abeb32e967d8d15",
+      "resultLines": [
+        "1 passed",
+        "Tests  3",
+        "tests 16"
+      ]
+    }
+  ],
+  "notes": [
+    "No raw logs, credentials, search phrases or browser traces committed.",
+    "Standalone build lacked .env.local; isolated runner invokes pnpm build with disposable local configuration and passed.",
+    "Full E2E: 40 passed, one short-JWT variant skipped; final diagnostic smoke: three passed.",
+    "Native100 measurements retained from 13:57 UTC; not re-dated."
+  ]
+}
